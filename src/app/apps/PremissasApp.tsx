@@ -229,7 +229,7 @@ export function PremissasApp() {
                   labelFormatter={(l) => `D+${l}`}
                   contentStyle={{ borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial" }}
                 />
-                <Bar dataKey="v" fill="#c87b00" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="v" fill="#c87b00" radius={[3, 3, 0, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>

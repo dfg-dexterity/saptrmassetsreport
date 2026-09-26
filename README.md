@@ -59,6 +59,14 @@ qualquer subpasta do site, sem configuração de servidor:
 
 Links diretos para um relatório também funcionam, ex.: `.../demos/trm-reporting/#/r07-concentracao`.
 
+### Arquivo único
+
+`npm run build:single` gera `dist-single/index.html`: um único arquivo HTML (≈1,4 MB) com JS, CSS e fontes embutidos,
+que abre direto no navegador, sem servidor. Útil para enviar a demo por e-mail ou hospedar como um arquivo só.
+
+Dentro do viewer de Artifacts do claude.ai o app detecta o ambiente sozinho: usa navegação em memória, entrega o Excel
+pela confirmação de download do viewer e esconde o botão Imprimir (bloqueado nesse frame).
+
 ### GitHub Pages (opcional)
 
 O workflow `.github/workflows/deploy.yml` compila o projeto a cada PR e publica no GitHub Pages a cada push na branch

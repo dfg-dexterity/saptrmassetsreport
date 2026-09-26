@@ -219,8 +219,8 @@ export function R03Rentabilidade() {
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% CDI`, n]} />
                 <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
                 <ReferenceLine y={100} stroke="#788fa6" strokeDasharray="4 4" />
-                <Bar dataKey="bruto" name="% CDI bruto" fill="#168eff" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="liquido" name="% CDI líquido" fill="#75980b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="bruto" name="% CDI bruto" fill="#168eff" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="liquido" name="% CDI líquido" fill="#75980b" radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>

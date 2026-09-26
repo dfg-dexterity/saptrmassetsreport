@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { EM_ARTIFACT, obterDownloads } from "./ambiente";
 import { fmtDate } from "./dates";
 
 export type TipoColuna = "texto" | "moeda" | "pct" | "data" | "inteiro" | "decimal";
@@ -94,10 +95,33 @@ export async function exportarExcel(arquivo: string, planilhas: PlanilhaExport[]
       };
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await writeXlsxFile(sheets as any, { fontFamily: "Arial", fontSize: 10 }).toFile(arquivo);
+    const planilha = writeXlsxFile(sheets as any, { fontFamily: "Arial", fontSize: 10 });
+    if (EM_ARTIFACT) {
+      await salvarNoViewer(arquivo, await planilha.toBlob());
+      return;
+    }
+    await planilha.toFile(arquivo);
     toast.success(`Arquivo ${arquivo} gerado`);
   } catch (e) {
     console.error(e);
     toast.error("Não foi possível gerar o arquivo Excel");
+  }
+}
+
+/** No viewer do claude.ai o arquivo é entregue pela capacidade `downloads` (o usuário confirma o salvamento). */
+async function salvarNoViewer(arquivo: string, blob: Blob) {
+  const downloads = await obterDownloads();
+  if (!downloads) {
+    toast.error("A exportação para Excel não está disponível nesta visualização");
+    return;
+  }
+  try {
+    const r = await downloads.save({ filename: arquivo, data: blob });
+    if (r.status === "saved") toast.success(`Arquivo ${arquivo} salvo`);
+  } catch (e) {
+    const code = (e as { code?: string } | null)?.code;
+    if (code === "declined") toast.info("Download cancelado");
+    else if (code === "rate_limited") toast.info("Já existe um download aguardando confirmação");
+    else toast.error("Não foi possível salvar o arquivo nesta visualização");
   }
 }

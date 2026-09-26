@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { createHashRouter, Navigate } from "react-router";
+import { createHashRouter, createMemoryRouter, Navigate, type RouteObject } from "react-router";
 import { RootLayout } from "./components/shell/RootLayout";
 import { Launchpad } from "./apps/Launchpad";
 import { PremissasApp } from "./apps/PremissasApp";
@@ -11,12 +11,13 @@ import { R05Evolucao } from "./apps/R05Evolucao";
 import { R06Indicadores } from "./apps/R06Indicadores";
 import { R07Concentracao } from "./apps/R07Concentracao";
 import { Carregando } from "./components/shell/Carregando";
+import { RELATORIOS } from "./data/catalogo";
+import { EM_ARTIFACT } from "./lib/ambiente";
 
 // O catálogo de CDS (≈180 KB de metadados) é carregado sob demanda
 const CdsCatalogo = lazy(() => import("./apps/CdsCatalogo").then((m) => ({ default: m.CdsCatalogo })));
 
-// HashRouter: funciona em qualquer hospedagem estática (subpasta do site, GitHub Pages, iframe)
-export const router = createHashRouter([
+const rotas: RouteObject[] = [
   {
     path: "/",
     Component: RootLayout,
@@ -41,4 +42,20 @@ export const router = createHashRouter([
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
-]);
+];
+
+/** Rota inicial a partir de uma âncora simples (ex.: …#r07-concentracao), único formato que o viewer repassa. */
+function rotaInicial(): string {
+  try {
+    const token = window.location.hash.replace(/^#\/?/, "");
+    return RELATORIOS.some((r) => r.rota === `/${token}`) ? `/${token}` : "/";
+  } catch {
+    return "/";
+  }
+}
+
+// Site / GitHub Pages: HashRouter (funciona em qualquer subpasta ou iframe, com links diretos por relatório).
+// Viewer do claude.ai: navegação em memória, sem alterar a URL do frame.
+export const router = EM_ARTIFACT
+  ? createMemoryRouter(rotas, { initialEntries: [rotaInicial()] })
+  : createHashRouter(rotas);

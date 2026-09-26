@@ -1,8 +1,9 @@
 import { ChevronRight, FileSpreadsheet, Printer } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { SECOES, type Relatorio } from "../../data/catalogo";
 import { usePremissas } from "../../context/PremissasContext";
+import { EM_ARTIFACT, obterDownloads } from "../../lib/ambiente";
 import { fmtDate } from "../../lib/dates";
 import { Button } from "../fiori/Button";
 import { ShellBar } from "./ShellBar";
@@ -29,6 +30,17 @@ export function ReportPage({
   const { premissas } = usePremissas();
   const secao = SECOES.find((s) => s.id === relatorio.secao)!;
   const Icone = relatorio.icone;
+  // No viewer do claude.ai o botão só aparece quando a capacidade `downloads` está disponível
+  const [podeExportar, setPodeExportar] = useState(!EM_ARTIFACT);
+
+  useEffect(() => {
+    if (!EM_ARTIFACT) return;
+    let ativo = true;
+    obterDownloads().then((d) => ativo && setPodeExportar(d !== null));
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   useEffect(() => {
     document.title = `${relatorio.tituloCurto} | Reporting Pack – Demo`;
@@ -68,14 +80,16 @@ export function ReportPage({
             </div>
             <div className="flex items-center gap-2 shrink-0 no-print">
               {actions}
-              {onExport && (
+              {onExport && podeExportar && (
                 <Button variant="emphasized" icon={<FileSpreadsheet className="w-4 h-4" />} onClick={onExport}>
                   Exportar Excel
                 </Button>
               )}
-              <Button variant="transparent" icon={<Printer className="w-4 h-4" />} onClick={() => window.print()} title="Imprimir / PDF">
-                <span className="hidden sm:inline">Imprimir</span>
-              </Button>
+              {!EM_ARTIFACT && (
+                <Button variant="transparent" icon={<Printer className="w-4 h-4" />} onClick={() => window.print()} title="Imprimir / PDF">
+                  <span className="hidden sm:inline">Imprimir</span>
+                </Button>
+              )}
             </div>
           </div>
 

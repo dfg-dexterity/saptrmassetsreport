@@ -274,17 +274,28 @@ export function R02Movimentacao() {
             <Button
               icon={<Copy className="w-4 h-4" />}
               onClick={() => {
-                navigator.clipboard?.writeText(textoNota).then(
-                  () => toast.success("Texto copiado"),
-                  () => toast.error("Não foi possível copiar"),
-                );
+                const selecionarTexto = () => {
+                  const el = document.getElementById("texto-nota");
+                  const sel = window.getSelection();
+                  if (!el || !sel) return;
+                  const range = document.createRange();
+                  range.selectNodeContents(el);
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                  toast.info("Texto selecionado – use Ctrl+C para copiar");
+                };
+                try {
+                  navigator.clipboard.writeText(textoNota).then(() => toast.success("Texto copiado"), selecionarTexto);
+                } catch {
+                  selecionarTexto();
+                }
               }}
             >
               Copiar
             </Button>
           }
         >
-          <article className="max-w-3xl text-[15px] leading-relaxed text-text space-y-3">
+          <article id="texto-nota" className="max-w-3xl text-[15px] leading-relaxed text-text space-y-3">
             {textoNota.split("\n\n").map((par, i) => (i === 0 ? <h3 key={i} className="text-lg font-bold">{par}</h3> : <p key={i}>{par}</p>))}
           </article>
         </Card>

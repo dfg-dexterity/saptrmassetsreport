@@ -134,9 +134,9 @@ export function R06Indicadores() {
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => (n === "DL / EBITDA" ? [fmtX(v), n] : [`R$ ${fmtDec(v, 1)} mi`, n])} />
                 <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
                 <ReferenceLine yAxisId="x" y={covDl.limite} stroke="#f53232" strokeDasharray="4 4" label={{ value: `Covenant ${fmtX(covDl.limite, 1)}`, fill: "#aa0808", fontSize: 11, position: "insideTopRight" }} />
-                <Bar yAxisId="v" dataKey="divida" name="Dívida bruta" fill="#df1278" radius={[4, 4, 0, 0]} />
-                <Bar yAxisId="v" dataKey="caixa" name="Caixa + aplicações" fill="#168eff" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="x" dataKey="dlEbitda" name="DL / EBITDA" stroke="#1d2d3e" strokeWidth={2.5} dot={{ r: 3.5, fill: "#1d2d3e" }} />
+                <Bar yAxisId="v" dataKey="divida" name="Dívida bruta" fill="#df1278" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar yAxisId="v" dataKey="caixa" name="Caixa + aplicações" fill="#168eff" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Line yAxisId="x" dataKey="dlEbitda" name="DL / EBITDA" stroke="#1d2d3e" strokeWidth={2.5} dot={{ r: 3.5, fill: "#1d2d3e" }} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

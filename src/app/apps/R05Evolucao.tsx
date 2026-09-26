@@ -145,8 +145,8 @@ export function R05Evolucao() {
                 />
                 <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
                 <ReferenceLine yAxisId="p" y={100} stroke="#788fa6" strokeDasharray="4 4" />
-                <Bar yAxisId="v" dataKey="saldo" name="Saldo final" fill="#168eff" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="p" dataKey="pctCDI" name="% do CDI" stroke="#c87b00" strokeWidth={2.5} dot={{ r: 3, fill: "#c87b00" }} />
+                <Bar yAxisId="v" dataKey="saldo" name="Saldo final" fill="#168eff" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Line yAxisId="p" dataKey="pctCDI" name="% do CDI" stroke="#c87b00" strokeWidth={2.5} dot={{ r: 3, fill: "#c87b00" }} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -161,8 +161,8 @@ export function R05Evolucao() {
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(Math.abs(v), 2)} mi`, n]} />
                 <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
                 <ReferenceLine y={0} stroke="#a8b2bd" />
-                <Bar dataKey="aplicacoes" name="Aplicações" stackId="f" fill="#30914c" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="resgates" name="Resgates" stackId="f" fill="#da6c6c" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="aplicacoes" name="Aplicações" stackId="f" fill="#30914c" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="resgates" name="Resgates" stackId="f" fill="#da6c6c" radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

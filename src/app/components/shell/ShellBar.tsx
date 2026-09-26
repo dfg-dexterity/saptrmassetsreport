@@ -55,8 +55,8 @@ export function ShellBar({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-shell shadow-shell no-print">
-        <div className="h-[3.25rem] px-2 sm:px-4 flex items-center gap-2">
+      <header className="sticky top-[env(safe-area-inset-top,0px)] z-40 bg-shell shadow-shell no-print">
+        <div className="h-[3.25rem] px-4 flex items-center gap-1.5 sm:gap-2">
           {back && (
             <button
               type="button"
@@ -76,7 +76,7 @@ export function ShellBar({
             {appTitle && (
               <>
                 <span className="text-line hidden md:inline">/</span>
-                <span className="text-sm font-semibold text-text truncate">{appTitle}</span>
+                <span className="text-sm font-semibold text-text truncate hidden sm:inline">{appTitle}</span>
               </>
             )}
             <span className="rounded-md bg-[#fff8d6] border border-[#e76500]/40 text-[#b44f00] text-[10px] font-bold px-1.5 py-0.5 tracking-wider shrink-0">

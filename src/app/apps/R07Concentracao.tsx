@@ -184,7 +184,7 @@ export function R07Concentracao() {
                 <XAxis dataKey="faixa" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit="mi" />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, _n, item) => [`${fmtBRL(v * 1e6)} (${fmtPct(item.payload.share, 1)})`, "Exposição"]} />
-                <Bar dataKey="v" radius={[4, 4, 0, 0]} fill="#168eff" />
+                <Bar dataKey="v" radius={[4, 4, 0, 0]} fill="#168eff" isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
