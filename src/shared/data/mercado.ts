@@ -17,6 +17,9 @@ export interface PremissasMercado {
   tlpReal: number; // BNDES FINAME: TLP = IPCA + taxa real
   baseDiasCorridos: number;
   baseDiasUteis: number;
+  /** PTAX venda (BCB) do fim do mês da data-base – TCURR tipo M */
+  ptaxUSD: number;
+  ptaxEUR: number;
 }
 
 /** Compatibilidade com o motor de Aplicações */
@@ -48,6 +51,8 @@ export const FONTES_SAP: Record<string, string> = {
   ipca12m: "Dados de mercado SAP – índice IPCA acumulado 12 meses",
   tjlp: "Dados de mercado SAP – TJLP (CMN/BCB, fixada trimestralmente)",
   tlpReal: "Dados de mercado SAP – TLP taxa real prefixada (BCB, mensal)",
+  ptaxUSD: "Dados de mercado SAP – câmbio PTAX venda BCB (TCURR, tipo M)",
+  ptaxEUR: "Dados de mercado SAP – câmbio PTAX venda BCB (TCURR, tipo M)",
   baseDiasCorridos: "Constante",
   baseDiasUteis: "Constante (dias úteis ANBIMA)",
 };
@@ -284,6 +289,69 @@ export function valorDoMes(serie: Record<string, number>, mes: string): number {
   return serie[mes] ?? serie[ULTIMO_MES_CDI];
 }
 
+/** PTAX venda (BCB) do último dia útil de cada mês, importada do SAP (TCURR tipo M) – R$ por unidade de moeda */
+export const PTAX_MENSAL: Record<"USD" | "EUR", Record<string, number>> = {
+  USD: {
+    "2024-06": 5.5589,
+    "2024-07": 5.7131,
+    "2024-08": 5.6554,
+    "2024-09": 5.4481,
+    "2024-10": 5.668,
+    "2024-11": 5.7885,
+    "2024-12": 6.1923,
+    "2025-01": 5.835,
+    "2025-02": 5.8528,
+    "2025-03": 5.7422,
+    "2025-04": 5.6624,
+    "2025-05": 5.67,
+    "2025-06": 5.4571,
+    "2025-07": 5.6036,
+    "2025-08": 5.4288,
+    "2025-09": 5.3276,
+    "2025-10": 5.38,
+    "2025-11": 5.338,
+    "2025-12": 5.496,
+    "2026-01": 5.471,
+    "2026-02": 5.518,
+    "2026-03": 5.452,
+  },
+  EUR: {
+    "2024-06": 5.9547,
+    "2024-07": 6.1882,
+    "2024-08": 6.2596,
+    "2024-09": 6.066,
+    "2024-10": 6.145,
+    "2024-11": 6.115,
+    "2024-12": 6.4363,
+    "2025-01": 6.0708,
+    "2025-02": 6.0842,
+    "2025-03": 6.2069,
+    "2025-04": 6.4239,
+    "2025-05": 6.4313,
+    "2025-06": 6.4171,
+    "2025-07": 6.3974,
+    "2025-08": 6.3368,
+    "2025-09": 6.2553,
+    "2025-10": 6.211,
+    "2025-11": 6.178,
+    "2025-12": 6.118,
+    "2026-01": 6.034,
+    "2026-02": 5.987,
+    "2026-03": 5.924,
+  },
+};
+
+export const PRIMEIRO_MES_PTAX = "2024-06";
+export const ULTIMO_MES_PTAX = "2026-03";
+
+/** PTAX de fim de mês (limitada ao primeiro e ao último mês importados) */
+export function ptaxDoMes(moeda: "USD" | "EUR", mes: string): number {
+  const serie = PTAX_MENSAL[moeda];
+  if (mes < PRIMEIRO_MES_PTAX) return serie[PRIMEIRO_MES_PTAX];
+  if (mes > ULTIMO_MES_PTAX) return serie[ULTIMO_MES_PTAX];
+  return serie[mes];
+}
+
 /** Último CDI disponível até o mês da data-base */
 export function ultimoCDI(dataBase: string): number {
   let mes = dataBase.slice(0, 7);
@@ -303,5 +371,7 @@ export function premissasNaDataBase(dataBase: string): PremissasMercado {
     tlpReal: valorDoMes(TLP_REAL_MENSAL, dataBase.slice(0, 7)),
     baseDiasCorridos: 365,
     baseDiasUteis: 252,
+    ptaxUSD: ptaxDoMes("USD", dataBase.slice(0, 7)),
+    ptaxEUR: ptaxDoMes("EUR", dataBase.slice(0, 7)),
   };
 }

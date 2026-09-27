@@ -1,5 +1,4 @@
-import { OPERACOES } from "../../aplicacoes/data/carteira";
-import { posicoesEm } from "../../aplicacoes/lib/finance";
+import { contratosMestre } from "../../aplicacoes/lib/carteiraMestre";
 import { DADOS_CORPORATIVOS, GERACAO_CAIXA_ICSD, type DadosCorporativos } from "../../shared/data/corporativo";
 import { premissasNaDataBase } from "../../shared/data/mercado";
 import { addMonths } from "../../shared/lib/dates";
@@ -37,7 +36,8 @@ export function indicadoresEm(data: string): IndicadoresCorporativos {
   if (!base) throw new Error(`Sem dados corporativos em ${data}`);
   const p = premissasNaDataBase(data);
   const dividaBruta = totalDivida(posicoesDivida(CONTRATOS, data, p));
-  const aplic = posicoesEm(OPERACOES, data, p);
+  // aplicações consolidadas da Carteira-Mestre (renda fixa, títulos públicos, fundos e time deposits) pelo valor contábil
+  const aplic = contratosMestre(data, p);
   const aplicacoes = aplic.reduce((s, x) => s + x.valorContabil, 0);
   const aplicacoesCirculantes = aplic.filter((x) => x.circulante).reduce((s, x) => s + x.valorContabil, 0);
   const enc = encargosDivida(CONTRATOS, addMonths(data, -12), data, p);

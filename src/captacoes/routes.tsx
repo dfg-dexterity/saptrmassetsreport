@@ -10,6 +10,7 @@ import { C03Encargos } from "./apps/C03Encargos";
 import { C04Covenants } from "./apps/C04Covenants";
 import { C05Fechamento } from "./apps/C05Fechamento";
 import { C06NotaExplicativa } from "./apps/C06NotaExplicativa";
+import { KpisCaptacoes } from "./apps/KpisCaptacoes";
 import { LaunchpadCaptacoes } from "./apps/LaunchpadCaptacoes";
 import { PremissasCaptacoes } from "./apps/PremissasCaptacoes";
 import { RELATORIOS_CAPTACOES } from "./data/catalogo";
@@ -28,6 +29,7 @@ const rotas: RouteObject[] = [
       { path: "c02-cronograma", Component: C02Cronograma },
       { path: "c01-movimentacao", Component: C01Movimentacao },
       { path: "c03-encargos", Component: C03Encargos },
+      { path: "kpis", Component: KpisCaptacoes },
       { path: "c04-covenants", Component: C04Covenants },
       { path: "c05-fechamento", Component: C05Fechamento },
       { path: "c06-nota-explicativa", Component: C06NotaExplicativa },

@@ -5,6 +5,12 @@ import { OPERACOES } from "../data/carteira";
 import { fmtDate, fmtQuarter, lastMonthEnds } from "../../shared/lib/dates";
 import { fmtCompact, fmtDec, fmtPct, fmtX } from "../../shared/lib/format";
 import { analiseFiscal, posicoesEm, rentabilidade, type Posicao } from "../lib/finance";
+import { contratosMestre } from "../lib/carteiraMestre";
+import { FUNDOS } from "../data/fundos";
+import { historicoFundo, posicaoFundo } from "../lib/fundos";
+import { TIME_DEPOSITS } from "../data/timeDeposits";
+import { posicaoTimeDeposit } from "../lib/timeDeposit";
+import { diffDays } from "../../shared/lib/dates";
 import type { Benchmark } from "../data/benchmark";
 import { compararCarteira, compararOperacao } from "../lib/benchmark";
 import { useBenchmarks } from "./BenchmarkContext";
@@ -28,11 +34,19 @@ export function operacoesDoEscopo(escopo: Escopo) {
   return escopo === "todas" ? OPERACOES : OPERACOES.filter((o) => o.empresa === escopo);
 }
 
+/** Renda fixa bancária (R01/R03/R04) do escopo */
 export function useCarteira(escopo: Escopo = "todas") {
   const { premissas } = usePremissas();
   const ops = useMemo(() => operacoesDoEscopo(escopo), [escopo]);
   const posicoes = useMemo(() => posicoesEm(ops, premissas.dataBase, premissas), [ops, premissas]);
   return { premissas, ops, posicoes };
+}
+
+/** Carteira consolidada (Carteira-Mestre: renda fixa, títulos públicos, fundos e time deposits) do escopo */
+export function useMestre(escopo: Escopo = "todas") {
+  const { premissas } = usePremissas();
+  const contratos = useMemo(() => contratosMestre(premissas.dataBase, premissas, escopo), [premissas, escopo]);
+  return { premissas, contratos };
 }
 
 export type { Alerta } from "../../shared/context/ProdutoContext";
@@ -65,8 +79,9 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
     });
   }
 
-  // Concentração por grupo econômico (R07)
-  for (const g of concentracaoPorGrupo(posicoes)) {
+  // Concentração por grupo econômico e política de investimentos (R07) – carteira consolidada
+  const mestre = contratosMestre(p.dataBase, p);
+  for (const g of concentracaoPorGrupo(mestre)) {
     if (g.status === "ok") continue;
     out.push({
       id: `lim-${g.grupo}`,
@@ -76,7 +91,16 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
       rota: "/r07-concentracao",
     });
   }
-  for (const r of avaliarPolitica(posicoes)) {
+  for (const r of avaliarPolitica(mestre)) {
+    if (r.status === "atencao" && r.id === "exterior") {
+      out.push({
+        id: `pol-${r.id}`,
+        severidade: "critical",
+        titulo: `Política: ${r.regra} perto do limite`,
+        descricao: `${fmtPct(r.share, 1)} da carteira vs limite máximo de ${fmtPct(r.limite, 0)}.`,
+        rota: "/r11-moeda-tipo",
+      });
+    }
     if (r.status === "excedido") {
       out.push({
         id: `pol-${r.id}`,
@@ -141,6 +165,46 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
       titulo: `Vencimento em ${v.prazoRemanescente} dias – ${v.op.produto} ${v.op.contraparte}`,
       descricao: `${fmtCompact(v.valorBruto)} em ${fmtDate(v.op.dataVencimento)}. Planejar reinvestimento.`,
       rota: "/r01-composicao",
+    });
+  }
+
+  // Títulos públicos e time deposits vencendo em até 30 dias (R08/R10)
+  for (const c of mestre) {
+    if (c.tipo === "Renda fixa bancária" || c.prazoRemanescente === null || c.prazoRemanescente < 0 || c.prazoRemanescente > 30) continue;
+    out.push({
+      id: `venc-${c.codigo}`,
+      severidade: "information",
+      titulo: `Vencimento em ${c.prazoRemanescente} dias – ${c.produto} ${c.contraparte}`,
+      descricao: `${fmtCompact(c.saldoCurva)} em ${fmtDate(c.vencimento)}${c.moeda !== "BRL" ? ` (${c.moeda} – PTAX do dia define o valor em R$)` : ""}. Planejar reinvestimento.`,
+      rota: c.rota,
+    });
+  }
+
+  // Come-cotas nos próximos 45 dias (R09)
+  for (const f of FUNDOS) {
+    const pos = posicaoFundo(f, p.dataBase, p);
+    if (!pos.ativo || !pos.proximoComeCotas) continue;
+    const dias = diffDays(p.dataBase, pos.proximoComeCotas);
+    if (dias < 0 || dias > 45) continue;
+    const ev = historicoFundo(f, p).comeCotas.find((e) => e.data === pos.proximoComeCotas);
+    out.push({
+      id: `cc-${f.id}`,
+      severidade: "information",
+      titulo: `Come-cotas em ${dias} dias – ${f.nome}`,
+      descricao: `Antecipação de IR estimada em ${fmtCompact(ev?.ir ?? 0)} em ${fmtDate(pos.proximoComeCotas)} (redução de cotas, sem saída de caixa).`,
+      rota: "/r09-fundos",
+    });
+  }
+
+  // Variação cambial negativa relevante no mês (R10)
+  const vcMes = TIME_DEPOSITS.map((td) => posicaoTimeDeposit(td, p.dataBase, p)).filter((x) => x.ativo).reduce((s, x) => s + x.variacaoCambialMes, 0);
+  if (vcMes < -50_000) {
+    out.push({
+      id: "fx-mes",
+      severidade: "critical",
+      titulo: `Variação cambial negativa de ${fmtCompact(Math.abs(vcMes))} no mês`,
+      descricao: "Apreciação do real sobre os time deposits em USD/EUR (PTAX de fechamento × mês anterior). Avaliar hedge ou resgate.",
+      rota: "/r10-time-deposit",
     });
   }
 

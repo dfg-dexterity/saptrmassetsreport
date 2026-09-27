@@ -1,5 +1,5 @@
-import { CDI_MENSAL, IPCA_12M_MENSAL, PRIMEIRO_MES_CDI, TJLP_MENSAL, TLP_REAL_MENSAL, valorDoMes, type PremissasMercado } from "../data/mercado";
-import { fromDay } from "./dates";
+import { CDI_MENSAL, IPCA_12M_MENSAL, PRIMEIRO_MES_CDI, ptaxDoMes, TJLP_MENSAL, TLP_REAL_MENSAL, valorDoMes, type PremissasMercado } from "../data/mercado";
+import { addMonths, fromDay, toDay } from "./dates";
 
 /**
  * CDI a.a. vigente no dia (número do dia desde 1970-01-01): série histórica importada do SAP até o mês da data-base;
@@ -41,7 +41,26 @@ export function tlpRealContratada(dataContratacao: string): number {
   return valorDoMes(TLP_REAL_MENSAL, dataContratacao.slice(0, 7));
 }
 
+export type MoedaEstrangeira = "USD" | "EUR";
+
+/**
+ * PTAX na data (R$ por unidade): interpolação linear entre as PTAX de fim de mês importadas do SAP; depois da
+ * data-base, o último dado disponível (PTAX da data-base).
+ */
+export function ptaxNaData(moeda: MoedaEstrangeira | "BRL", iso: string, p: PremissasMercado): number {
+  if (moeda === "BRL") return 1;
+  if (iso >= p.dataBase) return moeda === "USD" ? p.ptaxUSD : p.ptaxEUR;
+  const mes = iso.slice(0, 7);
+  const fimMes = addMonths(`${mes}-01`, 1);
+  const ultimoDia = toDay(fimMes) - 1;
+  const inicioMes = toDay(`${mes}-01`) - 1; // fim do mês anterior
+  const atual = ptaxDoMes(moeda, mes);
+  const anterior = ptaxDoMes(moeda, addMonths(`${mes}-01`, -1).slice(0, 7));
+  const frac = (toDay(iso) - inicioMes) / (ultimoDia - inicioMes);
+  return anterior + (atual - anterior) * frac;
+}
+
 /** Chave de cache das premissas (mudam apenas com a data-base) */
 export function chavePremissas(p: PremissasMercado): string {
-  return `${p.dataBase}|${p.cdi}|${p.selic}|${p.ipca12m}|${p.tjlp}|${p.tlpReal}`;
+  return `${p.dataBase}|${p.cdi}|${p.selic}|${p.ipca12m}|${p.tjlp}|${p.tlpReal}|${p.ptaxUSD}|${p.ptaxEUR}`;
 }

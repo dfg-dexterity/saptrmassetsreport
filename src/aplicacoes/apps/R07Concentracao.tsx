@@ -8,7 +8,7 @@ import { ObjectStatus, semaforoState, Tag } from "../../shared/components/fiori/
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { relatorioPorId } from "../data/catalogo";
 import { LIMITE_POR_RATING } from "../data/carteira";
-import { ESCOPOS, useCarteira, type Escopo } from "../context/useDados";
+import { ESCOPOS, useMestre, type Escopo } from "../context/useDados";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { FAIXAS_PRAZO } from "../lib/finance";
 import { fmtBRL, fmtCompact, fmtInt, fmtNum, fmtPct } from "../../shared/lib/format";
@@ -16,10 +16,10 @@ import {
   avaliarPolitica,
   classificarHHI,
   concentracaoPorGrupo,
-  distribuicao,
+  distribuicaoMestre,
   hhi,
   SEMAFORO_TEXTO,
-  totalCarteira,
+  totalMestre,
   type Fatia,
   type GrupoExposicao,
   type ResultadoRegra,
@@ -31,22 +31,22 @@ const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily:
 
 export function R07Concentracao() {
   const [escopo, setEscopo] = useState<Escopo>("todas");
-  const { premissas: p, posicoes } = useCarteira(escopo);
+  const { premissas: p, contratos } = useMestre(escopo);
 
   const d = useMemo(() => {
-    const grupos = concentracaoPorGrupo(posicoes);
+    const grupos = concentracaoPorGrupo(contratos);
     const indice = hhi(grupos.map((g) => g.share));
     return {
       grupos,
       indice,
       classe: classificarHHI(indice),
-      produto: distribuicao(posicoes, (x) => x.op.produto),
-      indexador: distribuicao(posicoes, (x) => x.op.indexador),
-      prazo: distribuicao(posicoes, (x) => x.faixaPrazo, FAIXAS_PRAZO),
-      politica: avaliarPolitica(posicoes),
-      total: totalCarteira(posicoes),
+      produto: distribuicaoMestre(contratos, (x) => x.tipo),
+      indexador: distribuicaoMestre(contratos, (x) => x.indexador),
+      prazo: distribuicaoMestre(contratos, (x) => x.faixaPrazo, FAIXAS_PRAZO),
+      politica: avaliarPolitica(contratos),
+      total: totalMestre(contratos),
     };
-  }, [posicoes]);
+  }, [contratos]);
 
   const enquadradas = d.politica.filter((r) => r.status !== "excedido").length + d.grupos.filter((g) => g.status !== "excedido").length;
   const totalRegras = d.politica.length + d.grupos.length;
@@ -148,7 +148,7 @@ export function R07Concentracao() {
         <>
           <HeaderKpi label="Índice HHI" value={fmtInt(d.indice)} state={semaforoState(d.classe.status)} sub={d.classe.rotulo} />
           <HeaderKpi label="Maior exposição" value={d.grupos[0] ? fmtPct(d.grupos[0].share, 1) : "—"} sub={d.grupos[0]?.grupo} />
-          <HeaderKpi label="Grupos econômicos" value={String(d.grupos.length)} sub={`${posicoes.length} operações`} />
+          <HeaderKpi label="Grupos econômicos" value={String(d.grupos.length)} sub={`${contratos.length} contratos`} />
           <HeaderKpi
             label="Enquadramento"
             value={`${enquadradas}/${totalRegras}`}

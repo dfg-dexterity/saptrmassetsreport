@@ -14,8 +14,9 @@ import { premissasNaDataBase, type PremissasMercado as Premissas } from "../../s
 import { fmtQuarter } from "../../shared/lib/dates";
 import { fmtDec, fmtPct, fmtX } from "../../shared/lib/format";
 import type { Semaforo } from "../../shared/lib/semaforo";
-import { LIMITE_POR_RATING, OPERACOES, REGRAS_POLITICA, type Rating } from "../data/carteira";
-import { posicoesEm, taxaAnualEquivalente, type Posicao } from "./finance";
+import { LIMITE_POR_RATING, REGRAS_POLITICA, type Rating } from "../data/carteira";
+import { contratosMestre, type ContratoMestre, type TipoContrato } from "./carteiraMestre";
+import type { Posicao } from "./finance";
 
 export type { Semaforo } from "../../shared/lib/semaforo";
 export { SEMAFORO_TEXTO } from "../../shared/lib/semaforo";
@@ -28,7 +29,10 @@ export interface GrupoExposicao {
   grupo: string;
   rating: Rating;
   contrapartes: string[];
+  /** quantidade de contratos */
   operacoes: number;
+  /** tipos de contrato com exposição ao grupo */
+  tipos: TipoContrato[];
   valor: number;
   share: number;
   limite: number;
@@ -42,29 +46,38 @@ export function semaforoUtilizacao(u: number): Semaforo {
   return "ok";
 }
 
+/** Saldo bruto da renda fixa bancária (R01) */
 export function totalCarteira(pos: Posicao[]): number {
   return pos.reduce((s, p) => s + p.valorBruto, 0);
 }
 
-export function concentracaoPorGrupo(pos: Posicao[]): GrupoExposicao[] {
-  const total = totalCarteira(pos);
+/** Saldo bruto consolidado (Carteira-Mestre): curva, cota ou saldo em moeda × PTAX */
+export function totalMestre(cs: ContratoMestre[]): number {
+  return cs.reduce((s, c) => s + c.saldoCurva, 0);
+}
+
+/** Exposição por grupo econômico sobre a carteira consolidada (limite pelo rating – política de investimentos) */
+export function concentracaoPorGrupo(cs: ContratoMestre[]): GrupoExposicao[] {
+  const total = totalMestre(cs);
   const map = new Map<string, GrupoExposicao>();
-  for (const p of pos) {
-    const g = map.get(p.op.grupo) ?? {
-      grupo: p.op.grupo,
-      rating: p.op.rating,
+  for (const c of cs) {
+    const g = map.get(c.grupo) ?? {
+      grupo: c.grupo,
+      rating: c.rating,
       contrapartes: [],
       operacoes: 0,
+      tipos: [],
       valor: 0,
       share: 0,
-      limite: LIMITE_POR_RATING[p.op.rating],
+      limite: LIMITE_POR_RATING[c.rating],
       utilizacao: 0,
       status: "ok" as Semaforo,
     };
     g.operacoes++;
-    g.valor += p.valorBruto;
-    if (!g.contrapartes.includes(p.op.contraparte)) g.contrapartes.push(p.op.contraparte);
-    map.set(p.op.grupo, g);
+    g.valor += c.saldoCurva;
+    if (!g.contrapartes.includes(c.contraparte)) g.contrapartes.push(c.contraparte);
+    if (!g.tipos.includes(c.tipo)) g.tipos.push(c.tipo);
+    map.set(c.grupo, g);
   }
   return [...map.values()]
     .map((g) => {
@@ -82,19 +95,29 @@ export interface Fatia {
   qtd: number;
 }
 
-export function distribuicao(pos: Posicao[], chave: (p: Posicao) => string, ordem?: string[]): Fatia[] {
-  const total = totalCarteira(pos);
+function agrupar<T>(itens: T[], chave: (x: T) => string, valor: (x: T) => number, ordem?: string[]): Fatia[] {
+  const total = itens.reduce((s, x) => s + valor(x), 0);
   const map = new Map<string, Fatia>();
-  for (const p of pos) {
-    const k = chave(p);
+  for (const x of itens) {
+    const k = chave(x);
     const f = map.get(k) ?? { chave: k, valor: 0, share: 0, qtd: 0 };
-    f.valor += p.valorBruto;
+    f.valor += valor(x);
     f.qtd++;
     map.set(k, f);
   }
   const out = [...map.values()].map((f) => ({ ...f, share: total > 0 ? f.valor / total : 0 }));
   if (ordem) return ordem.map((k) => out.find((f) => f.chave === k) ?? { chave: k, valor: 0, share: 0, qtd: 0 });
   return out.sort((a, b) => b.valor - a.valor);
+}
+
+/** Distribuição da renda fixa bancária (R01) pelo valor bruto */
+export function distribuicao(pos: Posicao[], chave: (p: Posicao) => string, ordem?: string[]): Fatia[] {
+  return agrupar(pos, chave, (p) => p.valorBruto, ordem);
+}
+
+/** Distribuição da carteira consolidada (Carteira-Mestre) pelo saldo bruto em R$ */
+export function distribuicaoMestre(cs: ContratoMestre[], chave: (c: ContratoMestre) => string, ordem?: string[]): Fatia[] {
+  return agrupar(cs, chave, (c) => c.saldoCurva, ordem);
 }
 
 /** Índice Herfindahl-Hirschman (0–10.000) */
@@ -118,18 +141,34 @@ export interface ResultadoRegra {
   status: Semaforo;
 }
 
-export function avaliarPolitica(pos: Posicao[]): ResultadoRegra[] {
-  const total = totalCarteira(pos);
-  const soma = (f: (p: Posicao) => boolean) => pos.filter(f).reduce((s, p) => s + p.valorBruto, 0);
-  const valores: Record<string, number> = {
-    credito: soma((p) => ["Debênture", "CRI", "CRA"].includes(p.op.produto)),
-    fundos: soma((p) => p.op.produto === "Fundo RF"),
-    liquidez: soma((p) => p.liquidezImediata),
-    longo: soma((p) => p.prazoRemanescente !== null && p.prazoRemanescente > 730),
-    pre: soma((p) => p.op.indexador === "Pré"),
-  };
+const CREDITO_PRIVADO = ["Debênture", "CRI", "CRA"];
+
+/** Valor de cada regra da política de investimentos sobre a carteira consolidada */
+export function valorRegraPolitica(id: string, c: ContratoMestre): boolean {
+  switch (id) {
+    case "credito":
+      return CREDITO_PRIVADO.includes(c.produto) || c.chave.produto === "Fundo crédito privado";
+    case "fundos":
+      return c.tipo === "Fundo de investimento";
+    case "liquidez":
+      return c.liquidezImediata;
+    case "longo":
+      return c.prazoRemanescente !== null && c.prazoRemanescente > 730;
+    case "pre":
+      return c.indexador === "Pré";
+    case "exterior":
+      return c.moeda !== "BRL" || c.indexador === "USD";
+    case "rv":
+      return c.chave.produto === "Fundo de ações" || c.chave.produto === "Fundo multimercado";
+    default:
+      return false;
+  }
+}
+
+export function avaliarPolitica(cs: ContratoMestre[]): ResultadoRegra[] {
+  const total = totalMestre(cs);
   return REGRAS_POLITICA.map((r) => {
-    const valor = valores[r.id] ?? 0;
+    const valor = cs.filter((c) => valorRegraPolitica(r.id, c)).reduce((s, c) => s + c.saldoCurva, 0);
     const share = total > 0 ? valor / total : 0;
     let status: Semaforo;
     if (r.tipo === "max") status = share > r.limite ? "excedido" : share >= r.limite * 0.8 ? "atencao" : "ok";
@@ -274,7 +313,8 @@ export function endividamentoEm(p: Premissas): EndividamentoNaData {
   const contratual = reclass.size ? posicoesDivida(CONTRATOS, data, p) : pos;
   const circ = pos.reduce((s, x) => s + x.circulante, 0);
   const circContratual = contratual.reduce((s, x) => s + x.circulante, 0);
-  const aplic = posicoesEm(OPERACOES, data, p);
+  // aplicações consolidadas (Carteira-Mestre): renda fixa, títulos públicos, fundos e time deposits
+  const aplic = contratosMestre(data, p);
   const corp = dadosCorporativosAte(data);
   const ultimo = corp[corp.length - 1] ?? null;
   const dividaBruta = totalDivida(pos);
@@ -290,7 +330,7 @@ export function endividamentoEm(p: Premissas): EndividamentoNaData {
     caixa,
     dataCaixa: ultimo?.data ?? null,
     aplicacoesContabil,
-    aplicacoesBruto: aplic.reduce((s, x) => s + x.valorBruto, 0),
+    aplicacoesBruto: aplic.reduce((s, x) => s + x.saldoCurva, 0),
     dividaLiquida: dividaBruta - caixa - aplicacoesContabil,
   };
 }
@@ -310,10 +350,11 @@ export interface Carry {
   custoCarregamento: number; // R$ a.a.
 }
 
-export function calcularCarry(pos: Posicao[], p: Premissas): Carry {
-  const saldo = totalCarteira(pos);
-  const peso = (fn: (x: Posicao) => number) => (saldo > 0 ? pos.reduce((s, x) => s + fn(x) * x.valorBruto, 0) / saldo : 0);
-  const taxaBruta = peso((x) => taxaAnualEquivalente(x.op, p));
+/** Carry da carteira consolidada (Carteira-Mestre) contra o custo médio da dívida */
+export function calcularCarry(cs: ContratoMestre[], p: Premissas): Carry {
+  const saldo = cs.reduce((s, x) => s + x.saldoCurva, 0);
+  const peso = (fn: (x: ContratoMestre) => number) => (saldo > 0 ? cs.reduce((s, x) => s + fn(x) * x.saldoCurva, 0) / saldo : 0);
+  const taxaBruta = peso((x) => x.taxaAA);
   const aliquotaMediaIR = peso((x) => x.aliqIR);
   const taxaLiquida = taxaBruta * (1 - aliquotaMediaIR);
   const custoDivida = custoMedioDivida(p);

@@ -4,7 +4,25 @@ import { isBusinessDay, toDay } from "../../shared/lib/dates";
 import { cdiAnual, chavePremissas } from "../../shared/lib/taxas";
 import type { Operacao } from "../data/carteira";
 import { ESCOPOS_BENCHMARK, type Benchmark } from "../data/benchmark";
-import type { Posicao, RentabOp } from "./finance";
+import type { Posicao } from "./finance";
+
+/** Identificação de um contrato para as regras de benchmark (renda fixa, títulos públicos, fundos ou time deposits) */
+export type ChaveBenchmark = Pick<Operacao, "transacao" | "empresa" | "portfolio" | "produto"> | {
+  transacao: string;
+  empresa: string;
+  portfolio: string;
+  produto: string;
+};
+
+/** Rendimento de um contrato em um período, na forma usada pela comparação com o benchmark */
+export interface RentabBase {
+  op: ChaveBenchmark;
+  /** capital base no início do período (ou na aplicação) */
+  base: number;
+  rendimento: number;
+  inicio: string;
+  fim: string;
+}
 
 /**
  * Benchmark de rentabilidade em % do CDI.
@@ -20,7 +38,7 @@ import type { Posicao, RentabOp } from "./finance";
  */
 
 /** Benchmark aplicável à operação: o cadastro mais específico vigente na data (produto > portfolio > empresa > carteira) */
-export function benchmarkDaOperacao(op: Operacao, cadastro: Benchmark[], data: string): Benchmark | null {
+export function benchmarkDaOperacao(op: ChaveBenchmark, cadastro: Benchmark[], data: string): Benchmark | null {
   const prioridade = (b: Benchmark) => ESCOPOS_BENCHMARK.find((e) => e.value === b.escopo)?.prioridade ?? 0;
   const aplicaveis = cadastro.filter((b) => {
     if (b.vigenciaInicio > data) return false;
@@ -67,7 +85,7 @@ export interface TrechoBenchmark {
 }
 
 /** Regras aplicadas à operação em [inicio, fim): a regra aplicável só muda nas datas de início de vigência do cadastro */
-export function trechosBenchmark(op: Operacao, cadastro: Benchmark[], inicio: string, fim: string): TrechoBenchmark[] {
+export function trechosBenchmark(op: ChaveBenchmark, cadastro: Benchmark[], inicio: string, fim: string): TrechoBenchmark[] {
   if (fim <= inicio) {
     const regra = benchmarkDaOperacao(op, cadastro, inicio);
     return [{ inicio, fim: inicio, regra, pct: regra?.pctCDI ?? 1 }];
@@ -117,7 +135,7 @@ function diDiario(dia: number, p: Premissas): number {
 const cacheFator = new WeakMap<Benchmark[], Map<string, FatorBenchmark>>();
 
 /** Fator do benchmark da operação em [inicio, fim), com a regra vigente em cada dia */
-export function fatorBenchmark(op: Operacao, cadastro: Benchmark[], inicio: string, fim: string, p: Premissas): FatorBenchmark {
+export function fatorBenchmark(op: ChaveBenchmark, cadastro: Benchmark[], inicio: string, fim: string, p: Premissas): FatorBenchmark {
   let porCadastro = cacheFator.get(cadastro);
   if (!porCadastro) {
     porCadastro = new Map();
@@ -206,7 +224,7 @@ function comparar(base: number, rendimento: number, fb: FatorBenchmark): Compara
 }
 
 /** Benchmark × realizado de uma operação no período do R03 (capital base no início do período ou na aplicação) */
-export function compararOperacao(r: RentabOp, cadastro: Benchmark[], p: Premissas): ComparacaoOperacao {
+export function compararOperacao(r: RentabBase, cadastro: Benchmark[], p: Premissas): ComparacaoOperacao {
   return comparar(r.base, r.rendimento, fatorBenchmark(r.op, cadastro, r.inicio, r.fim, p));
 }
 
@@ -242,7 +260,7 @@ export function somarComparacoes(cs: ComparacaoBenchmark[]): ComparacaoBenchmark
 }
 
 /** Benchmark da carteira no período: Σ rendimentos do benchmark ÷ Σ (base × CDI do período), comparável ao realizado */
-export function compararCarteira(linhas: RentabOp[], cadastro: Benchmark[], p: Premissas): ComparacaoBenchmark {
+export function compararCarteira(linhas: RentabBase[], cadastro: Benchmark[], p: Premissas): ComparacaoBenchmark {
   return somarComparacoes(linhas.map((r) => compararOperacao(r, cadastro, p)));
 }
 

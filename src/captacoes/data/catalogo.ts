@@ -1,4 +1,4 @@
-import { CalendarRange, ClipboardCheck, Coins, Database, FileText, Landmark, Scale, SlidersHorizontal, Waypoints } from "lucide-react";
+import { CalendarRange, ClipboardCheck, Coins, Database, FileText, Gauge, Landmark, Scale, SlidersHorizontal, Waypoints } from "lucide-react";
 import type { SecaoProduto } from "../../shared/context/ProdutoContext";
 import type { MapeamentoCampo, MapeamentoRelatorio, RelatorioBase } from "../../shared/data/relatorio";
 
@@ -8,7 +8,7 @@ export const SECOES_CAPTACOES: SecaoProduto[] = [
   { id: "parametrizacao", numero: 1, titulo: "Parametrização e base de dados" },
   { id: "posicao", numero: 2, titulo: "Carteira e vencimentos" },
   { id: "movimentacao", numero: 3, titulo: "Movimentação e custo da dívida" },
-  { id: "covenants", numero: 4, titulo: "Covenants" },
+  { id: "covenants", numero: 4, titulo: "Covenants e indicadores (KPIs)" },
   { id: "fechamento", numero: 5, titulo: "Fechamento e nota explicativa" },
   { id: "tecnica", numero: 6, titulo: "Base técnica (CDS Views SAP)" },
 ];
@@ -92,6 +92,22 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     rota: "/c03-encargos",
     icone: Coins,
     cor: "#c87b00",
+  },
+  {
+    id: "kpis",
+    codigo: "KPI",
+    aba: "Painel de KPIs",
+    titulo: "Painel de KPIs – Captações financeiras",
+    tituloCurto: "Painel de KPIs",
+    descricao:
+      "Indicadores-chave da dívida em um só lugar: dívida bruta e líquida, custo médio ponderado × CDI, prazo médio (duration), concentração por credor e indexador, parcela de curto prazo, DL/EBITDA, ICSD e folga dos covenants, com metas, tendência e semáforo.",
+    publico: "Diretoria Financeira / Conselho / RI",
+    periodicidade: "Mensal / Trimestral",
+    norma: "Covenants / CPC 26",
+    secao: "covenants",
+    rota: "/kpis",
+    icone: Gauge,
+    cor: "#0070f2",
   },
   {
     id: "c04",

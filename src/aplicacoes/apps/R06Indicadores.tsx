@@ -7,14 +7,13 @@ import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, semaforoState, Tag } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { relatorioPorId } from "../data/catalogo";
-import { OPERACOES } from "../data/carteira";
 import { CONTRATOS, GRUPO_MODALIDADE } from "../../captacoes/data/contratos";
 import { reclassificadosEm } from "../../captacoes/lib/covenants";
 import { custoMedioPonderado, posicoesDivida, type PosicaoDivida } from "../../captacoes/lib/divida";
 import { usePremissas } from "../../shared/context/MercadoContext";
 import { fmtDate, fmtQuarter } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { posicoesEm } from "../lib/finance";
+import { contratosMestre } from "../lib/carteiraMestre";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
 import {
   apurarCovenants,
@@ -68,7 +67,7 @@ export function R06Indicadores() {
   const d = useMemo(() => {
     const serie = trimestresAte(db).map((t) => indicadoresTrimestre(t));
     const trimestre = serie[serie.length - 1];
-    const carry = calcularCarry(posicoesEm(OPERACOES, db, p), p);
+    const carry = calcularCarry(contratosMestre(db, p), p);
     const dividas = composicaoDivida(posicoesDivida(CONTRATOS, db, p, reclassificadosEm(db)));
     const na = endividamentoEm(p);
     const covenants = apurarCovenants(db);

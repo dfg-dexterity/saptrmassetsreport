@@ -77,8 +77,9 @@ function fatorOperacao(op: Operacao, ate: string, p: Premissas): number {
 // ---------------------------------------------------------------------------
 
 export function aliquotaIR(diasCorridos: number, regime: RegimeIR): number {
-  if (regime === "Isento") return 0;
-  if (regime === "15% fixo") return 0.15;
+  if (regime === "Isento" || regime === "Exterior – IRPJ/CSLL") return 0;
+  if (regime === "15% fixo" || regime === "Fundo de ações (15%)") return 0.15;
+  if (regime === "Fundo CP (come-cotas 20%)") return diasCorridos <= 180 ? 0.225 : 0.2;
   const faixa = TABELA_IRRF.find((f) => diasCorridos >= f.de && diasCorridos <= f.ate);
   return faixa ? faixa.aliquota : 0.15;
 }
@@ -95,7 +96,7 @@ export interface ProximaFaixa {
 }
 
 export function proximaFaixaIR(diasCorridos: number, regime: RegimeIR): ProximaFaixa | null {
-  if (regime !== "Regressivo") return null;
+  if (regime !== "Regressivo" && regime !== "Fundo LP (come-cotas 15%)") return null;
   const prox = TABELA_IRRF.find((f) => f.de > diasCorridos);
   return prox ? { aPartirDe: prox.de, aliquota: prox.aliquota } : null;
 }
