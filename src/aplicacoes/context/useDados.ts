@@ -2,18 +2,21 @@ import { useMemo } from "react";
 import type { Alerta } from "../../shared/context/ProdutoContext";
 import type { PremissasMercado as Premissas } from "../../shared/data/mercado";
 import { OPERACOES } from "../data/carteira";
-import { fmtDate, lastMonthEnds } from "../../shared/lib/dates";
+import { fmtDate, fmtQuarter, lastMonthEnds } from "../../shared/lib/dates";
 import { fmtCompact, fmtDec, fmtPct, fmtX } from "../../shared/lib/format";
 import { analiseFiscal, posicoesEm, rentabilidade, type Posicao } from "../lib/finance";
 import type { Benchmark } from "../data/benchmark";
 import { compararCarteira, compararOperacao } from "../lib/benchmark";
 import { useBenchmarks } from "./BenchmarkContext";
 import {
-  avaliarCovenants,
+  apurarCovenants,
+  avaliarLimitesPolitica,
   avaliarPolitica,
   concentracaoPorGrupo,
-  COVENANTS,
+  fmtLimiteCovenant,
+  fmtValorCovenant,
   indicadoresTrimestre,
+  rotuloApuracao,
   trimestresAte,
 } from "../lib/indicadores";
 import { usePremissas } from "../../shared/context/MercadoContext";
@@ -39,7 +42,7 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
 
   // Rentabilidade × benchmark cadastrado (% do CDI, últimos 12 meses)
   const linhas = rentabilidade(OPERACOES, lastMonthEnds(p.dataBase, 13)[0], p.dataBase, p);
-  const carteira = compararCarteira(linhas, benchmarks, p.dataBase);
+  const carteira = compararCarteira(linhas, benchmarks, p);
   if (carteira.situacao === "abaixo") {
     out.push({
       id: "bmk-carteira",
@@ -49,7 +52,7 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
       rota: "/benchmark",
     });
   }
-  const abaixo = linhas.filter((r) => r.status === "Ativa").map((r) => ({ r, c: compararOperacao(r, benchmarks, p.dataBase) }))
+  const abaixo = linhas.filter((r) => r.status === "Ativa").map((r) => ({ r, c: compararOperacao(r, benchmarks, p) }))
     .filter((x) => x.c.realizado - x.c.pct < -0.02);
   if (abaixo.length) {
     const pior = abaixo.sort((a, b) => a.c.realizado - a.c.pct - (b.c.realizado - b.c.pct))[0];
@@ -85,18 +88,43 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
     }
   }
 
-  // Covenants (R06)
+  // Covenants contratuais da dívida (mesma apuração da carteira de captações) – R06
+  for (const a of apurarCovenants(p.dataBase)) {
+    if (a.status === "ok" || !a.dataApuracao) continue;
+    const valor = fmtValorCovenant(a.cov, a.valor);
+    const limite = fmtLimiteCovenant(a.cov);
+    if (a.status === "excedido") {
+      out.push({
+        id: `cov-${a.cov.id}`,
+        severidade: a.reclassifica ? "negative" : "critical",
+        titulo: a.reclassifica
+          ? `Covenant descumprido: ${a.cov.indicador} – dívida reclassificada para o circulante`
+          : `Covenant descumprido com waiver: ${a.cov.indicador}`,
+        descricao: a.reclassifica
+          ? `${valor} vs limite ${limite} (apuração ${rotuloApuracao(a)}). Sem waiver até a data-base: não circulante de ${a.cov.contratos.join(", ")} no circulante (CPC 26, item 74).`
+          : `${valor} vs limite ${limite} (apuração ${rotuloApuracao(a)}). Waiver do ${a.waiver?.credor} obtido em ${fmtDate(a.waiver?.obtidoEm)}.`,
+        rota: "/r06-indicadores",
+      });
+    } else {
+      out.push({
+        id: `cov-${a.cov.id}`,
+        severidade: "critical",
+        titulo: `Covenant em atenção: ${a.cov.indicador} ${valor}`,
+        descricao: `Limite ${limite} (apuração ${rotuloApuracao(a)}; ${a.cov.fonte}).`,
+        rota: "/r06-indicadores",
+      });
+    }
+  }
+  // Limites da política financeira interna (não contratuais)
   const tri = trimestresAte(p.dataBase);
   if (tri.length) {
-    const ind = indicadoresTrimestre(tri[tri.length - 1]);
-    for (const c of avaliarCovenants(ind)) {
-      if (c.status === "ok") continue;
-      const cov = COVENANTS.find((x) => x.id === c.id)!;
+    for (const l of avaliarLimitesPolitica(indicadoresTrimestre(tri[tri.length - 1]))) {
+      if (l.status === "ok") continue;
       out.push({
-        id: `cov-${c.id}`,
-        severidade: c.status === "excedido" ? "negative" : "critical",
-        titulo: `Covenant ${cov.indicador}: ${fmtX(c.valor)}`,
-        descricao: `Limite ${cov.tipo === "max" ? "≤" : "≥"} ${fmtX(cov.limite)} (${cov.fonte}).`,
+        id: `polfin-${l.id}`,
+        severidade: l.status === "excedido" ? "negative" : "critical",
+        titulo: `Política financeira: ${l.indicador} ${fmtX(l.valor)}`,
+        descricao: `Limite interno ${l.tipo === "max" ? "≤" : "≥"} ${fmtX(l.limite)} (apuração ${fmtQuarter(tri[tri.length - 1])}).`,
         rota: "/r06-indicadores",
       });
     }

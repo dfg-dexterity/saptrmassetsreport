@@ -78,7 +78,11 @@ export function GenericTile({
                 <ArrowDown className="w-4 h-4 mb-1" style={{ color: COR[state] }} />
               ))}
           </div>
-          {unit && <div className="text-xs text-label mt-1 truncate">{unit}</div>}
+          {unit && (
+            <div className="text-xs text-label mt-1 truncate" title={unit}>
+              {unit}
+            </div>
+          )}
         </div>
         {wide && chart && <div className="flex-1 h-16 min-w-0 max-w-[12rem]">{chart}</div>}
       </div>
@@ -87,6 +91,7 @@ export function GenericTile({
         <div
           className="text-xs mt-2 truncate"
           style={{ color: footerState ? COR[footerState] : "#556b82", fontWeight: footerState ? 600 : 400 }}
+          title={typeof footer === "string" ? footer : undefined}
         >
           {footer}
         </div>

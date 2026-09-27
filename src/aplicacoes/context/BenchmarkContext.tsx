@@ -8,6 +8,8 @@ interface Ctx {
   salvar: (b: Benchmark) => void;
   remover: (id: string) => void;
   restaurar: () => void;
+  /** substitui a lista inteira (desfazer exclusão / restauração) */
+  substituir: (lista: Benchmark[]) => void;
   alterado: boolean;
 }
 
@@ -41,9 +43,13 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
   }, []);
   const remover = useCallback((id: string) => setCadastro((lista) => lista.filter((x) => x.id !== id)), []);
   const restaurar = useCallback(() => setCadastro(BENCHMARKS_PADRAO), []);
+  const substituir = useCallback((lista: Benchmark[]) => setCadastro(lista), []);
   const alterado = useMemo(() => JSON.stringify(cadastro) !== JSON.stringify(BENCHMARKS_PADRAO), [cadastro]);
 
-  const value = useMemo(() => ({ cadastro, salvar, remover, restaurar, alterado }), [cadastro, salvar, remover, restaurar, alterado]);
+  const value = useMemo(
+    () => ({ cadastro, salvar, remover, restaurar, substituir, alterado }),
+    [cadastro, salvar, remover, restaurar, substituir, alterado],
+  );
   return <BenchmarkContext.Provider value={value}>{children}</BenchmarkContext.Provider>;
 }
 

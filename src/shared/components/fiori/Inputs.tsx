@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { ChevronDown, Search, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /** Campo de filtro (label acima, padrão Filter Bar Horizon) */
 export function FilterField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
@@ -79,6 +79,33 @@ export function SearchField({
   );
 }
 
+/** Texto digitado → número: aceita vírgula ou ponto decimal ("102,5", "102.5", "1.000,50"); NaN se vazio/inválido */
+export function lerNumero(texto: string): number {
+  let t = texto.trim().replace(/\s/g, "");
+  if (!t) return NaN;
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  else if ((t.match(/\./g) ?? []).length > 1) t = t.replace(/\./g, "");
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t)) return NaN;
+  return Number(t);
+}
+
+/** Número → texto do campo (vírgula decimal pt-BR, sem separador de milhar) */
+function formatarNumero(v: number): string {
+  if (!Number.isFinite(v)) return "";
+  return String(Math.round(v * 1e8) / 1e8).replace(".", ",");
+}
+
+/** Casas decimais do passo (evita 0,30000000000000004 nas setas) */
+function casasDoPasso(step: number): number {
+  const s = String(step);
+  return s.includes(".") ? s.split(".")[1].length : 0;
+}
+
+/**
+ * Campo numérico (sap.m.Input type Number): texto livre em estado local, aceita vírgula ou ponto, propaga o número
+ * sempre que o texto é válido e reformata ao perder o foco. Setas ↑/↓ somam/subtraem `step` (limitado a min/max).
+ * Com `allowEmpty`, o campo vazio propaga NaN (a validação do formulário decide); sem ele, volta ao último valor.
+ */
 export function NumberInput({
   value,
   onChange,
@@ -88,6 +115,8 @@ export function NumberInput({
   max,
   className,
   ariaLabel,
+  allowEmpty,
+  id,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -97,19 +126,58 @@ export function NumberInput({
   max?: number;
   className?: string;
   ariaLabel?: string;
+  allowEmpty?: boolean;
+  id?: string;
 }) {
+  const [texto, setTexto] = useState(() => formatarNumero(value));
+
+  // Valor alterado por fora (ex.: outro controle) → atualiza o texto, sem atropelar o que está sendo digitado
+  useEffect(() => {
+    setTexto((t) => {
+      const atual = lerNumero(t);
+      if (Object.is(atual, value) || atual === value || (Number.isNaN(atual) && Number.isNaN(value))) return t;
+      return formatarNumero(value);
+    });
+  }, [value]);
+
+  const alterar = (t: string) => {
+    setTexto(t);
+    const v = lerNumero(t);
+    if (Number.isFinite(v)) onChange(v);
+    else if (allowEmpty && !t.trim()) onChange(NaN);
+  };
+
+  const passo = (dir: 1 | -1) => {
+    const base = Number.isFinite(lerNumero(texto)) ? lerNumero(texto) : Number.isFinite(value) ? value : (min ?? 0);
+    const casas = casasDoPasso(step);
+    let v = Number((base + dir * step).toFixed(casas));
+    if (min !== undefined) v = Math.max(min, v);
+    if (max !== undefined) v = Math.min(max, v);
+    setTexto(formatarNumero(v));
+    onChange(v);
+  };
+
   return (
     <div className={clsx("relative", className)}>
       <input
+        id={id}
         aria-label={ariaLabel}
-        type="number"
-        value={Number.isFinite(value) ? value : ""}
-        step={step}
-        min={min}
-        max={max}
-        onChange={(e) => {
-          const v = parseFloat(e.target.value);
-          if (Number.isFinite(v)) onChange(v);
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        value={texto}
+        onChange={(e) => alterar(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+            e.preventDefault();
+            passo(e.key === "ArrowUp" ? 1 : -1);
+          }
+        }}
+        onBlur={() => {
+          const v = lerNumero(texto);
+          if (Number.isFinite(v)) setTexto(formatarNumero(v));
+          else if (allowEmpty && !texto.trim()) setTexto("");
+          else setTexto(formatarNumero(value));
         }}
         className="w-full h-9 rounded-[var(--radius-field)] border border-field bg-white pl-2.5 pr-12 text-sm text-right tabular text-text focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)]"
       />

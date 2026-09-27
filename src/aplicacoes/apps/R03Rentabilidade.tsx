@@ -14,7 +14,7 @@ import { exportarExcel } from "../../shared/lib/exportar";
 import { consolidarRentabilidade, rentabilidade, taxaContratada, type RentabOp } from "../lib/finance";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 import { useBenchmarks } from "../context/BenchmarkContext";
-import { compararCarteira, compararOperacao, SITUACAO_STATE, SITUACAO_TEXTO } from "../lib/benchmark";
+import { compararCarteira, compararOperacao, corExcesso, SITUACAO_STATE, SITUACAO_TEXTO } from "../lib/benchmark";
 
 const rel = relatorioPorId("r03");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
@@ -56,8 +56,8 @@ export function R03Rentabilidade() {
     return {
       linhas,
       cart: consolidarRentabilidade(linhas, inicio, p.dataBase, p),
-      bmk: compararCarteira(linhas, cadastro, p.dataBase),
-      cmp: new Map(linhas.map((r) => [r.op.transacao, compararOperacao(r, cadastro, p.dataBase)])),
+      bmk: compararCarteira(linhas, cadastro, p),
+      cmp: new Map(linhas.map((r) => [r.op.transacao, compararOperacao(r, cadastro, p)])),
     };
   }, [ops, inicio, p, status, cadastro]);
   const cmpDe = (r: RentabOp) => cmp.get(r.op.transacao)!;
@@ -68,7 +68,7 @@ export function R03Rentabilidade() {
     return [...map.entries()]
       .map(([produto, rs]) => {
         const c = consolidarRentabilidade(rs, inicio, p.dataBase, p);
-        const b = compararCarteira(rs, cadastro, p.dataBase);
+        const b = compararCarteira(rs, cadastro, p);
         return { produto, bruto: c.pctCDIBruto * 100, liquido: c.pctCDILiquido * 100, benchmark: b.pct * 100 };
       })
       .sort((a, b) => b.bruto - a.bruto);
@@ -98,16 +98,19 @@ export function R03Rentabilidade() {
       header: "Status",
       value: (r) => r.status,
       render: (r) => (
-        <ObjectStatus inverted icon={false} state={r.status === "Ativa" ? "positive" : "neutral"}>
-          {r.status === "Ativa" ? "Ativa" : `Liquidada ${fmtDate(r.fim)}`}
-        </ObjectStatus>
+        <div className="leading-snug">
+          <ObjectStatus inverted icon={false} state={r.status === "Ativa" ? "positive" : "neutral"}>
+            {r.status}
+          </ObjectStatus>
+          {r.status === "Liquidada" && <div className="text-xs text-label tabular mt-0.5">{fmtDate(r.fim)}</div>}
+        </div>
       ),
     },
     { key: "base", header: "Capital base", align: "right", headerTitle: "Saldo no início do período ou valor aplicado, se posterior", value: (r) => r.base, render: (r) => fmtNum(r.base) },
-    { key: "rend", header: "Rendimento bruto", align: "right", value: (r) => r.rendimento, render: (r) => fmtNum(r.rendimento), total: () => fmtNum(cart.rendimento) },
+    { key: "rend", header: "Rend. bruto", headerTitle: "Rendimento bruto no período", align: "right", value: (r) => r.rendimento, render: (r) => fmtNum(r.rendimento), total: () => fmtNum(cart.rendimento) },
     { key: "iof", header: "IOF", align: "right", value: (r) => r.iof, render: (r) => (r.iof ? <span className="text-critical">{fmtNum(r.iof)}</span> : <span className="text-label">–</span>), total: () => fmtNum(cart.iof) },
     { key: "ir", header: "IRRF", align: "right", value: (r) => r.ir, render: (r) => fmtNum(r.ir), total: () => fmtNum(cart.ir) },
-    { key: "liq", header: "Rendimento líquido", align: "right", value: (r) => r.rendLiquido, render: (r) => <span className="font-semibold">{fmtNum(r.rendLiquido)}</span>, total: () => fmtNum(cart.rendLiquido) },
+    { key: "liq", header: "Rend. líquido", headerTitle: "Rendimento líquido de IOF e IRRF", align: "right", value: (r) => r.rendLiquido, render: (r) => <span className="font-semibold">{fmtNum(r.rendLiquido)}</span>, total: () => fmtNum(cart.rendLiquido) },
     { key: "rb", header: "Rentab. bruta", align: "right", value: (r) => r.rentabBruta, render: (r) => fmtPct(r.rentabBruta), total: () => fmtPct(cart.rentabBruta) },
     {
       key: "cdib",
@@ -116,35 +119,6 @@ export function R03Rentabilidade() {
       value: (r) => r.pctCDIBruto,
       render: (r) => <span className={r.pctCDIBruto >= 1 ? "text-positive font-semibold" : ""}>{pctCDI(r.pctCDIBruto)}</span>,
       total: () => pctCDI(cart.pctCDIBruto),
-    },
-    {
-      key: "bmk",
-      header: "Benchmark",
-      headerTitle: "Benchmark cadastrado em % do CDI (regra mais específica)",
-      align: "right",
-      value: (r) => cmpDe(r).pct,
-      render: (r) => pctCDI(cmpDe(r).pct),
-      total: () => pctCDI(bmk.pct),
-    },
-    {
-      key: "exc",
-      header: "Excesso s/ benchmark",
-      headerTitle: "Rendimento bruto − (capital base × CDI do período × % do benchmark)",
-      align: "right",
-      value: (r) => cmpDe(r).excesso,
-      render: (r) => {
-        const c = cmpDe(r);
-        return (
-          <div className="whitespace-nowrap">
-            <div className={c.excesso >= 0 ? "text-positive" : "text-negative"}>{fmtNum(c.excesso, { parens: true })}</div>
-            <div className="text-xs text-label">
-              {c.realizado - c.pct >= 0 ? "+" : ""}
-              {fmtDec((c.realizado - c.pct) * 100, 1)} p.p.
-            </div>
-          </div>
-        );
-      },
-      total: () => <span className={bmk.excesso >= 0 ? "text-positive" : "text-negative"}>{fmtNum(bmk.excesso, { parens: true })}</span>,
     },
     { key: "cdil", header: "% CDI líquido", align: "right", value: (r) => r.pctCDILiquido, render: (r) => pctCDI(r.pctCDILiquido), total: () => pctCDI(cart.pctCDILiquido) },
     {
@@ -155,6 +129,47 @@ export function R03Rentabilidade() {
       value: (r) => r.rentabReal,
       render: (r) => <span className={r.rentabReal >= 0 ? "text-positive" : "text-negative"}>{fmtPct(r.rentabReal)}</span>,
       total: () => fmtPct(cart.rentabReal),
+    },
+    {
+      key: "bmk",
+      header: "Benchmark",
+      headerTitle:
+        "% do CDI do benchmark no período: capital base × (Π (1 + DI diário × % da regra vigente no dia) − 1) ÷ (capital base × CDI do período) – mesma base do % CDI bruto",
+      align: "right",
+      value: (r) => cmpDe(r).pct,
+      render: (r) => {
+        const c = cmpDe(r);
+        return (
+          <div className="whitespace-nowrap" title={c.trechos.length > 1 ? "Regra de benchmark alterada no período" : undefined}>
+            <div>{pctCDI(c.pct)}</div>
+            <div className="text-xs text-label">
+              regra {pctCDI(c.pctRegra)}
+              {c.trechos.length > 1 ? "*" : ""}
+            </div>
+          </div>
+        );
+      },
+      total: () => pctCDI(bmk.pct),
+    },
+    {
+      key: "exc",
+      header: "Excesso",
+      headerTitle: "Excesso sobre o benchmark: rendimento bruto − rendimento do benchmark sobre o mesmo capital base (capitalizado dia a dia)",
+      align: "right",
+      value: (r) => cmpDe(r).excesso,
+      render: (r) => {
+        const c = cmpDe(r);
+        return (
+          <div className="whitespace-nowrap">
+            <div className={corExcesso(c.excesso)}>{fmtNum(c.excesso, { parens: true })}</div>
+            <div className="text-xs text-label">
+              {c.realizado - c.pct >= 0 ? "+" : ""}
+              {fmtDec((c.realizado - c.pct) * 100, 1)} p.p.
+            </div>
+          </div>
+        );
+      },
+      total: () => <span className={corExcesso(bmk.excesso)}>{fmtNum(bmk.excesso, { parens: true })}</span>,
     },
   ];
 
@@ -179,17 +194,22 @@ export function R03Rentabilidade() {
             { titulo: "Rendimento líquido", tipo: "moeda" },
             { titulo: "Rentab. bruta", tipo: "pct" },
             { titulo: "% CDI bruto", tipo: "pct" },
-            { titulo: "Benchmark (% CDI)", tipo: "pct" },
-            { titulo: "Excesso s/ benchmark", tipo: "moeda" },
             { titulo: "% CDI líquido", tipo: "pct" },
             { titulo: "Rentab. real", tipo: "pct" },
+            { titulo: "Regra de benchmark (% CDI, média do período)", tipo: "pct", largura: 18 },
+            { titulo: "Benchmark no período (% CDI)", tipo: "pct", largura: 16 },
+            { titulo: "Rendimento do benchmark", tipo: "moeda" },
+            { titulo: "Excesso s/ benchmark", tipo: "moeda" },
           ],
-          linhas: linhas.map((r) => [r.op.transacao, r.op.produto, r.op.contraparte, taxaContratada(r.op), r.status, r.base, r.rendimento, r.iof, r.ir, r.rendLiquido, r.rentabBruta, r.pctCDIBruto, cmpDe(r).pct, cmpDe(r).excesso, r.pctCDILiquido, r.rentabReal]),
-          total: ["CARTEIRA", "", "", "", "", "", cart.rendimento, cart.iof, cart.ir, cart.rendLiquido, cart.rentabBruta, cart.pctCDIBruto, bmk.pct, bmk.excesso, cart.pctCDILiquido, cart.rentabReal],
+          linhas: linhas.map((r) => {
+            const c = cmpDe(r);
+            return [r.op.transacao, r.op.produto, r.op.contraparte, taxaContratada(r.op), r.status, r.base, r.rendimento, r.iof, r.ir, r.rendLiquido, r.rentabBruta, r.pctCDIBruto, r.pctCDILiquido, r.rentabReal, c.pctRegra, c.pct, c.rendBenchmark, c.excesso];
+          }),
+          total: ["CARTEIRA", "", "", "", "", "", cart.rendimento, cart.iof, cart.ir, cart.rendLiquido, cart.rentabBruta, cart.pctCDIBruto, cart.pctCDILiquido, cart.rentabReal, bmk.pctRegra, bmk.pct, bmk.rendBenchmark, bmk.excesso],
           notas: [
             `CDI do período: ${fmtPct(cart.cdiPeriodo)} · IPCA do período: ${fmtPct(cart.ipcaPeriodo)} (IPCA 12m das Premissas: ${fmtPct(p.ipca12m)}).`,
             "Rentabilidade real = (1 + rentabilidade líquida) / (1 + IPCA do período) − 1.",
-            "Benchmark: cadastro em % do CDI; excesso = rendimento bruto − capital base × CDI do período × % do benchmark.",
+            "Benchmark: rendimento = capital base × (Π (1 + DI diário × % do CDI da regra vigente no dia) − 1), DI diário = (1 + CDI do dia)^(1/252) − 1; benchmark no período (% CDI) = esse rendimento ÷ (capital base × CDI do período); excesso = rendimento bruto − rendimento do benchmark.",
           ],
         },
       ],
@@ -246,7 +266,7 @@ export function R03Rentabilidade() {
         </div>
       </div>
 
-      <Card title={`Rentabilidade por aplicação (${linhas.length})`} subtitle="Inclui aplicações liquidadas no período (rendimento até a data do resgate)" bodyClassName="px-0 pb-0">
+      <Card title={`Rentabilidade por aplicação (${linhas.length})`} subtitle="Inclui aplicações liquidadas no período (rendimento até a data do resgate) · benchmark capitalizado dia a dia com a regra vigente em cada dia (* regra alterada no período)" bodyClassName="px-0 pb-0">
         <DataTable columns={colunas} rows={linhas} rowKey={(r) => r.op.transacao} showTotals defaultSort={{ key: "rend", dir: "desc" }} maxHeight={560} />
       </Card>
 
@@ -297,7 +317,7 @@ export function R03Rentabilidade() {
           </ul>
           <MessageStrip className="mt-4">
             Rentabilidade real = (1 + líquida) ÷ (1 + IPCA do período) − 1. IPCA de {fmtPct(p.ipca12m)} a.a. conforme Premissas;
-            {" "}o benchmark cadastrado ({pctCDI(bmk.pct)} do CDI) teria rendido {fmtBRL(bmk.rendBenchmark)} sobre o mesmo capital.
+            {" "}o benchmark cadastrado ({pctCDI(bmk.pct)} do CDI no período, capitalizado dia a dia) teria rendido {fmtBRL(bmk.rendBenchmark)} sobre o mesmo capital.
           </MessageStrip>
         </Card>
       </div>

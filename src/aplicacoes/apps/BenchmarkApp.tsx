@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "../../shared/components/fiori/Button";
@@ -13,7 +13,7 @@ import { ObjectStatus, Tag } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { usePremissas } from "../../shared/context/MercadoContext";
 import { EMPRESAS } from "../../shared/data/empresas";
-import { fmtDate, lastMonthEnds } from "../../shared/lib/dates";
+import { addDays, fmtDate, lastMonthEnds } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 import { useBenchmarks } from "../context/BenchmarkContext";
@@ -24,9 +24,13 @@ import {
   benchmarkDaOperacao,
   compararCarteira,
   compararOperacao,
+  corExcesso,
+  regraCarteiraVigente,
   SITUACAO_STATE,
   SITUACAO_TEXTO,
-  type ComparacaoBenchmark,
+  taxaEquivalenteBenchmark,
+  type ComparacaoOperacao,
+  type TrechoBenchmark,
 } from "../lib/benchmark";
 import { ativaEm, rentabilidade, taxaContratada, type RentabOp } from "../lib/finance";
 
@@ -77,9 +81,14 @@ interface Rascunho {
   vigenciaInicio: string;
 }
 
-type Erros = Partial<Record<"descricao" | "valor" | "pct" | "vigenciaInicio", string>>;
+type Erros = Partial<Record<"descricao" | "escopo" | "valor" | "pct" | "vigenciaInicio", string>>;
 
-function validar(r: Rascunho, cadastro: Benchmark[]): Erros {
+/** Existe regra da carteira consolidada vigente na data-base? (obrigatória: é a regra padrão de todas as aplicações) */
+function temCarteiraVigente(lista: Benchmark[], dataBase: string): boolean {
+  return regraCarteiraVigente(lista, dataBase) !== null;
+}
+
+function validar(r: Rascunho, cadastro: Benchmark[], dataBase: string): Erros {
   const e: Erros = {};
   if (r.descricao.trim().length < 3) e.descricao = "Informe uma descrição com pelo menos 3 caracteres.";
   if (r.escopo !== "carteira" && !r.valor) e.valor = "Selecione a que o benchmark se aplica.";
@@ -89,30 +98,54 @@ function validar(r: Rascunho, cadastro: Benchmark[]): Erros {
   const valor = r.escopo === "carteira" ? "" : r.valor;
   const duplicado = cadastro.find((b) => b.id !== r.id && b.escopo === r.escopo && b.valor === valor && b.vigenciaInicio === r.vigenciaInicio);
   if (duplicado && !e.valor && !e.vigenciaInicio) e.vigenciaInicio = `Já existe a regra “${duplicado.descricao}” para este escopo com a mesma vigência.`;
+
+  // A carteira consolidada precisa continuar com uma regra vigente na data-base depois da alteração
+  const original = r.id ? cadastro.find((b) => b.id === r.id) : undefined;
+  const mexeNaCarteira = r.escopo === "carteira" || original?.escopo === "carteira";
+  if (mexeNaCarteira && !e.vigenciaInicio && temCarteiraVigente(cadastro, dataBase)) {
+    const resultante = [
+      ...cadastro.filter((b) => b.id !== r.id),
+      { id: r.id ?? "novo", descricao: r.descricao, escopo: r.escopo, valor, pctCDI: r.pct / 100, vigenciaInicio: r.vigenciaInicio },
+    ];
+    if (!temCarteiraVigente(resultante, dataBase)) {
+      if (r.escopo !== "carteira")
+        e.escopo = `Esta é a única regra da carteira consolidada vigente em ${fmtDate(dataBase)}. Cadastre outra regra de carteira antes de mudar o escopo.`;
+      else
+        e.vigenciaInicio = `A carteira consolidada precisa de uma regra vigente na data-base (${fmtDate(dataBase)}): use uma vigência até essa data ou mantenha outra regra de carteira vigente.`;
+    }
+  }
   return e;
+}
+
+/** Chamado pelos botões da linha: não deixa o clique chegar ao onRowClick da tabela (que abre a edição) */
+function semPropagar(fn: () => void) {
+  return (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
 }
 
 interface LinhaOp {
   r: RentabOp;
+  /** regra vigente no último dia do período da operação */
   regra: Benchmark | null;
-  cmp: ComparacaoBenchmark;
+  cmp: ComparacaoOperacao;
 }
 
 export function BenchmarkApp() {
   const { premissas: p } = usePremissas();
-  const { cadastro, salvar, remover, restaurar, alterado } = useBenchmarks();
+  const { cadastro, salvar, remover, restaurar, substituir, alterado } = useBenchmarks();
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
 
   const inicio = lastMonthEnds(p.dataBase, 13)[0];
   const rentab = useMemo(() => rentabilidade(OPERACOES, inicio, p.dataBase, p), [inicio, p]);
 
   const d = useMemo(() => {
-    const linhas: LinhaOp[] = rentab.map((r) => ({
-      r,
-      regra: benchmarkDaOperacao(r.op, cadastro, p.dataBase),
-      cmp: compararOperacao(r, cadastro, p.dataBase),
-    }));
-    const carteira = compararCarteira(rentab, cadastro, p.dataBase);
+    const linhas: LinhaOp[] = rentab.map((r) => {
+      const cmp = compararOperacao(r, cadastro, p);
+      return { r, regra: cmp.trechos[cmp.trechos.length - 1]?.regra ?? null, cmp };
+    });
+    const carteira = compararCarteira(rentab, cadastro, p);
     const ativas = OPERACOES.filter((o) => ativaEm(o, p.dataBase));
     const cobertura = new Map<string, number>();
     for (const o of ativas) {
@@ -121,13 +154,20 @@ export function BenchmarkApp() {
     }
     const porProduto = PRODUTOS.map((produto) => {
       const rs = rentab.filter((r) => r.op.produto === produto);
-      const c = compararCarteira(rs, cadastro, p.dataBase);
+      const c = compararCarteira(rs, cadastro, p);
       return { produto, realizado: c.realizado * 100, benchmark: c.pct * 100, qtd: rs.length };
     })
       .filter((x) => x.qtd > 0)
       .sort((a, b) => b.realizado - a.realizado);
-    return { linhas, carteira, cobertura, porProduto, abaixo: linhas.filter((l) => l.cmp.situacao === "abaixo").length };
-  }, [rentab, cadastro, p.dataBase]);
+    return {
+      linhas,
+      carteira,
+      cobertura,
+      porProduto,
+      abaixo: linhas.filter((l) => l.cmp.situacao === "abaixo").length,
+      comVigenciaNoPeriodo: linhas.filter((l) => l.cmp.trechos.length > 1).length,
+    };
+  }, [rentab, cadastro, p]);
 
   const ordenado = useMemo(
     () =>
@@ -147,12 +187,25 @@ export function BenchmarkApp() {
     setRascunho({ id: b.id, descricao: b.descricao, escopo: b.escopo, valor: b.valor, pct: Math.round(b.pctCDI * 10000) / 100, vigenciaInicio: b.vigenciaInicio });
 
   const excluir = (b: Benchmark) => {
-    if (b.escopo === "carteira" && cadastro.filter((x) => x.escopo === "carteira").length === 1) {
-      toast.error("A regra da carteira consolidada é obrigatória – edite o percentual em vez de excluí-la.");
+    if (b.escopo === "carteira" && temCarteiraVigente(cadastro, p.dataBase) && !temCarteiraVigente(cadastro.filter((x) => x.id !== b.id), p.dataBase)) {
+      toast.error(
+        `A carteira consolidada precisa de uma regra vigente na data-base (${fmtDate(p.dataBase)}) – edite o percentual ou cadastre outra regra de carteira antes de excluir esta.`,
+      );
       return;
     }
+    const anterior = cadastro;
     remover(b.id);
-    toast.success(`Benchmark “${b.descricao}” excluído`);
+    toast.success(`Benchmark “${b.descricao}” excluído`, {
+      action: { label: "Desfazer", onClick: () => substituir(anterior) },
+    });
+  };
+
+  const restaurarPadrao = () => {
+    const anterior = cadastro;
+    restaurar();
+    toast.success("Cadastro de benchmark restaurado para o padrão da demo", {
+      action: { label: "Desfazer", onClick: () => substituir(anterior) },
+    });
   };
 
   const confirmar = (r: Rascunho) => {
@@ -191,7 +244,7 @@ export function BenchmarkApp() {
             ESCOPOS_BENCHMARK.find((e) => e.value === b.escopo)?.label ?? b.escopo,
             aplicaSeA(b),
             b.pctCDI * 100,
-            b.pctCDI * p.cdi * 100,
+            taxaEquivalenteBenchmark(b.pctCDI, p.cdi) * 100,
             b.vigenciaInicio,
             d.cobertura.get(b.id) ?? 0,
           ]),
@@ -203,8 +256,9 @@ export function BenchmarkApp() {
           colunas: [
             { titulo: "Transação", largura: 14 },
             { titulo: "Aplicação", largura: 34 },
-            { titulo: "Regra aplicada", largura: 30 },
-            { titulo: "Benchmark (% CDI)", tipo: "decimal" },
+            { titulo: "Regra aplicada (fim do período)", largura: 30 },
+            { titulo: "Regra cadastrada (% CDI, média do período)", tipo: "decimal", largura: 18 },
+            { titulo: "Benchmark no período (% CDI)", tipo: "decimal", largura: 16 },
             { titulo: "Realizado (% CDI)", tipo: "decimal" },
             { titulo: "Rendimento", tipo: "moeda" },
             { titulo: "Rend. do benchmark", tipo: "moeda" },
@@ -215,6 +269,7 @@ export function BenchmarkApp() {
             l.r.op.transacao,
             `${l.r.op.produto} · ${l.r.op.contraparte}`,
             l.regra?.descricao ?? "100% do CDI (sem regra)",
+            l.cmp.pctRegra * 100,
             l.cmp.pct * 100,
             l.cmp.realizado * 100,
             l.r.rendimento,
@@ -226,12 +281,18 @@ export function BenchmarkApp() {
             "TOTAL",
             "",
             "",
+            d.carteira.pctRegra * 100,
             d.carteira.pct * 100,
             d.carteira.realizado * 100,
             d.linhas.reduce((s, l) => s + l.r.rendimento, 0),
             d.carteira.rendBenchmark,
             d.carteira.excesso,
             SITUACAO_TEXTO[d.carteira.situacao],
+          ],
+          notas: [
+            "Rendimento do benchmark = capital base × (Π (1 + DI diário × % do CDI da regra vigente no dia) − 1), nos dias úteis em que a aplicação esteve ativa no período; DI diário = (1 + CDI do dia)^(1/252) − 1.",
+            "Benchmark no período (% CDI) = rendimento do benchmark ÷ (capital base × CDI do período) – mesma base do realizado; uma aplicação contratada ao mesmo % do CDI fica em linha.",
+            "Taxa equivalente = (1 + ((1 + CDI)^(1/252) − 1) × % do CDI)^252 − 1 (capitalização diária).",
           ],
         },
       ],
@@ -263,10 +324,10 @@ export function BenchmarkApp() {
     {
       key: "taxa",
       header: "Taxa equivalente",
-      headerTitle: "Benchmark × CDI vigente na data-base",
+      headerTitle: "Taxa anual equivalente com o CDI vigente na data-base, capitalizada diariamente: (1 + ((1 + CDI)^(1/252) − 1) × % do CDI)^252 − 1",
       align: "right",
-      value: (b) => b.pctCDI * p.cdi,
-      render: (b) => `${fmtPct(b.pctCDI * p.cdi)} a.a.`,
+      value: (b) => taxaEquivalenteBenchmark(b.pctCDI, p.cdi),
+      render: (b) => `${fmtPct(taxaEquivalenteBenchmark(b.pctCDI, p.cdi))} a.a.`,
     },
     { key: "vig", header: "Vigência desde", align: "right", value: (b) => b.vigenciaInicio, render: (b) => fmtDate(b.vigenciaInicio) },
     {
@@ -285,9 +346,9 @@ export function BenchmarkApp() {
       header: "",
       align: "right",
       render: (b) => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="transparent" icon={<Pencil className="w-4 h-4" />} aria-label={`Editar ${b.descricao}`} title="Editar" onClick={() => editar(b)} />
-          <Button size="sm" variant="transparent" icon={<Trash2 className="w-4 h-4" />} aria-label={`Excluir ${b.descricao}`} title="Excluir" onClick={() => excluir(b)} />
+        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button size="sm" variant="transparent" icon={<Pencil className="w-4 h-4" />} aria-label={`Editar ${b.descricao}`} title="Editar" onClick={semPropagar(() => editar(b))} />
+          <Button size="sm" variant="transparent" icon={<Trash2 className="w-4 h-4" />} aria-label={`Excluir ${b.descricao}`} title="Excluir" onClick={semPropagar(() => excluir(b))} />
         </div>
       ),
     },
@@ -317,22 +378,32 @@ export function BenchmarkApp() {
       header: "Regra aplicada",
       minWidth: 170,
       value: (l) => l.regra?.descricao ?? "",
-      render: (l) =>
-        l.regra ? (
-          <div className="flex items-center gap-1.5">
-            <Tag color={COR_ESCOPO[l.regra.escopo]}>{ROTULO_ESCOPO[l.regra.escopo]}</Tag>
-            <span className="text-[13px] text-text truncate">{l.regra.descricao}</span>
-          </div>
-        ) : (
-          <span className="text-label">Sem regra (100% do CDI)</span>
-        ),
+      render: (l) => (
+        <div>
+          {l.regra ? (
+            <div className="flex items-center gap-1.5">
+              <Tag color={COR_ESCOPO[l.regra.escopo]}>{ROTULO_ESCOPO[l.regra.escopo]}</Tag>
+              <span className="text-[13px] text-text truncate">{l.regra.descricao}</span>
+            </div>
+          ) : (
+            <span className="text-label">Sem regra (100% do CDI)</span>
+          )}
+          {l.cmp.trechos.length > 1 && <div className="text-xs text-label mt-0.5">{descreverTrechos(l.cmp.trechos)}</div>}
+        </div>
+      ),
     },
     {
       key: "bmk",
       header: "Benchmark",
+      headerTitle: "% do CDI do benchmark no período: rendimento do benchmark (capitalizado dia a dia com a regra vigente em cada dia) ÷ (capital base × CDI do período)",
       align: "right",
       value: (l) => l.cmp.pct,
-      render: (l) => `${fmtDec(l.cmp.pct * 100, 1)}%`,
+      render: (l) => (
+        <div className="whitespace-nowrap">
+          <div>{fmtDec(l.cmp.pct * 100, 1)}%</div>
+          <div className="text-xs text-label">regra {fmtDec(l.cmp.pctRegra * 100, 1)}%</div>
+        </div>
+      ),
       total: () => `${fmtDec(d.carteira.pct * 100, 1)}%`,
     },
     {
@@ -355,11 +426,11 @@ export function BenchmarkApp() {
     {
       key: "exc",
       header: "Excesso (R$)",
-      headerTitle: "Rendimento realizado − rendimento que o benchmark teria gerado",
+      headerTitle: "Rendimento realizado − rendimento que o benchmark teria gerado sobre o mesmo capital, capitalizado dia a dia",
       align: "right",
       value: (l) => l.cmp.excesso,
-      render: (l) => <span className={l.cmp.excesso >= 0 ? "text-positive" : "text-negative"}>{fmtNum(l.cmp.excesso, { parens: true })}</span>,
-      total: () => <span className={d.carteira.excesso >= 0 ? "text-positive" : "text-negative"}>{fmtNum(d.carteira.excesso, { parens: true })}</span>,
+      render: (l) => <span className={corExcesso(l.cmp.excesso)}>{fmtNum(l.cmp.excesso, { parens: true })}</span>,
+      total: () => <span className={corExcesso(d.carteira.excesso)}>{fmtNum(d.carteira.excesso, { parens: true })}</span>,
     },
     {
       key: "sit",
@@ -380,21 +451,25 @@ export function BenchmarkApp() {
             variant="default"
             icon={<RotateCcw className="w-4 h-4" />}
             disabled={!alterado}
-            onClick={() => {
-              restaurar();
-              toast.success("Cadastro de benchmark restaurado para o padrão da demo");
-            }}
+            onClick={restaurarPadrao}
+            aria-label="Restaurar padrão"
+            title="Restaurar o cadastro padrão da demo"
           >
             <span className="hidden sm:inline">Restaurar padrão</span>
           </Button>
-          <Button variant="emphasized" icon={<Plus className="w-4 h-4" />} onClick={novo}>
+          <Button variant="emphasized" icon={<Plus className="w-4 h-4" />} onClick={novo} aria-label="Novo benchmark" title="Novo benchmark">
             <span className="hidden sm:inline">Novo benchmark</span>
           </Button>
         </>
       }
       kpis={
         <>
-          <HeaderKpi label="Benchmark da carteira" value={`${fmtDec(d.carteira.pct * 100, 1)}%`} unit="do CDI" sub="Ponderado pelas regras" />
+          <HeaderKpi
+            label="Benchmark da carteira"
+            value={`${fmtDec(d.carteira.pct * 100, 1)}%`}
+            unit="do CDI"
+            sub={`12 meses · regras ${fmtDec(d.carteira.pctRegra * 100, 1)}%`}
+          />
           <HeaderKpi
             label="Realizado 12 meses"
             value={`${fmtDec(d.carteira.realizado * 100, 1)}%`}
@@ -415,16 +490,23 @@ export function BenchmarkApp() {
       <MessageStrip>
         Cadastre a taxa de benchmark de cada aplicação como <strong>percentual do CDI</strong>. A regra mais específica
         vence: <strong>tipo de produto › portfolio › empresa › carteira consolidada</strong>; entre regras do mesmo nível,
-        vale a de vigência mais recente até a data-base. O benchmark é usado no R01 (composição), R03 (rentabilidade) e R05
-        (evolução mensal). Nesta demo o cadastro fica salvo neste navegador.
+        vale a de vigência mais recente. O rendimento do benchmark é capitalizado <strong>dia a dia</strong> com a regra
+        vigente em cada dia, como uma aplicação pós-fixada em % do CDI, e é usado no R01 (composição), R03 (rentabilidade),
+        R05 (evolução mensal) e nos alertas. Nesta demo o cadastro fica salvo neste navegador.
       </MessageStrip>
+      {!temCarteiraVigente(cadastro, p.dataBase) && (
+        <MessageStrip design="critical">
+          Não há regra da <strong>carteira consolidada</strong> vigente em {fmtDate(p.dataBase)}: as aplicações sem regra
+          específica são comparadas com 100% do CDI. Cadastre uma regra de carteira com vigência até a data-base.
+        </MessageStrip>
+      )}
 
       <Card
         title="Regras de benchmark"
-        subtitle={`${cadastro.length} regra(s) · CDI vigente ${fmtPct(p.cdi)} a.a. (importado do SAP)`}
+        subtitle={`${cadastro.length} regra(s) · CDI vigente ${fmtPct(p.cdi)} a.a. (importado do SAP) · clique na linha para editar`}
         bodyClassName="px-0 pb-0"
         actions={
-          <Button size="sm" variant="transparent" icon={<Plus className="w-4 h-4" />} onClick={novo}>
+          <Button size="sm" variant="transparent" icon={<Plus className="w-4 h-4" />} onClick={novo} title="Adicionar regra de benchmark">
             Adicionar
           </Button>
         }
@@ -474,21 +556,25 @@ export function BenchmarkApp() {
             })}
           </ol>
           <p className="text-xs text-label mt-4 leading-relaxed">
-            Excesso = rendimento realizado − (saldo × CDI do período × % do benchmark). A diferença em p.p. compara o % do CDI
-            realizado com o benchmark; tolerância de ±0,5 p.p. para “em linha”.
+            Rendimento do benchmark = capital base × (Π (1 + DI diário × % da regra do dia) − 1), com DI diário = (1 + CDI)^(1/252) − 1,
+            nos dias úteis em que a aplicação esteve ativa. Benchmark em % do CDI = esse rendimento ÷ (capital base × CDI do
+            período), na mesma base do realizado – por isso uma regra de 90% aparece como {fmtDec(taxaEquivalenteBenchmark(0.9, p.cdi) / p.cdi * 100, 1)}% do CDI em 12 meses.
+            Excesso = rendimento realizado − rendimento do benchmark; tolerância de ±0,5 p.p. para “em linha”.
           </p>
         </Card>
       </div>
 
       <Card
         title="Rentabilidade × benchmark por aplicação"
-        subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · rendimento total ${fmtBRL(d.linhas.reduce((s, l) => s + l.r.rendimento, 0))}`}
+        subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · rendimento total ${fmtBRL(d.linhas.reduce((s, l) => s + l.r.rendimento, 0))}${d.comVigenciaNoPeriodo ? ` · ${d.comVigenciaNoPeriodo} aplicação(ões) com mudança de regra no período` : ""}`}
         bodyClassName="px-0 pb-0"
       >
         <DataTable columns={colunasOps} rows={d.linhas} rowKey={(l) => l.r.op.transacao} showTotals maxHeight={520} defaultSort={{ key: "dif", dir: "asc" }} />
       </Card>
 
-      {rascunho && <DialogoBenchmark inicial={rascunho} cadastro={cadastro} cdi={p.cdi} onCancel={() => setRascunho(null)} onConfirm={confirmar} />}
+      {rascunho && (
+        <DialogoBenchmark inicial={rascunho} cadastro={cadastro} cdi={p.cdi} dataBase={p.dataBase} onCancel={() => setRascunho(null)} onConfirm={confirmar} />
+      )}
     </ReportPage>
   );
 }
@@ -503,29 +589,70 @@ function Diferenca({ v }: { v: number }) {
   );
 }
 
+/** "até 31/12/2025: Benchmark da carteira (100%)" – regras anteriores quando a vigência mudou no período */
+function descreverTrechos(trechos: TrechoBenchmark[]): string {
+  return trechos
+    .slice(0, -1)
+    .map((t) => `até ${fmtDate(addDays(t.fim, -1))}: ${t.regra?.descricao ?? "sem regra"} (${fmtDec(t.pct * 100, 1)}%)`)
+    .join(" · ");
+}
+
+/** Mantém Tab / Shift+Tab dentro do diálogo modal */
+function prenderFoco(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.key !== "Tab") return;
+  const focaveis = [
+    ...e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea, [href], [tabindex]:not([tabindex="-1"])'),
+  ].filter((el) => el.offsetParent !== null);
+  if (!focaveis.length) return;
+  const primeiro = focaveis[0];
+  const ultimo = focaveis[focaveis.length - 1];
+  const ativo = document.activeElement;
+  if (e.shiftKey && (ativo === primeiro || !e.currentTarget.contains(ativo))) {
+    e.preventDefault();
+    ultimo.focus();
+  } else if (!e.shiftKey && (ativo === ultimo || !e.currentTarget.contains(ativo))) {
+    e.preventDefault();
+    primeiro.focus();
+  }
+}
+
 function DialogoBenchmark({
   inicial,
   cadastro,
   cdi,
+  dataBase,
   onCancel,
   onConfirm,
 }: {
   inicial: Rascunho;
   cadastro: Benchmark[];
   cdi: number;
+  dataBase: string;
   onCancel: () => void;
   onConfirm: (r: Rascunho) => void;
 }) {
   const [r, setR] = useState<Rascunho>(inicial);
   const [tentou, setTentou] = useState(false);
-  const erros = validar(r, cadastro);
+  const erros = validar(r, cadastro, dataBase);
   const visiveis = tentou ? erros : {};
+  // Elemento que abriu o diálogo, capturado na renderização (antes do autoFocus do primeiro campo)
+  const [origem] = useState<HTMLElement | null>(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onCancel]);
+
+  const primeiroCampo = useRef<HTMLInputElement>(null);
+
+  // Foco no primeiro campo ao abrir e de volta ao elemento que abriu o diálogo ao fechar
+  useEffect(() => {
+    primeiroCampo.current?.focus();
+    return () => {
+      if (origem && origem !== document.body && document.contains(origem)) origem.focus();
+    };
+  }, [origem]);
 
   const set = (patch: Partial<Rascunho>) => setR((x) => ({ ...x, ...patch }));
   const trocarEscopo = (escopo: EscopoBenchmark) => set({ escopo, valor: opcoesValor(escopo)[0]?.value ?? "" });
@@ -549,6 +676,7 @@ function DialogoBenchmark({
         aria-labelledby="bmk-titulo"
         className="w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-fiori-lg overflow-hidden max-h-[92vh] flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={prenderFoco}
       >
         <header className="flex items-center justify-between px-5 py-3.5 border-b border-line-soft">
           <h2 id="bmk-titulo" className="text-base font-bold text-text">
@@ -567,7 +695,7 @@ function DialogoBenchmark({
         >
           <Campo label="Descrição" obrigatorio erro={visiveis.descricao}>
             <input
-              autoFocus
+              ref={primeiroCampo}
               value={r.descricao}
               onChange={(e) => set({ descricao: e.target.value })}
               placeholder="Ex.: CDBs de bancos de primeira linha"
@@ -576,7 +704,7 @@ function DialogoBenchmark({
             />
           </Campo>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Campo label="Escopo" obrigatorio>
+            <Campo label="Escopo" obrigatorio erro={visiveis.escopo}>
               <Select
                 ariaLabel="Escopo"
                 value={r.escopo}
@@ -588,16 +716,25 @@ function DialogoBenchmark({
               <Select ariaLabel="Aplica-se a" value={r.valor} onChange={(v) => set({ valor: v })} options={opcoesValor(r.escopo)} />
             </Campo>
             <Campo label="Benchmark (% do CDI)" obrigatorio erro={visiveis.pct}>
-              <NumberInput ariaLabel="Benchmark em % do CDI" value={r.pct} onChange={(v) => set({ pct: v })} suffix="% CDI" step={0.5} min={PCT_MINIMO * 100} max={PCT_MAXIMO * 100} />
+              <NumberInput
+                ariaLabel="Benchmark em % do CDI"
+                value={r.pct}
+                onChange={(v) => set({ pct: v })}
+                allowEmpty
+                suffix="% CDI"
+                step={0.5}
+                min={PCT_MINIMO * 100}
+                max={PCT_MAXIMO * 100}
+              />
             </Campo>
             <Campo label="Vigência a partir de" obrigatorio erro={visiveis.vigenciaInicio}>
               <input type="date" value={r.vigenciaInicio} onChange={(e) => set({ vigenciaInicio: e.target.value })} className={inputCls(visiveis.vigenciaInicio)} />
             </Campo>
           </div>
           <div className="rounded-lg bg-[#f5f6f7] px-3 py-2.5 text-[13px] text-label">
-            Equivale a <strong className="text-text tabular">{Number.isFinite(r.pct) ? fmtPct((r.pct / 100) * cdi) : "—"} a.a.</strong> com o
-            CDI vigente de {fmtPct(cdi)} a.a. (importado do SAP). Faixa permitida: {fmtDec(PCT_MINIMO * 100, 0)}% a{" "}
-            {fmtDec(PCT_MAXIMO * 100, 0)}% do CDI.
+            Equivale a <strong className="text-text tabular">{Number.isFinite(r.pct) ? fmtPct(taxaEquivalenteBenchmark(r.pct / 100, cdi)) : "—"} a.a.</strong> com o
+            CDI vigente de {fmtPct(cdi)} a.a. (importado do SAP), capitalizado diariamente. Faixa permitida: {fmtDec(PCT_MINIMO * 100, 0)}% a{" "}
+            {fmtDec(PCT_MAXIMO * 100, 0)}% do CDI. A regra vale a partir da vigência; os dias anteriores seguem a regra anterior.
           </div>
           <button type="submit" className="hidden" />
         </form>

@@ -1,7 +1,10 @@
 import clsx from "clsx";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-/** Popover simples ancorado ao gatilho (fecha ao clicar fora ou com Esc) */
+/**
+ * Popover simples ancorado ao gatilho (fecha ao clicar fora ou com Esc). No celular (< sm) abre como painel fixo
+ * sob a shell bar, ocupando a largura da tela com margem de 8 px – nunca sai pelas bordas.
+ */
 export function Popover({
   trigger,
   children,
@@ -36,10 +39,12 @@ export function Popover({
       {open && (
         <div
           className={clsx(
-            "absolute top-full mt-2 z-50 bg-white rounded-[var(--radius-card)] shadow-fiori-lg border border-line-soft overflow-hidden max-w-[calc(100vw-1rem)]",
-            align === "right" ? "right-0" : "left-0",
+            "z-50 bg-white rounded-[var(--radius-card)] shadow-fiori-lg border border-line-soft overflow-hidden",
+            "fixed left-2 right-2 top-[calc(3.5rem+env(safe-area-inset-top,0px))]",
+            "sm:absolute sm:top-full sm:mt-2 sm:w-[var(--popover-w)] sm:max-w-[calc(100vw-1rem)]",
+            align === "right" ? "sm:left-auto sm:right-0" : "sm:right-auto sm:left-0",
           )}
-          style={{ width }}
+          style={{ "--popover-w": `${width}px` } as CSSProperties}
         >
           {children(() => setOpen(false))}
         </div>

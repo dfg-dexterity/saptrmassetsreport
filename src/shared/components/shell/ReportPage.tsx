@@ -134,7 +134,7 @@ function Attr({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-label">{label}</dt>
-      <dd className="text-text font-semibold truncate max-w-[16rem]" title={value}>
+      <dd className="text-text font-semibold leading-snug break-words xl:max-w-[16rem]" title={value}>
         {value}
       </dd>
     </div>

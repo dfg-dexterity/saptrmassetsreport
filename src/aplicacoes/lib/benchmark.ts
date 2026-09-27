@@ -246,6 +246,12 @@ export function compararCarteira(linhas: RentabOp[], cadastro: Benchmark[], p: P
   return somarComparacoes(linhas.map((r) => compararOperacao(r, cadastro, p)));
 }
 
+/** Classe de cor do excesso em R$ (valores abaixo de R$ 0,50 – ruído de arredondamento – ficam neutros) */
+export function corExcesso(v: number): string {
+  if (Math.abs(v) < 0.5) return "text-label";
+  return v > 0 ? "text-positive" : "text-negative";
+}
+
 export const SITUACAO_TEXTO: Record<SituacaoBenchmark, string> = {
   acima: "Acima do benchmark",
   "em linha": "Em linha",

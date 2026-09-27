@@ -1,10 +1,21 @@
 import { CONTRATOS } from "../../captacoes/data/contratos";
-import { indicadoresEm, reclassificadosEm, trimestresAte as trimestresCorporativos, type IndicadoresCorporativos } from "../../captacoes/lib/covenants";
-import { custoMedioPonderado, posicoesDivida } from "../../captacoes/lib/divida";
+import type { CovenantDivida } from "../../captacoes/data/covenants";
+import {
+  indicadoresEm,
+  reclassificadosEm,
+  trimestresAte as trimestresCorporativos,
+  type ApuracaoCovenant,
+  type IndicadoresCorporativos,
+} from "../../captacoes/lib/covenants";
+import { custoMedioPonderado, posicoesDivida, totalDivida } from "../../captacoes/lib/divida";
+import type { ValueState } from "../../shared/components/fiori/ObjectStatus";
+import { dadosCorporativosAte } from "../../shared/data/corporativo";
 import { premissasNaDataBase, type PremissasMercado as Premissas } from "../../shared/data/mercado";
+import { fmtQuarter } from "../../shared/lib/dates";
+import { fmtDec, fmtPct, fmtX } from "../../shared/lib/format";
 import type { Semaforo } from "../../shared/lib/semaforo";
-import { LIMITE_POR_RATING, REGRAS_POLITICA, type Rating } from "../data/carteira";
-import { taxaAnualEquivalente, type Posicao } from "./finance";
+import { LIMITE_POR_RATING, OPERACOES, REGRAS_POLITICA, type Rating } from "../data/carteira";
+import { posicoesEm, taxaAnualEquivalente, type Posicao } from "./finance";
 
 export type { Semaforo } from "../../shared/lib/semaforo";
 export { SEMAFORO_TEXTO } from "../../shared/lib/semaforo";
@@ -129,23 +140,72 @@ export function avaliarPolitica(pos: Posicao[]): ResultadoRegra[] {
 
 // ---------------------------------------------------------------------------
 // R06 – Endividamento × Aplicações
-// Dívida, encargos e custo médio vêm da carteira de captações do mesmo ambiente SAP (C00/C03).
+// Dívida, encargos, custo médio e covenants vêm da carteira de captações (dívida) do mesmo ambiente SAP.
 // ---------------------------------------------------------------------------
 
-export interface Covenant {
-  id: "dlEbitda" | "cobertura" | "liquidez" | "dlPl";
+export { apurarCovenants, type ApuracaoCovenant } from "../../captacoes/lib/covenants";
+
+/**
+ * Rótulo do covenant contratual, no mesmo vocabulário da apuração de covenants da carteira de captações:
+ * descumprido sem waiver na data-base = negativo (reclassifica pelo CPC 26.74); com waiver ou em atenção = crítico.
+ */
+export function rotuloCovenant(a: ApuracaoCovenant): { state: ValueState; texto: string } {
+  if (!a.dataApuracao) return { state: "neutral", texto: "Sem apuração" };
+  if (a.status === "excedido") return a.reclassifica ? { state: "negative", texto: "Descumprido" } : { state: "critical", texto: "Descumprido – waiver" };
+  if (a.status === "atencao") return { state: "critical", texto: "Atenção" };
+  return { state: "positive", texto: "Cumprido" };
+}
+
+/** Valor apurado: índice de capitalização em %, demais em múltiplos */
+export function fmtValorCovenant(cov: CovenantDivida, v: number): string {
+  return cov.formato === "pct" ? fmtPct(v, 1) : fmtX(v);
+}
+
+export function fmtLimiteCovenant(cov: CovenantDivida): string {
+  return `${cov.tipo === "max" ? "≤" : "≥"} ${cov.formato === "pct" ? fmtPct(cov.limite, 0) : fmtX(cov.limite)}`;
+}
+
+export function fmtFolgaCovenant(cov: CovenantDivida, folga: number): string {
+  const sinal = folga < 0 ? "−" : "";
+  return cov.formato === "pct" ? `${sinal}${fmtDec(Math.abs(folga) * 100, 1)} p.p.` : `${sinal}${fmtX(Math.abs(folga))}`;
+}
+
+/** "4T25" para covenants trimestrais, "2025" para anuais */
+export function rotuloApuracao(a: ApuracaoCovenant): string {
+  if (!a.dataApuracao) return "—";
+  return a.cov.periodicidade === "Anual" ? `exercício ${a.dataApuracao.slice(0, 4)}` : fmtQuarter(a.dataApuracao);
+}
+
+/** Limites da política financeira interna (não são covenants contratuais) */
+export interface LimitePolitica {
+  id: "liquidez" | "dlPl";
   indicador: string;
+  formula: string;
   tipo: "max" | "min";
   limite: number;
   alerta: number;
   fonte: string;
 }
 
-export const COVENANTS: Covenant[] = [
-  { id: "dlEbitda", indicador: "Dívida líquida / EBITDA", tipo: "max", limite: 3.0, alerta: 2.5, fonte: "Escrituras das debêntures e CCB" },
-  { id: "cobertura", indicador: "EBITDA / Encargos da dívida", tipo: "min", limite: 2.0, alerta: 2.5, fonte: "Debênture incentivada e CRA" },
-  { id: "liquidez", indicador: "Liquidez de curto prazo", tipo: "min", limite: 1.0, alerta: 1.2, fonte: "Política financeira interna" },
-  { id: "dlPl", indicador: "Dívida líquida / PL", tipo: "max", limite: 1.0, alerta: 0.8, fonte: "Política financeira interna" },
+export const LIMITES_POLITICA: LimitePolitica[] = [
+  {
+    id: "liquidez",
+    indicador: "Liquidez de curto prazo",
+    formula: "(Caixa + aplicações circulantes) ÷ dívida circulante",
+    tipo: "min",
+    limite: 1.0,
+    alerta: 1.2,
+    fonte: "Política financeira interna",
+  },
+  {
+    id: "dlPl",
+    indicador: "Dívida líquida / PL",
+    formula: "Dívida líquida ÷ patrimônio líquido",
+    tipo: "max",
+    limite: 1.0,
+    alerta: 0.8,
+    fonte: "Política financeira interna",
+  },
 ];
 
 export interface IndicadoresTrimestre extends IndicadoresCorporativos {
@@ -173,32 +233,69 @@ export function trimestresAte(dataBase: string): string[] {
   return trimestresCorporativos(dataBase).filter((d) => d >= "2025-03-31");
 }
 
-export function valorCovenant(c: Covenant, i: IndicadoresTrimestre): number {
-  switch (c.id) {
-    case "dlEbitda":
-      return i.dlEbitda;
-    case "cobertura":
-      return i.cobertura;
-    case "liquidez":
-      return i.liquidezCP;
-    case "dlPl":
-      return i.dlPl;
-  }
+function valorLimite(l: LimitePolitica, i: IndicadoresTrimestre): number {
+  return l.id === "liquidez" ? i.liquidezCP : i.dlPl;
 }
 
-export function statusCovenant(c: Covenant, valor: number): Semaforo {
-  if (c.tipo === "max") return valor > c.limite ? "excedido" : valor >= c.alerta ? "atencao" : "ok";
-  return valor < c.limite ? "excedido" : valor <= c.alerta ? "atencao" : "ok";
+export function statusLimite(l: LimitePolitica, valor: number): Semaforo {
+  if (l.tipo === "max") return valor > l.limite ? "excedido" : valor >= l.alerta ? "atencao" : "ok";
+  return valor < l.limite ? "excedido" : valor <= l.alerta ? "atencao" : "ok";
 }
 
-export function avaliarCovenants(i: IndicadoresTrimestre) {
-  return COVENANTS.map((c) => {
-    const valor = valorCovenant(c, i);
-    return { ...c, valor, status: statusCovenant(c, valor) };
+/** Limites da política financeira interna apurados no fim de trimestre `i.data` */
+export function avaliarLimitesPolitica(i: IndicadoresTrimestre) {
+  return LIMITES_POLITICA.map((l) => {
+    const valor = valorLimite(l, i);
+    return { ...l, valor, folga: l.tipo === "max" ? l.limite - valor : valor - l.limite, status: statusLimite(l, valor) };
   });
 }
 
-/** Custo médio ponderado da dívida na data (C03 – alimenta Premissas e R06) */
+/** Endividamento na data-base: dívida pelo custo amortizado (com a reclassificação CPC 26.74, se houver) e aplicações pelo valor contábil */
+export interface EndividamentoNaData {
+  data: string;
+  dividaBruta: number;
+  dividaCirculante: number;
+  dividaNaoCirculante: number;
+  /** não circulante reclassificado para o circulante por descumprimento de covenant sem waiver (CPC 26.74) */
+  reclassificado: number;
+  idsReclassificados: string[];
+  /** disponibilidades do último balancete trimestral até a data-base (dado corporativo) */
+  caixa: number;
+  dataCaixa: string | null;
+  aplicacoesContabil: number;
+  aplicacoesBruto: number;
+  dividaLiquida: number;
+}
+
+export function endividamentoEm(p: Premissas): EndividamentoNaData {
+  const data = p.dataBase;
+  const reclass = reclassificadosEm(data);
+  const pos = posicoesDivida(CONTRATOS, data, p, reclass);
+  const contratual = reclass.size ? posicoesDivida(CONTRATOS, data, p) : pos;
+  const circ = pos.reduce((s, x) => s + x.circulante, 0);
+  const circContratual = contratual.reduce((s, x) => s + x.circulante, 0);
+  const aplic = posicoesEm(OPERACOES, data, p);
+  const corp = dadosCorporativosAte(data);
+  const ultimo = corp[corp.length - 1] ?? null;
+  const dividaBruta = totalDivida(pos);
+  const caixa = ultimo?.caixa ?? 0;
+  const aplicacoesContabil = aplic.reduce((s, x) => s + x.valorContabil, 0);
+  return {
+    data,
+    dividaBruta,
+    dividaCirculante: circ,
+    dividaNaoCirculante: pos.reduce((s, x) => s + x.naoCirculante, 0),
+    reclassificado: circ - circContratual,
+    idsReclassificados: [...reclass].sort(),
+    caixa,
+    dataCaixa: ultimo?.data ?? null,
+    aplicacoesContabil,
+    aplicacoesBruto: aplic.reduce((s, x) => s + x.valorBruto, 0),
+    dividaLiquida: dividaBruta - caixa - aplicacoesContabil,
+  };
+}
+
+/** Custo médio ponderado da dívida na data (carteira de captações – alimenta Premissas e R06) */
 export function custoMedioDivida(p: Premissas): number {
   return custoMedioPonderado(posicoesDivida(CONTRATOS, p.dataBase, p));
 }

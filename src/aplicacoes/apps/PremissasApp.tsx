@@ -14,6 +14,7 @@ import { addMonths, fmtDate, fmtMonthLong, fmtMonthShort, previousYearEnd } from
 import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtDec, fmtPct } from "../../shared/lib/format";
 import { useBenchmarks } from "../context/BenchmarkContext";
+import { regraCarteiraVigente } from "../lib/benchmark";
 import { relatorioPorId } from "../data/catalogo";
 import { NOTA_PREMISSAS, REGIMES_IR, TABELA_IOF, TABELA_IRRF } from "../data/tributacao";
 import { custoMedioDivida } from "../lib/indicadores";
@@ -21,11 +22,22 @@ import { custoMedioDivida } from "../lib/indicadores";
 const rel = relatorioPorId("premissas");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
+/** Origem de cada parâmetro: só os dados de mercado vêm do SAP */
+type Origem = "sap" | "usuario" | "derivado" | "constante";
+
+const ORIGEM: Record<Origem, { rotulo: string; cor: string; bloqueado: boolean }> = {
+  sap: { rotulo: "Importado do SAP", cor: "#556b82", bloqueado: true },
+  usuario: { rotulo: "Seleção do usuário", cor: "#0070f2", bloqueado: false },
+  derivado: { rotulo: "Derivado da data-base", cor: "#8b47d7", bloqueado: false },
+  constante: { rotulo: "Constante de cálculo", cor: "#788fa6", bloqueado: true },
+};
+
 interface Parametro {
   id: string;
   rotulo: string;
   valor: (p: PremissasMercado) => string;
   numero: (p: PremissasMercado) => number | string;
+  origem: Origem;
   fonte: string;
   usadoEm: string[];
 }
@@ -36,7 +48,8 @@ const PARAMETROS: Parametro[] = [
     rotulo: "Data-base do relatório",
     valor: (p) => `${fmtDate(p.dataBase)} (${fmtMonthLong(p.dataBase)})`,
     numero: (p) => fmtDate(p.dataBase),
-    fonte: "Data de corte do fechamento (selecionável na barra superior)",
+    origem: "usuario",
+    fonte: "Data de corte do fechamento, escolhida na barra superior (datas com dados importados do SAP)",
     usadoEm: ["Todos"],
   },
   {
@@ -44,14 +57,31 @@ const PARAMETROS: Parametro[] = [
     rotulo: "Data de abertura do período",
     valor: (p) => fmtDate(previousYearEnd(p.dataBase)),
     numero: (p) => fmtDate(previousYearEnd(p.dataBase)),
-    fonte: "31/12 do exercício anterior",
+    origem: "derivado",
+    fonte: "31/12 do exercício anterior à data-base",
     usadoEm: ["R02", "R03"],
   },
-  { id: "cdi", rotulo: "CDI a.a.", valor: (p) => fmtPct(p.cdi), numero: (p) => p.cdi * 100, fonte: FONTES_SAP.cdi, usadoEm: ["R01", "R03", "R04", "R05", "R06"] },
-  { id: "selic", rotulo: "Selic a.a.", valor: (p) => fmtPct(p.selic), numero: (p) => p.selic * 100, fonte: FONTES_SAP.selic, usadoEm: ["R01", "R04"] },
-  { id: "ipca12m", rotulo: "IPCA acumulado 12 meses", valor: (p) => fmtPct(p.ipca12m), numero: (p) => p.ipca12m * 100, fonte: FONTES_SAP.ipca12m, usadoEm: ["R01", "R03"] },
-  { id: "baseDiasCorridos", rotulo: "Base de dias corridos", valor: (p) => String(p.baseDiasCorridos), numero: (p) => p.baseDiasCorridos, fonte: FONTES_SAP.baseDiasCorridos, usadoEm: ["R01", "R03"] },
-  { id: "baseDiasUteis", rotulo: "Base de dias úteis", valor: (p) => String(p.baseDiasUteis), numero: (p) => p.baseDiasUteis, fonte: FONTES_SAP.baseDiasUteis, usadoEm: ["R01", "R03", "R05"] },
+  { id: "cdi", rotulo: "CDI a.a.", valor: (p) => fmtPct(p.cdi), numero: (p) => p.cdi * 100, origem: "sap", fonte: FONTES_SAP.cdi, usadoEm: ["R01", "R03", "R04", "R05", "R06"] },
+  { id: "selic", rotulo: "Selic a.a.", valor: (p) => fmtPct(p.selic), numero: (p) => p.selic * 100, origem: "sap", fonte: FONTES_SAP.selic, usadoEm: ["R01", "R04"] },
+  { id: "ipca12m", rotulo: "IPCA acumulado 12 meses", valor: (p) => fmtPct(p.ipca12m), numero: (p) => p.ipca12m * 100, origem: "sap", fonte: FONTES_SAP.ipca12m, usadoEm: ["R01", "R03"] },
+  {
+    id: "baseDiasCorridos",
+    rotulo: "Base de dias corridos",
+    valor: (p) => String(p.baseDiasCorridos),
+    numero: (p) => p.baseDiasCorridos,
+    origem: "constante",
+    fonte: "Convenção do cálculo (ano de 365 dias)",
+    usadoEm: ["R01", "R03"],
+  },
+  {
+    id: "baseDiasUteis",
+    rotulo: "Base de dias úteis",
+    valor: (p) => String(p.baseDiasUteis),
+    numero: (p) => p.baseDiasUteis,
+    origem: "constante",
+    fonte: "Convenção do cálculo (252 dias úteis – calendário ANBIMA)",
+    usadoEm: ["R01", "R03", "R05"],
+  },
 ];
 
 export function PremissasApp() {
@@ -60,7 +90,8 @@ export function PremissasApp() {
   const navigate = useNavigate();
 
   const custoDivida = useMemo(() => custoMedioDivida(p), [p]);
-  const bmkCarteira = cadastro.find((b) => b.escopo === "carteira" && b.vigenciaInicio <= p.dataBase);
+  // Regra da carteira vigente na data-base (a de vigência mais recente, mesma lógica do cálculo do benchmark)
+  const bmkCarteira = regraCarteiraVigente(cadastro, p.dataBase);
 
   // Histórico do CDI importado do SAP (24 meses até a data-base) + projeção de 12 meses com o último dado disponível
   const serieCDI = useMemo(() => {
@@ -91,12 +122,18 @@ export function PremissasApp() {
           colunas: [
             { titulo: "Parâmetro", largura: 42 },
             { titulo: "Valor", largura: 16 },
-            { titulo: "Fonte no SAP", largura: 60 },
+            { titulo: "Origem", largura: 22 },
+            { titulo: "Fonte", largura: 60 },
           ],
           linhas: [
-            ...PARAMETROS.map((x) => [x.rotulo, x.numero(p), x.fonte]),
-            ["Custo médio ponderado da dívida (% a.a.)", custoDivida * 100, "Calculado da carteira de captações (C03)"],
-            ["Benchmark da carteira (% do CDI)", (bmkCarteira?.pctCDI ?? 1) * 100, "Cadastro de benchmark"],
+            ...PARAMETROS.map((x) => [x.rotulo, x.numero(p), ORIGEM[x.origem].rotulo, x.fonte]),
+            ["Custo médio ponderado da dívida (% a.a.)", custoDivida * 100, "Calculado", "Taxa efetiva média ponderada da carteira de captações (dívida) na data-base"],
+            [
+              "Benchmark da carteira (% do CDI)",
+              (bmkCarteira?.pctCDI ?? 1) * 100,
+              "Cadastro do usuário",
+              bmkCarteira ? `Regra “${bmkCarteira.descricao}”, vigente desde ${fmtDate(bmkCarteira.vigenciaInicio)}` : "Sem regra de carteira vigente – 100% do CDI",
+            ],
           ],
           notas: ["Taxas expressas em % a.a.", "Valores posteriores à data-base são projetados com o último dado disponível."],
         },
@@ -133,7 +170,7 @@ export function PremissasApp() {
           <HeaderKpi label="CDI a.a." value={fmtPct(p.cdi)} />
           <HeaderKpi label="Selic a.a." value={fmtPct(p.selic)} />
           <HeaderKpi label="IPCA 12m" value={fmtPct(p.ipca12m)} />
-          <HeaderKpi label="Custo da dívida" value={fmtPct(custoDivida)} sub="Captações (C03)" />
+          <HeaderKpi label="Custo da dívida" value={fmtPct(custoDivida)} sub="carteira de captações (dívida)" />
         </>
       }
     >
@@ -152,7 +189,7 @@ export function PremissasApp() {
               <tr className="text-left text-[13px] text-text">
                 <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Parâmetro</th>
                 <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd] text-right w-48">Valor</th>
-                <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Fonte no SAP</th>
+                <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Origem / fonte</th>
                 <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Usado em</th>
               </tr>
             </thead>
@@ -162,9 +199,9 @@ export function PremissasApp() {
                   <td className="px-4 py-2.5 border-b border-line-soft">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-text">{x.rotulo}</span>
-                      <Tag color="#556b82">
-                        <Lock className="w-2.5 h-2.5 mr-1" />
-                        Importado do SAP
+                      <Tag color={ORIGEM[x.origem].cor}>
+                        {ORIGEM[x.origem].bloqueado && <Lock className="w-2.5 h-2.5 mr-1" />}
+                        {ORIGEM[x.origem].rotulo}
                       </Tag>
                     </div>
                   </td>
@@ -188,7 +225,7 @@ export function PremissasApp() {
                 </td>
                 <td className="px-4 py-2.5 border-b border-line-soft text-right tabular font-bold text-text">{fmtPct(custoDivida)}</td>
                 <td className="px-4 py-2.5 border-b border-line-soft text-label">
-                  Taxa efetiva média ponderada da carteira de captações (C03), pelo saldo contábil na data-base
+                  Taxa efetiva média ponderada da carteira de captações (dívida), pelo saldo contábil na data-base
                 </td>
                 <td className="px-4 py-2.5 border-b border-line-soft">
                   <Tag>R06</Tag>
@@ -206,7 +243,10 @@ export function PremissasApp() {
                 </td>
                 <td className="px-4 py-2.5 border-b border-line-soft text-label">
                   <div className="flex items-center justify-between gap-3">
-                    <span>Taxa de referência cadastrada pela tesouraria (regras por empresa, portfolio e produto)</span>
+                    <span>
+                      Taxa de referência cadastrada pela tesouraria (regras por empresa, portfolio e produto)
+                      {bmkCarteira ? ` · regra “${bmkCarteira.descricao}” vigente desde ${fmtDate(bmkCarteira.vigenciaInicio)}` : " · sem regra de carteira vigente na data-base (100% do CDI)"}
+                    </span>
                     <Button size="sm" variant="transparent" icon={<ArrowRight className="w-4 h-4" />} onClick={() => navigate("/benchmark")}>
                       Cadastro
                     </Button>

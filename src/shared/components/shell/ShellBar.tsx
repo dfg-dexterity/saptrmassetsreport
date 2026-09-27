@@ -35,6 +35,11 @@ export function Logo() {
 }
 
 const SEV_ICON = { negative: XCircle, critical: AlertTriangle, information: Info };
+
+/** "março de 2026" → "Março de 2026" (só a primeira letra) */
+function maiusculaInicial(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 const SEV_COR = { negative: "text-negative", critical: "text-critical-strong", information: "text-brand" };
 
 /** sap.f.ShellBar – tema Horizon (barra branca) */
@@ -54,31 +59,44 @@ export function ShellBar({
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [sobre, setSobre] = useState(false);
   const criticos = alertas.filter((a) => a.severidade !== "information").length;
+  // "Aplicações Financeiras" → "Aplicações"; "Captações Financeiras" → "Captações"
+  const nomeCurto = produto.nome.split(" ")[0];
 
   return (
     <>
       <header className="sticky top-[env(safe-area-inset-top,0px)] z-40 bg-shell shadow-shell no-print">
-        <div className="h-[3.25rem] px-4 flex items-center gap-1.5 sm:gap-2">
+        <div className="h-[3.25rem] px-3 sm:px-4 flex items-center gap-1 sm:gap-2">
           {back && (
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="p-2 rounded-lg text-link hover:bg-hover"
+              className="p-1.5 sm:p-2 rounded-lg text-link hover:bg-hover"
               aria-label="Voltar ao Launchpad"
               title="Voltar ao Launchpad"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-hover min-w-0">
+          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-hover shrink-0" aria-label="Início – Launchpad">
             <Logo />
           </button>
-          <div className="flex items-center gap-2 min-w-0">
+          {/* Celular: nome curto do produto (ex.: "Aplicações") com o selo DEMO embaixo */}
+          <div className="flex flex-col items-start min-w-0 sm:hidden leading-none" title={produto.nome}>
+            <span className="max-w-full text-[13px] font-semibold text-text truncate">{nomeCurto}</span>
+            <span className="mt-1 rounded bg-[#fff8d6] border border-[#e76500]/40 text-[#b44f00] text-[9px] font-bold px-1 py-px tracking-wider">DEMO</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 min-w-0">
+            {/* Tablet: nome curto; a partir de md, o nome completo */}
+            <span className="text-sm text-label truncate min-w-0 md:hidden shrink-0" title={produto.nome}>
+              {nomeCurto}
+            </span>
             <span className="text-sm text-label hidden md:inline whitespace-nowrap">{produto.nome}</span>
             {appTitle && (
               <>
-                <span className="text-line hidden md:inline">/</span>
-                <span className="text-sm font-semibold text-text truncate hidden sm:inline">{appTitle}</span>
+                <span className="text-line hidden sm:inline">/</span>
+                <span className="text-sm font-semibold text-text truncate hidden sm:inline min-w-0" title={appTitle}>
+                  {appTitle}
+                </span>
               </>
             )}
             <span className="rounded-md bg-[#fff8d6] border border-[#e76500]/40 text-[#b44f00] text-[10px] font-bold px-1.5 py-0.5 tracking-wider shrink-0">
@@ -117,7 +135,7 @@ export function ShellBar({
           {search && !buscaAberta && (
             <button
               type="button"
-              className="sm:hidden p-2 rounded-lg text-link hover:bg-hover"
+              className="sm:hidden p-1.5 rounded-lg text-link hover:bg-hover"
               onClick={() => setBuscaAberta(true)}
               aria-label="Pesquisar"
             >
@@ -133,14 +151,16 @@ export function ShellBar({
                 type="button"
                 onClick={toggle}
                 className={clsx(
-                  "flex items-center gap-1.5 h-9 px-2.5 rounded-lg text-sm hover:bg-hover",
+                  "flex items-center gap-1.5 h-9 px-1.5 sm:px-2.5 rounded-lg text-sm hover:bg-hover",
                   open ? "bg-selected text-[#0057d2]" : "text-link",
                 )}
                 title="Data-base do relatório"
               >
                 <CalendarDays className="w-[18px] h-[18px]" />
                 <span className="hidden lg:inline text-label">Data-base</span>
-                <span className="font-semibold tabular">{fmtDate(premissas.dataBase)}</span>
+                <span className="font-semibold tabular hidden min-[400px]:inline">{fmtDate(premissas.dataBase)}</span>
+                {/* dd/mm/aa em telas muito estreitas */}
+                <span className="font-semibold tabular min-[400px]:hidden">{fmtDate(premissas.dataBase).replace(/\/(\d{2})(\d{2})$/, "/$2")}</span>
               </button>
             )}
           >
@@ -164,7 +184,7 @@ export function ShellBar({
                       >
                         <span>
                           <span className="font-semibold tabular">{fmtDate(d)}</span>
-                          <span className="text-label ml-2 capitalize">{fmtMonthLong(d)}</span>
+                          <span className="text-label ml-2">{maiusculaInicial(fmtMonthLong(d))}</span>
                         </span>
                         {d === premissas.dataBase && <Check className="w-4 h-4 text-brand" />}
                       </button>
@@ -182,7 +202,7 @@ export function ShellBar({
               <button
                 type="button"
                 onClick={toggle}
-                className="relative p-2 rounded-lg text-link hover:bg-hover"
+                className="relative p-1.5 sm:p-2 rounded-lg text-link hover:bg-hover"
                 aria-label={`Notificações (${alertas.length})`}
                 title="Notificações"
               >

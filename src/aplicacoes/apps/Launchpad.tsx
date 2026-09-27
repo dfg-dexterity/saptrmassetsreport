@@ -19,7 +19,7 @@ import { Card, SectionTitle } from "../../shared/components/fiori/Card";
 import { GenericTile } from "../../shared/components/fiori/GenericTile";
 import { MicroBar } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
-import { ObjectStatus, semaforoState } from "../../shared/components/fiori/ObjectStatus";
+import { ObjectStatus, semaforoState, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ShellBar } from "../../shared/components/shell/ShellBar";
 import { RELATORIOS, SECOES, type Relatorio } from "../data/catalogo";
 import { EMPRESAS, OPERACOES } from "../data/carteira";
@@ -30,24 +30,19 @@ import { AVISO_DADOS, IMPORTACAO_SAP, ultimoDadoNaDataBase } from "../../shared/
 import { compararCarteira, SITUACAO_STATE } from "../lib/benchmark";
 import { usePremissas } from "../../shared/context/MercadoContext";
 import { fmtDate, lastMonthEnds } from "../../shared/lib/dates";
-import {
-  analiseFiscal,
-  consolidarRentabilidade,
-  evolucaoMensal,
-  pctCDIEvolucao,
-  posicoesEm,
-  rentabilidade,
-} from "../lib/finance";
+import { analiseFiscal, consolidarRentabilidade, evolucaoMensal, posicoesEm, rentabilidade } from "../lib/finance";
 import { fmtCompact, fmtDec, fmtInt, fmtMi, fmtPct, fmtX } from "../../shared/lib/format";
 import {
-  avaliarCovenants,
+  apurarCovenants,
   avaliarPolitica,
   classificarHHI,
   concentracaoPorGrupo,
+  fmtLimiteCovenant,
+  fmtValorCovenant,
   hhi,
-  indicadoresTrimestre,
+  rotuloApuracao,
+  rotuloCovenant,
   totalCarteira,
-  trimestresAte,
 } from "../lib/indicadores";
 
 function saudacao(d: Date) {
@@ -77,16 +72,15 @@ export function Launchpad() {
     const evol = evolucaoMensal(OPERACOES, meses.slice(1), p);
     const linhasRent = rentabilidade(OPERACOES, meses[0], p.dataBase, p);
     const rent = consolidarRentabilidade(linhasRent, meses[0], p.dataBase, p);
-    const bmk = compararCarteira(linhasRent, cadastro, p.dataBase);
+    const bmk = compararCarteira(linhasRent, cadastro, p);
     const grupos = concentracaoPorGrupo(pos);
     const indiceHHI = hhi(grupos.map((g) => g.share));
     const politica = avaliarPolitica(pos);
     const fiscal = pos.map((x) => analiseFiscal(x, p));
     const aguardar = fiscal.filter((f) => f.recomendacao === "Aguardar próxima faixa");
     const iof = fiscal.filter((f) => f.recomendacao === "Evitar resgate (IOF)");
-    const tri = trimestresAte(p.dataBase);
-    const ind = tri.length ? indicadoresTrimestre(tri[tri.length - 1]) : null;
-    const covenants = ind ? avaliarCovenants(ind) : [];
+    // Covenants contratuais da dívida: mesma apuração da carteira de captações
+    const covenants = apurarCovenants(p.dataBase);
     const controladora = pos.filter((x) => x.op.empresa === "1000").reduce((s, x) => s + x.valorBruto, 0);
     const vencimentos = pos
       .filter((x) => x.prazoRemanescente !== null && x.prazoRemanescente <= 90)
@@ -107,7 +101,6 @@ export function Launchpad() {
       politica,
       aguardar,
       iof,
-      ind,
       covenants,
       controladora,
       vencimentos,
@@ -115,9 +108,20 @@ export function Launchpad() {
   }, [p, cadastro]);
 
   const limitesAlerta = d.grupos.filter((g) => g.status !== "ok").length + d.politica.filter((r) => r.status !== "ok").length;
-  const covViolados = d.covenants.filter((c) => c.status === "excedido").length;
+  const covDescumpridos = d.covenants.filter((c) => c.status === "excedido");
+  const covSemWaiver = covDescumpridos.filter((c) => c.reclassifica).length;
   const covAtencao = d.covenants.filter((c) => c.status === "atencao").length;
-  const dlEbitda = d.covenants.find((c) => c.id === "dlEbitda");
+  const dlEbitda = d.covenants.find((c) => c.cov.id === "dlEbitda");
+  const rotuloDl = dlEbitda ? rotuloCovenant(dlEbitda) : null;
+  // Rodapé curto (cabe no tile 1×1)
+  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+  const rodapeCov: { texto: string; state: ValueState } = covSemWaiver
+    ? { texto: plural(covSemWaiver, "covenant descumprido", "descumpridos"), state: "negative" }
+    : covDescumpridos.length
+      ? { texto: plural(covDescumpridos.length, "covenant c/ waiver", "c/ waiver"), state: "critical" }
+      : covAtencao
+        ? { texto: plural(covAtencao, "em atenção", "em atenção"), state: "critical" }
+        : { texto: "Covenants cumpridos", state: "positive" };
 
   const tiles: Record<string, Parameters<typeof GenericTile>[0]> = {
     premissas: {
@@ -154,8 +158,8 @@ export function Launchpad() {
     r05: {
       title: "Evolução Mensal",
       subtitle: "R05 · Saldo 12 meses",
-      value: fmtDec(pctCDIEvolucao(d.evol) * 100, 1),
-      unit: "% do CDI (12 meses)",
+      value: fmtDec(d.rent.pctCDIBruto * 100, 1),
+      unit: "% do CDI bruto (12 meses)",
       footer: `Rendimentos 12m: ${fmtCompact(d.rend12)}`,
       wide: true,
       chart: (
@@ -177,7 +181,7 @@ export function Launchpad() {
       subtitle: "R03 · Últimos 12 meses",
       value: fmtDec(d.rent.pctCDIBruto * 100, 1),
       unit: "% do CDI bruto",
-      footer: `Benchmark: ${fmtDec(d.bmk.pct * 100, 1)}% do CDI`,
+      footer: `Benchmark ${fmtDec(d.bmk.pct * 100, 1)}%`,
       footerState: SITUACAO_STATE[d.bmk.situacao],
       state: d.bmk.situacao === "abaixo" ? "critical" : d.bmk.situacao === "acima" ? "positive" : "neutral",
     },
@@ -193,10 +197,10 @@ export function Launchpad() {
       title: "Endividamento × Aplicações",
       subtitle: "R06 · DL / EBITDA",
       value: dlEbitda ? fmtDec(dlEbitda.valor, 2) : "—",
-      unit: dlEbitda ? `x (covenant ≤ ${fmtX(dlEbitda.limite, 1)})` : "",
-      state: dlEbitda ? semaforoState(dlEbitda.status) : "neutral",
-      footer: covViolados ? `${covViolados} covenant(s) violado(s)` : covAtencao ? `${covAtencao} covenant(s) em atenção` : "Covenants atendidos",
-      footerState: covViolados ? "negative" : covAtencao ? "critical" : "positive",
+      unit: dlEbitda ? `x (covenant ${fmtLimiteCovenant(dlEbitda.cov)})` : "",
+      state: rotuloDl?.state ?? "neutral",
+      footer: rodapeCov.texto,
+      footerState: rodapeCov.state,
     },
     r02: {
       title: "Movimentação – Nota Explicativa",
@@ -282,8 +286,8 @@ export function Launchpad() {
               <KpiCard
                 label="DL / EBITDA"
                 value={dlEbitda ? fmtX(dlEbitda.valor) : "—"}
-                sub={dlEbitda ? `Covenant ≤ ${fmtX(dlEbitda.limite, 1)}` : ""}
-                color={dlEbitda?.status === "ok" ? "#256f3a" : "#b44f00"}
+                sub={dlEbitda ? `Covenant ${fmtLimiteCovenant(dlEbitda.cov)} · ${rotuloApuracao(dlEbitda)}` : ""}
+                color={rotuloDl ? COR_ESTADO[rotuloDl.state] : undefined}
               />
             </div>
           </section>
@@ -422,25 +426,30 @@ export function Launchpad() {
                 )}
               </Card>
 
-              {/* Covenants */}
+              {/* Covenants contratuais da dívida */}
               <Card
-                title="Covenants"
-                subtitle={d.ind ? `Posição de ${fmtDate(d.ind.data)} (R06)` : "R06"}
+                title="Covenants contratuais"
+                subtitle={`Última apuração até ${fmtDate(p.dataBase)} (R06)`}
                 icon={<Scale className="w-5 h-5 text-[#df1278]" />}
                 actions={<VerMais onClick={() => navigate("/r06-indicadores")} />}
               >
                 <ul className="divide-y divide-line-soft -mx-1">
-                  {d.covenants.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-3 px-1 py-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-text truncate">{c.indicador}</div>
-                        <div className="text-xs text-label">
-                          Limite {c.tipo === "max" ? "≤" : "≥"} {fmtX(c.limite, 1)}
+                  {d.covenants.map((c) => {
+                    const r = rotuloCovenant(c);
+                    return (
+                      <li key={c.cov.id} className="flex items-center justify-between gap-3 px-1 py-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-text truncate" title={c.cov.indicador}>
+                            {c.cov.indicador}
+                          </div>
+                          <div className="text-xs text-label">
+                            {fmtLimiteCovenant(c.cov)} · {rotuloApuracao(c)} · {r.texto}
+                          </div>
                         </div>
-                      </div>
-                      <ObjectStatus state={semaforoState(c.status)}>{fmtX(c.valor)}</ObjectStatus>
-                    </li>
-                  ))}
+                        <ObjectStatus state={r.state}>{fmtValorCovenant(c.cov, c.valor)}</ObjectStatus>
+                      </li>
+                    );
+                  })}
                 </ul>
               </Card>
             </div>
@@ -525,14 +534,22 @@ function QuickStat({ label, value, className }: { label: string; value: string; 
   );
 }
 
+const COR_ESTADO: Record<ValueState, string> = {
+  positive: "#256f3a",
+  critical: "#b44f00",
+  negative: "#aa0808",
+  information: "#0070f2",
+  neutral: "#1d2d3e",
+};
+
 function KpiCard({ label, value, sub, color = "#1d2d3e" }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 min-w-0">
-      <div className="text-[13px] text-label truncate">{label}</div>
+      <div className="text-[13px] text-label leading-snug">{label}</div>
       <div className="text-xl font-bold tabular truncate mt-0.5" style={{ color }}>
         {value}
       </div>
-      {sub && <div className="text-xs text-label truncate mt-0.5">{sub}</div>}
+      {sub && <div className="text-xs text-label leading-snug mt-0.5">{sub}</div>}
     </div>
   );
 }

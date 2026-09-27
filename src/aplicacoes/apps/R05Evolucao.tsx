@@ -11,33 +11,46 @@ import { relatorioPorId } from "../data/catalogo";
 import { ESCOPOS, useCarteira, type Escopo } from "../context/useDados";
 import { fmtDate, fmtMonthLong, fmtMonthShort, lastMonthEnds } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { consolidarRentabilidade, evolucaoMensal, pctCDIEvolucao, rentabilidade, type MesEvolucao } from "../lib/finance";
+import { consolidarRentabilidade, evolucaoMensal, rentabilidade, type MesEvolucao, type RentabCarteira } from "../lib/finance";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 import { totalCarteira } from "../lib/indicadores";
 import { useBenchmarks } from "../context/BenchmarkContext";
-import { compararCarteira, situacaoBenchmark, SITUACAO_STATE, SITUACAO_TEXTO } from "../lib/benchmark";
+import { compararCarteira, corExcesso, situacaoBenchmark, SITUACAO_STATE, SITUACAO_TEXTO, type ComparacaoBenchmark, type SituacaoBenchmark } from "../lib/benchmark";
 
 const rel = relatorioPorId("r05");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
-/** Mês do R05 com o benchmark cadastrado (% do CDI) aplicado ao saldo médio do mês */
-type MesR05 = MesEvolucao & { baseMedia: number; pctBmk: number; excesso: number };
+/**
+ * Mês do R05 com o benchmark cadastrado: rendimento do benchmark calculado aplicação a aplicação, dia a dia, com a
+ * regra vigente em cada dia (mesma função do R03). O % do CDI do mês e o benchmark do mês usam a MESMA base (saldo
+ * médio do mês), de modo que % do CDI − benchmark = excesso ÷ (saldo médio × CDI do mês).
+ */
+type MesR05 = MesEvolucao & { baseMedia: number; rendBmk: number; pctBmk: number; excesso: number; situacao: SituacaoBenchmark };
+
+/** Coluna "12 meses": mesmo método do R03 (capital base de cada aplicação no início da janela de 12 meses) */
+interface Total12m {
+  r03: RentabCarteira;
+  bmk: ComparacaoBenchmark;
+}
 
 const baseMedia = (m: MesEvolucao) => m.saldoInicial + 0.5 * (m.aplicacoes - m.resgatesBrutos);
 
-function pctBmkPeriodo(ms: MesR05[]): number {
-  const peso = ms.reduce((s, m) => s + m.cdiMes * m.baseMedia, 0);
-  return peso > 0 ? ms.reduce((s, m) => s + m.cdiMes * m.baseMedia * m.pctBmk, 0) / peso : 1;
-}
+const COR_SITUACAO: Record<SituacaoBenchmark, string> = {
+  acima: "text-positive",
+  "em linha": "text-info",
+  abaixo: "text-critical",
+};
 
 interface LinhaDef {
   rotulo: string;
   valor: (m: MesR05) => number;
-  total?: (ms: MesR05[]) => number | null;
+  total?: (ms: MesR05[], t: Total12m) => number | null;
   tipo?: "valor" | "pct" | "cdi" | "bmk";
   cor?: boolean;
   destaque?: boolean;
   sinal?: -1 | 1;
+  /** total de 12 meses pelo método do R03 (nota ¹) */
+  metodoR03?: boolean;
 }
 
 const LINHAS: LinhaDef[] = [
@@ -50,9 +63,9 @@ const LINHAS: LinhaDef[] = [
   { rotulo: "Saldo final", valor: (m) => m.saldoFinal, total: (ms) => ms[ms.length - 1]?.saldoFinal ?? 0, destaque: true },
   { rotulo: "Rentabilidade do mês", valor: (m) => m.rentabMes, total: () => null, tipo: "pct" },
   { rotulo: "CDI do mês", valor: (m) => m.cdiMes, total: () => null, tipo: "pct" },
-  { rotulo: "% do CDI", valor: (m) => m.pctCDI, total: (ms) => pctCDIEvolucao(ms), tipo: "cdi", destaque: true },
-  { rotulo: "Benchmark (% do CDI)", valor: (m) => m.pctBmk, total: (ms) => pctBmkPeriodo(ms), tipo: "bmk" },
-  { rotulo: "Excesso s/ benchmark (R$)", valor: (m) => m.excesso, total: (ms) => ms.reduce((s, m) => s + m.excesso, 0), cor: true },
+  { rotulo: "% do CDI", valor: (m) => m.pctCDI, total: (_, t) => t.r03.pctCDIBruto, tipo: "cdi", destaque: true, metodoR03: true },
+  { rotulo: "Benchmark (% do CDI)", valor: (m) => m.pctBmk, total: (_, t) => t.bmk.pct, tipo: "bmk", metodoR03: true },
+  { rotulo: "Excesso s/ benchmark (R$)", valor: (m) => m.excesso, total: (_, t) => t.bmk.excesso, cor: true, metodoR03: true },
 ];
 
 export function R05Evolucao() {
@@ -64,19 +77,24 @@ export function R05Evolucao() {
   const d = useMemo(() => {
     const fins = lastMonthEnds(p.dataBase, 13);
     const meses: MesR05[] = evolucaoMensal(ops, fins.slice(1), p).map((m) => {
-      const pctBmk = compararCarteira(rentabilidade(ops, m.inicio, m.fim, p), cadastro, m.fim).pct;
+      const cmp = compararCarteira(rentabilidade(ops, m.inicio, m.fim, p), cadastro, p);
       const b = baseMedia(m);
-      return { ...m, baseMedia: b, pctBmk, excesso: m.rendimentos - b * m.cdiMes * pctBmk };
+      const peso = b * m.cdiMes;
+      const pctBmk = peso > 0 ? cmp.rendBenchmark / peso : cmp.pct;
+      return { ...m, baseMedia: b, rendBmk: cmp.rendBenchmark, pctBmk, excesso: m.rendimentos - cmp.rendBenchmark, situacao: situacaoBenchmark(m.pctCDI, pctBmk) };
     });
-    const r03 = consolidarRentabilidade(rentabilidade(ops, fins[0], p.dataBase, p), fins[0], p.dataBase, p);
-    return { meses, r03 };
+    const linhas12 = rentabilidade(ops, fins[0], p.dataBase, p);
+    const total12: Total12m = { r03: consolidarRentabilidade(linhas12, fins[0], p.dataBase, p), bmk: compararCarteira(linhas12, cadastro, p) };
+    return { meses, total12, r03: total12.r03 };
   }, [ops, p, cadastro]);
 
-  const soma = (fn: (m: MesEvolucao) => number) => d.meses.reduce((s, m) => s + fn(m), 0);
+  const soma = (fn: (m: MesR05) => number) => d.meses.reduce((s, m) => s + fn(m), 0);
   const rend12 = soma((m) => m.rendimentos);
-  const pct12 = pctCDIEvolucao(d.meses);
-  const bmk12 = pctBmkPeriodo(d.meses);
-  const sit12 = situacaoBenchmark(pct12, bmk12);
+  // 12 meses pelo mesmo método do R03 / Benchmark / Launchpad
+  const pct12 = d.total12.r03.pctCDIBruto;
+  const bmk12 = d.total12.bmk.pct;
+  const sit12 = d.total12.bmk.situacao;
+  const excessoMeses = soma((m) => m.excesso);
   const saldoR01 = totalCarteira(posicoes);
   const final = d.meses[d.meses.length - 1];
   const conciliaR03 = Math.abs(rend12 - d.r03.rendimento) < 1;
@@ -109,11 +127,12 @@ export function R05Evolucao() {
           linhas: LINHAS.map((l) => [
             l.rotulo,
             ...d.meses.map((m) => (l.tipo ? l.valor(m) : l.valor(m) * (l.sinal ?? 1))),
-            l.total ? (l.total(d.meses) ?? "") : "",
+            l.total ? (l.total(d.meses, d.total12) ?? "") : "",
           ]),
           notas: [
             "Linhas de rentabilidade, CDI, % do CDI e benchmark expressas em fração (formatar como %).",
-            "Benchmark: cadastro em % do CDI ponderado pelas aplicações do mês; excesso = rendimentos − saldo médio × CDI do mês × benchmark.",
+            "Benchmark do mês: rendimento que as aplicações do mês teriam gerado no benchmark cadastrado, calculado dia a dia com a regra vigente em cada dia (capital base × (Π (1 + DI diário × % da regra) − 1)), expresso sobre o saldo médio do mês – mesma base do % do CDI do mês; excesso = rendimentos − rendimento do benchmark.",
+            `Coluna 12 meses de % do CDI, benchmark e excesso: mesmo método do R03 (capital base de cada aplicação no início da janela). A soma dos excessos mensais (${fmtBRL(excessoMeses)}) difere do excesso de 12 meses (${fmtBRL(d.total12.bmk.excesso)}) porque, mês a mês, o capital é recalculado com o rendimento realizado.`,
             `Conciliação: rendimentos 12m = R03 (${fmtBRL(d.r03.rendimento)}); saldo final = posição do R01 (${fmtBRL(saldoR01)}).`,
           ],
         },
@@ -132,7 +151,12 @@ export function R05Evolucao() {
           <HeaderKpi label="Aplicações 12m" value={fmtCompact(soma((m) => m.aplicacoes))} />
           <HeaderKpi label="Resgates 12m" value={fmtCompact(soma((m) => m.resgatesBrutos))} sub="brutos" />
           <HeaderKpi label="Rendimentos 12m" value={fmtCompact(rend12)} state="positive" />
-          <HeaderKpi label="% do CDI 12m" value={`${fmtDec(pct12 * 100, 1)}%`} state={SITUACAO_STATE[sit12]} sub={`Benchmark ${fmtDec(bmk12 * 100, 1)}% · ${SITUACAO_TEXTO[sit12].toLowerCase()}`} />
+          <HeaderKpi
+            label="% do CDI 12m"
+            value={`${fmtDec(pct12 * 100, 1)}%`}
+            state={SITUACAO_STATE[sit12]}
+            sub={`Benchmark ${fmtDec(bmk12 * 100, 1)}% · ${SITUACAO_TEXTO[sit12].toLowerCase()} (método R03)`}
+          />
         </>
       }
     >
@@ -234,15 +258,23 @@ export function R05Evolucao() {
                         className={clsx(
                           "px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap",
                           m.fim === mes.fim ? "bg-selected" : l.destaque ? "bg-[#f5f6f7]" : "",
-                          l.tipo === "cdi" && (situacaoBenchmark(m.pctCDI, m.pctBmk) === "abaixo" ? "text-critical" : "text-positive"),
-                          l.cor && (l.valor(m) >= 0 ? "text-positive" : "text-negative"),
+                          l.tipo === "cdi" && COR_SITUACAO[m.situacao],
+                          l.cor && corExcesso(l.valor(m)),
                         )}
                       >
                         {fmt(l.valor(m))}
                       </td>
                     ))}
-                    <td className="px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-[#f5f6f7] font-bold whitespace-nowrap">
-                      {l.total ? fmt(l.total(d.meses)) : ""}
+                    <td
+                      className={clsx(
+                        "px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-[#f5f6f7] font-bold whitespace-nowrap",
+                        l.tipo === "cdi" && COR_SITUACAO[sit12],
+                        l.cor && corExcesso(d.total12.bmk.excesso),
+                      )}
+                      title={l.metodoR03 ? "12 meses pelo mesmo método do R03 (nota ¹)" : undefined}
+                    >
+                      {l.total ? fmt(l.total(d.meses, d.total12)) : ""}
+                      {l.metodoR03 && <sup className="ml-0.5 text-label font-normal">1</sup>}
                     </td>
                   </tr>
                 );
@@ -250,6 +282,14 @@ export function R05Evolucao() {
             </tbody>
           </table>
         </div>
+        <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
+          Meses: % do CDI e benchmark sobre o saldo médio do mês (saldo inicial + ½ × (aplicações − resgates)); o benchmark é o
+          rendimento que as mesmas aplicações teriam gerado no cadastro, capitalizado dia a dia com a regra vigente em cada dia.
+          Cor do % do CDI: acima / em linha (±0,5 p.p.) / abaixo do benchmark. <sup>1</sup> 12 meses: mesmo método do R03 e do
+          Launchpad (capital base de cada aplicação no início da janela). A soma dos excessos mensais ({fmtBRL(excessoMeses)})
+          difere do excesso de 12 meses ({fmtBRL(d.total12.bmk.excesso)}) porque, mês a mês, o capital é recalculado com o
+          rendimento realizado.
+        </p>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

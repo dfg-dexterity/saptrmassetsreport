@@ -17,8 +17,7 @@ import { proximaFaixaIR, taxaContratada, type Posicao } from "../lib/finance";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 import { distribuicao, totalCarteira } from "../lib/indicadores";
 import { useBenchmarks } from "../context/BenchmarkContext";
-import type { Benchmark } from "../data/benchmark";
-import { benchmarkDaOperacao, situacaoBenchmark, SITUACAO_STATE } from "../lib/benchmark";
+import { compararPosicao, SITUACAO_STATE, type ComparacaoOperacao } from "../lib/benchmark";
 
 const rel = relatorioPorId("r01");
 
@@ -39,7 +38,10 @@ export function R01Composicao() {
   const [cpc, setCpc] = useState(TODOS);
   const [selecionada, setSelecionada] = useState<string | null>(null);
   const { cadastro } = useBenchmarks();
-  const bmk = (x: Posicao) => benchmarkDaOperacao(x.op, cadastro, p.dataBase)?.pctCDI ?? 1;
+  // Benchmark × realizado desde a aplicação até a data-base (capitalizado dia a dia com a regra vigente em cada dia)
+  const comparacoes = useMemo(() => new Map(posicoes.map((x) => [x.op.transacao, compararPosicao(x, cadastro, p)])), [posicoes, cadastro, p]);
+  const cmpDe = (x: Posicao) => comparacoes.get(x.op.transacao)!;
+  const bmk = (x: Posicao) => cmpDe(x).pct;
 
   const opcoes = (fn: (x: Posicao) => string) =>
     [{ value: TODOS, label: "Todos" }, ...[...new Set(posicoes.map(fn))].sort().map((v) => ({ value: v, label: v }))];
@@ -99,17 +101,17 @@ export function R01Composicao() {
     { key: "taxa", header: "Taxa contratada", value: (x) => x.op.taxa, render: (x) => <span className="whitespace-nowrap">{taxaContratada(x.op)}</span> },
     {
       key: "bmk",
-      header: "Benchmark",
-      headerTitle: "Benchmark cadastrado (% do CDI) × rentabilidade realizada desde a aplicação",
+      header: "Benchmark desde a aplicação",
+      headerTitle:
+        "Janela: da data de aplicação até a data-base (no R03 e no cadastro de benchmark a comparação é dos últimos 12 meses). Benchmark = rendimento que a regra cadastrada teria gerado sobre o principal, capitalizado dia a dia com a regra vigente em cada dia, em % do CDI do mesmo período; realizado = rendimento ÷ principal ÷ CDI do período.",
       align: "right",
       value: (x) => x.pctCDI - bmk(x),
       render: (x) => {
-        const b = bmk(x);
-        const sit = situacaoBenchmark(x.pctCDI, b);
+        const c = cmpDe(x);
         return (
           <div className="whitespace-nowrap">
-            <div>{fmtDec(b * 100, 1)}% CDI</div>
-            <div className={clsx("text-xs", sit === "abaixo" ? "text-critical font-semibold" : sit === "acima" ? "text-positive" : "text-label")}>
+            <div>{fmtDec(c.pct * 100, 1)}% CDI</div>
+            <div className={clsx("text-xs", c.situacao === "abaixo" ? "text-critical font-semibold" : c.situacao === "acima" ? "text-positive" : "text-label")}>
               Realizado {fmtDec(x.pctCDI * 100, 1)}%
             </div>
           </div>
@@ -201,7 +203,7 @@ export function R01Composicao() {
             { titulo: "Tipo de Produto", largura: 18 },
             { titulo: "Indexador", largura: 10 },
             { titulo: "Taxa Contratada", largura: 16 },
-            { titulo: "Benchmark (% CDI)", tipo: "decimal", largura: 14 },
+            { titulo: "Benchmark desde a aplicação (% CDI)", tipo: "decimal", largura: 18 },
             { titulo: "Realizado desde a aplicação (% CDI)", tipo: "decimal", largura: 18 },
             { titulo: "Portfolio", largura: 14 },
             { titulo: "Calendário", largura: 10 },
@@ -242,7 +244,7 @@ export function R01Composicao() {
             "(ii) Valor Líquido = Valor Principal + Juros Provisionados − IR − IOF.",
             "(iii) Valor justo: valor na curva ajustado a mercado.",
             "(iv) Classificação conforme CPC 48: Custo Amortizado, VJ por ORA ou VJ por Resultado.",
-            "(v) Benchmark conforme o cadastro de benchmark em % do CDI (regra mais específica: produto > portfolio > empresa > carteira).",
+            "(v) Benchmark conforme o cadastro de benchmark em % do CDI (regra mais específica: produto > portfolio > empresa > carteira), da data de aplicação até a data-base: rendimento que a regra teria gerado sobre o principal, capitalizado dia a dia com a regra vigente em cada dia, ÷ (principal × CDI do período). No R03 a janela é de 12 meses.",
           ],
         },
       ],
@@ -323,7 +325,7 @@ export function R01Composicao() {
             defaultSort={{ key: "principal", dir: "desc" }}
           />
         </Card>
-        {sel && <DetalheOperacao pos={sel} benchmark={benchmarkDaOperacao(sel.op, cadastro, p.dataBase)} onClose={() => setSelecionada(null)} />}
+        {sel && <DetalheOperacao pos={sel} benchmark={cmpDe(sel)} dataBase={p.dataBase} onClose={() => setSelecionada(null)} />}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -375,7 +377,7 @@ export function R01Composicao() {
   );
 }
 
-function DetalheOperacao({ pos, benchmark, onClose }: { pos: Posicao; benchmark: Benchmark | null; onClose: () => void }) {
+function DetalheOperacao({ pos, benchmark, dataBase, onClose }: { pos: Posicao; benchmark: ComparacaoOperacao; dataBase: string; onClose: () => void }) {
   const { op } = pos;
   const prox = proximaFaixaIR(pos.diasCorridos, op.regimeIR);
   const mapa = MAPEAMENTO_R01.filter((m) => m.visao);
@@ -443,17 +445,27 @@ function DetalheOperacao({ pos, benchmark, onClose }: { pos: Posicao; benchmark:
             <Field label="Prazo remanescente">{pos.prazoRemanescente === null ? "Liquidez diária" : `${pos.prazoRemanescente} dias`}</Field>
             <Field label="Taxa efetiva (a.a.)">{fmtPct(pos.taxaEfetivaAA)}</Field>
             <Field label="Rentab. desde a aplicação">{`${fmtDec(pos.pctCDI * 100, 1)}% CDI`}</Field>
-            <Field label="Benchmark">{`${fmtDec((benchmark?.pctCDI ?? 1) * 100, 1)}% CDI`}</Field>
-            <Field label="Versus benchmark">
-              <ObjectStatus state={SITUACAO_STATE[situacaoBenchmark(pos.pctCDI, benchmark?.pctCDI ?? 1)]}>
-                {`${pos.pctCDI - (benchmark?.pctCDI ?? 1) >= 0 ? "+" : ""}${fmtDec((pos.pctCDI - (benchmark?.pctCDI ?? 1)) * 100, 1)} p.p.`}
+            <Field label="Benchmark desde a aplicação">{`${fmtDec(benchmark.pct * 100, 1)}% CDI`}</Field>
+            <Field label="Versus benchmark (desde a aplicação)">
+              <ObjectStatus state={SITUACAO_STATE[benchmark.situacao]}>
+                {`${pos.pctCDI - benchmark.pct >= 0 ? "+" : ""}${fmtDec((pos.pctCDI - benchmark.pct) * 100, 1)} p.p.`}
               </ObjectStatus>
+            </Field>
+            <Field label="Regra cadastrada">
+              {benchmark.trechos
+                .map((t) => `${t.regra?.descricao ?? "Sem regra"} (${fmtDec(t.pct * 100, 1)}%)`)
+                .filter((v, i, a) => a.indexOf(v) === i)
+                .join(" → ")}
             </Field>
             <Field label="Regime de IR">{op.regimeIR}</Field>
             <Field label="Próxima faixa IR">{prox ? `${fmtPct(prox.aliquota, 1)} em ${prox.aPartirDe - pos.diasCorridos} dias` : "—"}</Field>
             <Field label="Liquidez">{op.liquidez}</Field>
             <Field label="Faixa de prazo">{pos.faixaPrazo}</Field>
           </div>
+          <p className="text-xs text-label leading-relaxed mt-3">
+            Benchmark e rentabilidade comparados de {fmtDate(op.dataAplicacao)} (aplicação) a {fmtDate(dataBase)} (data-base), com
+            a regra vigente em cada dia. O R03 e o cadastro de benchmark comparam os últimos 12 meses.
+          </p>
         </section>
 
         <section>
