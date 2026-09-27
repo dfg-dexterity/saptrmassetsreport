@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { Area, AreaChart, Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { Card, SectionTitle } from "../../shared/components/fiori/Card";
 import { GenericTile } from "../../shared/components/fiori/GenericTile";
 import { MicroBar } from "../../shared/components/fiori/Kpi";
@@ -22,16 +22,29 @@ import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, semaforoState, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ShellBar } from "../../shared/components/shell/ShellBar";
 import { RELATORIOS, SECOES, type Relatorio } from "../data/catalogo";
-import { EMPRESAS, OPERACOES } from "../data/carteira";
+import { OPERACOES } from "../data/carteira";
+import { FUNDOS } from "../data/fundos";
+import { TIME_DEPOSITS } from "../data/timeDeposits";
 import cdsResumo from "../../shared/data/cdsResumo";
 import { useAlertas } from "../context/useDados";
-import { contratosMestre } from "../lib/carteiraMestre";
+import {
+  contratosMestre,
+  evolucaoMestre,
+  movimentacaoMestre,
+  rentabilidadeMestre,
+  somaMestre,
+  TIPOS_CONTRATO,
+  type RentabContrato,
+  type TipoContrato,
+} from "../lib/carteiraMestre";
 import { useBenchmarks } from "../context/BenchmarkContext";
-import { AVISO_DADOS, IMPORTACAO_SAP, ultimoDadoNaDataBase } from "../../shared/data/mercado";
-import { compararCarteira, SITUACAO_STATE } from "../lib/benchmark";
+import { AVISO_DADOS, IMPORTACAO_SAP, ultimoDadoNaDataBase, type PremissasMercado } from "../../shared/data/mercado";
+import { compararCarteira, SITUACAO_STATE, TOLERANCIA_BENCHMARK } from "../lib/benchmark";
 import { usePremissas } from "../../shared/context/MercadoContext";
-import { fmtDate, lastMonthEnds } from "../../shared/lib/dates";
-import { analiseFiscal, consolidarRentabilidade, evolucaoMensal, posicoesEm, rentabilidade } from "../lib/finance";
+import { diffDays, fmtDate, fmtMonthShort, lastMonthEnds, previousMonthEnd } from "../../shared/lib/dates";
+import { analiseFiscal, consolidarRentabilidade, posicoesEm, rentabilidade } from "../lib/finance";
+import { historicoFundo, posicaoFundo } from "../lib/fundos";
+import { posicaoTimeDeposit } from "../lib/timeDeposit";
 import { fmtCompact, fmtDec, fmtInt, fmtMi, fmtPct, fmtX } from "../../shared/lib/format";
 import {
   apurarCovenants,
@@ -44,7 +57,41 @@ import {
   rotuloApuracao,
   rotuloCovenant,
   totalCarteira,
+  totalMestre,
+  type Semaforo,
 } from "../lib/indicadores";
+
+/** Ordem de gravidade do semáforo (para achar o pior status) */
+const NIVEL: Record<Semaforo, number> = { ok: 0, atencao: 1, excedido: 2 };
+
+const COR_SEMAFORO: Record<Semaforo, string> = { ok: "#30914c", atencao: "#e26300", excedido: "#f53232" };
+
+/** Rótulos curtos dos tipos de contrato no rodapé do tile da Carteira-Mestre */
+const ROTULO_TIPO: Record<TipoContrato, [string, string]> = {
+  "Renda fixa bancária": ["renda fixa", "renda fixa"],
+  "Tesouro Direto": ["título", "títulos"],
+  "Fundo de investimento": ["fundo", "fundos"],
+  "Time deposit": ["TD", "TDs"],
+};
+
+/**
+ * Rentabilidade consolidada dos contratos da Carteira-Mestre no período (mesma fórmula do R03):
+ * % do CDI líquido = Σ rendimento líquido ÷ Σ (base × CDI do período); rentabilidade real = líquida ÷ IPCA do período.
+ */
+function consolidarMestre(linhas: RentabContrato[], inicio: string, p: PremissasMercado) {
+  const diasPeriodo = Math.max(1, diffDays(inicio, p.dataBase));
+  const soma = (fn: (l: RentabContrato) => number) => linhas.reduce((s, l) => s + fn(l), 0);
+  const capital = soma((l) => l.base * (l.dias / diasPeriodo));
+  const peso = soma((l) => l.base * l.cdiPeriodo);
+  const rendLiquido = soma((l) => l.rendLiquido);
+  const rentabLiquida = capital > 0 ? rendLiquido / capital : 0;
+  const ipcaPeriodo = Math.pow(1 + p.ipca12m, diasPeriodo / 365) - 1;
+  return {
+    rendLiquido,
+    pctCDILiquido: peso > 0 ? rendLiquido / peso : 0,
+    rentabReal: (1 + rentabLiquida) / (1 + ipcaPeriodo) - 1,
+  };
+}
 
 function saudacao(d: Date) {
   const h = d.getHours();
@@ -67,45 +114,135 @@ export function Launchpad() {
   }, []);
 
   const d = useMemo(() => {
-    const pos = posicoesEm(OPERACOES, p.dataBase, p);
-    const total = totalCarteira(pos);
     const meses = lastMonthEnds(p.dataBase, 13);
-    const evol = evolucaoMensal(OPERACOES, meses.slice(1), p);
-    const linhasRent = rentabilidade(OPERACOES, meses[0], p.dataBase, p);
-    const rent = consolidarRentabilidade(linhasRent, meses[0], p.dataBase, p);
-    const bmk = compararCarteira(linhasRent, cadastro, p);
-    const mestre = contratosMestre(p.dataBase, p);
-    const grupos = concentracaoPorGrupo(mestre);
-    const indiceHHI = hhi(grupos.map((g) => g.share));
-    const politica = avaliarPolitica(mestre);
+    const inicio12 = meses[0];
+
+    // Renda fixa bancária (R01, R03 por operação, R04)
+    const pos = posicoesEm(OPERACOES, p.dataBase, p);
+    const totalRF = totalCarteira(pos);
+    const linhasRF = rentabilidade(OPERACOES, inicio12, p.dataBase, p);
+    const rentRF = consolidarRentabilidade(linhasRF, inicio12, p.dataBase, p);
+    const bmkRF = compararCarteira(linhasRF, cadastro, p);
     const fiscal = pos.map((x) => analiseFiscal(x, p));
     const aguardar = fiscal.filter((f) => f.recomendacao === "Aguardar próxima faixa");
     const iof = fiscal.filter((f) => f.recomendacao === "Evitar resgate (IOF)");
+
+    // Carteira consolidada (Carteira-Mestre: renda fixa bancária, Tesouro Direto, fundos e time deposits)
+    const mestre = contratosMestre(p.dataBase, p);
+    const total = totalMestre(mestre);
+    const contabil = somaMestre(mestre, "valorContabil");
+    const evol = evolucaoMestre(meses.slice(1), p);
+    const rend12 = evol.reduce((s, m) => s + m.rendimentos, 0);
+    const linhas12 = rentabilidadeMestre(inicio12, p.dataBase, p);
+    const bmk = compararCarteira(linhas12, cadastro, p);
+    const rent = consolidarMestre(linhas12, inicio12, p);
+    const grupos = concentracaoPorGrupo(mestre);
+    const indiceHHI = hhi(grupos.map((g) => g.share));
+    const hhiClasse = classificarHHI(indiceHHI);
+    const politica = avaliarPolitica(mestre);
+    const regra = (id: string) => politica.find((r) => r.id === id)!;
+    const liquidez = regra("liquidez");
+    const exterior = regra("exterior");
+    const credito = regra("credito");
+    const controladora = mestre.filter((c) => c.empresa === "1000");
+    const vencimentos = mestre
+      .filter((c) => c.prazoRemanescente !== null && c.prazoRemanescente <= 90)
+      .sort((a, b) => a.prazoRemanescente! - b.prazoRemanescente!);
+    const porTipo = TIPOS_CONTRATO.map((t) => {
+      const cs = mestre.filter((c) => c.tipo === t.tipo);
+      return { ...t, qtd: cs.length, saldo: somaMestre(cs, "saldoCurva") };
+    });
+    const doTipo = (tipo: TipoContrato) => mestre.filter((c) => c.tipo === tipo);
+
+    // R08 – títulos públicos (saldo a mercado e MTM)
+    const titulos = doTipo("Tesouro Direto");
+    const r08 = { qtd: titulos.length, mercado: somaMestre(titulos, "saldoMercado"), mtm: somaMestre(titulos, "mtm") };
+
+    // R10 – time deposits (saldo em R$ pela PTAX da data-base e variação cambial do mês)
+    const tds = TIME_DEPOSITS.map((td) => posicaoTimeDeposit(td, p.dataBase, p)).filter((x) => x.ativo);
+    const r10 = {
+      qtd: tds.length,
+      moedas: [...new Set(tds.map((x) => x.td.moeda))].join("/"),
+      saldo: somaMestre(doTipo("Time deposit"), "saldoCurva"),
+      variacaoMes: tds.reduce((s, x) => s + x.variacaoCambialMes, 0),
+    };
+
+    // R09 – fundos (saldo em cotas, come-cotas recolhidos e o próximo, estimado com o último dado disponível)
+    const fundos = FUNDOS.map((f) => ({ f, pos: posicaoFundo(f, p.dataBase, p), hist: historicoFundo(f, p) })).filter((x) => x.pos.ativo);
+    const proximoCC = fundos.map((x) => x.pos.proximoComeCotas).filter((x): x is string => !!x).sort()[0] ?? null;
+    // IR recolhido em cada come-cotas até a data-base (inclusive de fundos já resgatados) + o próximo, projetado
+    const eventosCC = new Map<string, number>();
+    for (const f of FUNDOS)
+      for (const e of historicoFundo(f, p).comeCotas) if (e.data <= p.dataBase) eventosCC.set(e.data, (eventosCC.get(e.data) ?? 0) + e.ir);
+    let irProximoCC = 0;
+    for (const x of fundos) irProximoCC += x.hist.comeCotas.find((e) => e.data === proximoCC)?.ir ?? 0;
+    const serieCC = [
+      ...[...eventosCC.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-3).map(([data, ir]) => ({ data, ir, projetado: false })),
+      ...(proximoCC ? [{ data: proximoCC, ir: irProximoCC, projetado: true }] : []),
+    ];
+    const r09 = {
+      qtd: fundos.length,
+      saldo: somaMestre(doTipo("Fundo de investimento"), "saldoCurva"),
+      proximoCC,
+      irProximoCC,
+      serieCC,
+    };
+
+    // R11 – exposição cambial (time deposits + fundo cambial) × limite da política
+    const r11 = exterior;
+
+    // Painel de KPIs – regras simples com meta explícita (mesmas bases do painel)
+    const difCDI = bmk.realizado - bmk.pct;
+    const piorGrupo = grupos.reduce<Semaforo>((pior, g) => (NIVEL[g.status] > NIVEL[pior] ? g.status : pior), "ok");
+    const kpis: { id: string; rotulo: string; status: Semaforo }[] = [
+      { id: "cdi", rotulo: "% CDI 12m", status: difCDI >= -TOLERANCIA_BENCHMARK ? "ok" : difCDI >= -0.02 ? "atencao" : "excedido" },
+      { id: "liquidez", rotulo: "Liquidez", status: liquidez.status },
+      { id: "hhi", rotulo: "HHI", status: hhiClasse.status },
+      { id: "cambio", rotulo: "Câmbio", status: exterior.status },
+      { id: "credito", rotulo: "Crédito", status: credito.status },
+      { id: "grupo", rotulo: "Grupos", status: piorGrupo },
+    ];
+
+    // R12 – roll-forward do mês da data-base: SF = SI + aplicações + rendimentos − resgates brutos − come-cotas
+    const mov = movimentacaoMestre(previousMonthEnd(p.dataBase), p.dataBase, p).total;
+    const r12 = {
+      mov,
+      diferenca: mov.saldoInicial + mov.aplicacoes + mov.rendimentos - mov.resgatesBrutos - mov.comeCotas - mov.saldoFinal,
+      diferencaMestre: mov.saldoFinal - total,
+    };
+
     // Covenants contratuais da dívida: mesma apuração da carteira de captações
     const covenants = apurarCovenants(p.dataBase);
-    const controladora = pos.filter((x) => x.op.empresa === "1000").reduce((s, x) => s + x.valorBruto, 0);
-    const vencimentos = pos
-      .filter((x) => x.prazoRemanescente !== null && x.prazoRemanescente <= 90)
-      .sort((a, b) => a.prazoRemanescente! - b.prazoRemanescente!);
-    const liquido = pos.reduce((s, x) => s + x.valorLiquido, 0);
-    const rend12 = evol.reduce((s, m) => s + m.rendimentos, 0);
     return {
       pos,
+      totalRF,
+      rentRF,
+      bmkRF,
+      mestre,
       total,
-      liquido,
+      contabil,
       evol,
-      rent,
       rend12,
       bmk,
+      rent,
       grupos,
       indiceHHI,
-      hhiClasse: classificarHHI(indiceHHI),
+      hhiClasse,
       politica,
+      liquidez,
       aguardar,
       iof,
       covenants,
-      controladora,
+      controladora: somaMestre(controladora, "saldoCurva"),
+      controladoraContabil: somaMestre(controladora, "valorContabil"),
       vencimentos,
+      porTipo,
+      r08,
+      r09,
+      r10,
+      r11,
+      kpis,
+      r12,
     };
   }, [p, cadastro]);
 
@@ -125,13 +262,20 @@ export function Launchpad() {
         ? { texto: plural(covAtencao, "em atenção", "em atenção"), state: "critical" }
         : { texto: "Covenants cumpridos", state: "positive" };
 
+  const kpisNaMeta = d.kpis.filter((k) => k.status === "ok").length;
+  const kpisAtencao = d.kpis.filter((k) => k.status === "atencao").length;
+  const kpisFora = d.kpis.filter((k) => k.status === "excedido").length;
+  const mesBase = fmtMonthShort(p.dataBase);
+  const r12Fechado = Math.abs(d.r12.diferenca) < 0.005 && Math.abs(d.r12.diferencaMestre) < 0.005;
+  const sinal = (v: number) => (v > 0.5 ? "+" : "");
+
   const tiles: Record<string, Parameters<typeof GenericTile>[0]> = {
     premissas: {
       title: "Premissas",
       subtitle: "Importadas do SAP",
       value: fmtDec(p.cdi * 100, 2),
-      unit: "CDI % a.a.",
-      footer: `IPCA ${fmtPct(p.ipca12m)} · Selic ${fmtPct(p.selic)}`,
+      unit: `CDI % a.a. · IPCA ${fmtPct(p.ipca12m)}`,
+      footer: `USD ${fmtDec(p.ptaxUSD, 4)} · EUR ${fmtDec(p.ptaxEUR, 4)}`,
     },
     benchmark: {
       title: "Benchmark de rentabilidade",
@@ -141,12 +285,51 @@ export function Launchpad() {
       footer: `Realizado 12m: ${fmtDec(d.bmk.realizado * 100, 1)}%`,
       footerState: SITUACAO_STATE[d.bmk.situacao],
     },
+    mestre: {
+      title: "Carteira-Mestre",
+      subtitle: "Base consolidada de contratos",
+      value: fmtMi(d.total),
+      unit: `R$ milhões (saldo bruto) · ${d.mestre.length} contratos`,
+      footer: d.porTipo.map((t) => plural(t.qtd, ...ROTULO_TIPO[t.tipo])).join(" · "),
+      wide: true,
+      chart: <MiniBarrasTipo dados={d.porTipo} />,
+    },
     r01: {
       title: "Composição Detalhada",
-      subtitle: "R01 · Por operação",
-      value: fmtMi(d.total),
+      subtitle: "R01 · Renda fixa bancária",
+      value: fmtMi(d.totalRF),
       unit: "R$ milhões (saldo bruto)",
-      footer: `${d.pos.length} operações · ${Object.keys(EMPRESAS).length} empresas`,
+      footer: `${d.pos.length} operações ativas`,
+    },
+    r08: {
+      title: "Tesouro Direto",
+      subtitle: `R08 · ${plural(d.r08.qtd, "título público", "títulos públicos")}`,
+      value: fmtMi(d.r08.mercado),
+      unit: "R$ milhões a mercado",
+      footer: `MTM ${sinal(d.r08.mtm)}${fmtCompact(d.r08.mtm)}`,
+      footerState: d.r08.mtm >= 0 ? "positive" : "negative",
+    },
+    r10: {
+      title: "Time Deposits",
+      subtitle: `R10 · ${plural(d.r10.qtd, "TD", "TDs")}${d.r10.moedas ? ` · ${d.r10.moedas}` : ""}`,
+      value: fmtMi(d.r10.saldo),
+      unit: "R$ milhões (ME × PTAX)",
+      footer: `Câmbio mês ${sinal(d.r10.variacaoMes)}${fmtCompact(d.r10.variacaoMes)}`,
+      footerState: Math.abs(d.r10.variacaoMes) < 0.5 ? undefined : d.r10.variacaoMes > 0 ? "positive" : "negative",
+    },
+    r11: {
+      title: "Moeda × Tipo de Contrato",
+      subtitle: "R11 · Exposição cambial",
+      value: fmtDec(d.r11.share * 100, 1),
+      unit: `% da carteira · limite ${fmtPct(d.r11.limite, 0)}`,
+      state: semaforoState(d.r11.status),
+      footer:
+        d.r11.status === "ok"
+          ? "Dentro do limite"
+          : d.r11.status === "atencao"
+            ? `Atenção: ${fmtPct(d.r11.share / d.r11.limite, 0)} do limite`
+            : "Acima do limite",
+      footerState: semaforoState(d.r11.status),
     },
     r07: {
       title: "Concentração da Carteira",
@@ -159,8 +342,8 @@ export function Launchpad() {
     },
     r05: {
       title: "Evolução Mensal",
-      subtitle: "R05 · Saldo 12 meses",
-      value: fmtDec(d.rent.pctCDIBruto * 100, 1),
+      subtitle: "R05 · Carteira consolidada, 12 meses",
+      value: fmtDec(d.bmk.realizado * 100, 1),
       unit: "% do CDI bruto (12 meses)",
       footer: `Rendimentos 12m: ${fmtCompact(d.rend12)}`,
       wide: true,
@@ -173,6 +356,7 @@ export function Launchpad() {
                 <stop offset="100%" stopColor="#049f9a" stopOpacity={0} />
               </linearGradient>
             </defs>
+            <YAxis hide domain={["dataMin", "dataMax"]} />
             <Area type="monotone" dataKey="v" stroke="#049f9a" strokeWidth={2} fill="url(#spark)" isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
@@ -180,20 +364,43 @@ export function Launchpad() {
     },
     r03: {
       title: "Rentabilidade Realizada e Real",
-      subtitle: "R03 · Últimos 12 meses",
-      value: fmtDec(d.rent.pctCDIBruto * 100, 1),
-      unit: "% do CDI bruto",
-      footer: `Benchmark ${fmtDec(d.bmk.pct * 100, 1)}%`,
-      footerState: SITUACAO_STATE[d.bmk.situacao],
-      state: d.bmk.situacao === "abaixo" ? "critical" : d.bmk.situacao === "acima" ? "positive" : "neutral",
+      subtitle: "R03 · Renda fixa bancária",
+      value: fmtDec(d.rentRF.pctCDIBruto * 100, 1),
+      unit: "% do CDI bruto 12m",
+      footer: `Benchmark ${fmtDec(d.bmkRF.pct * 100, 1)}%`,
+      footerState: SITUACAO_STATE[d.bmkRF.situacao],
+      state: d.bmkRF.situacao === "abaixo" ? "critical" : d.bmkRF.situacao === "acima" ? "positive" : "neutral",
     },
     r04: {
       title: "Eficiência Fiscal por Prazo",
-      subtitle: "R04 · Janela de IR/IOF",
+      subtitle: "R04 · Renda fixa bancária",
       value: String(d.aguardar.length + d.iof.length),
       unit: "operações em janela fiscal",
       state: d.aguardar.length + d.iof.length ? "critical" : "positive",
       footer: `Economia: ${fmtCompact(d.aguardar.reduce((s, a) => s + a.economiaIR, 0))}`,
+    },
+    r09: {
+      title: "Fundos e Come-cotas",
+      subtitle: `R09 · ${plural(d.r09.qtd, "fundo", "fundos")} · come-cotas mai/nov`,
+      value: fmtMi(d.r09.saldo),
+      unit: "R$ milhões em cotas",
+      footer: d.r09.proximoCC
+        ? `Próximo: ${fmtDate(d.r09.proximoCC)} · IR estimado ${fmtCompact(d.r09.irProximoCC)}`
+        : "Sem come-cotas previsto",
+      footerState: d.r09.proximoCC ? "information" : undefined,
+      wide: true,
+      chart: <MiniComeCotas dados={d.r09.serieCC} />,
+    },
+    kpis: {
+      title: "Painel de KPIs",
+      subtitle: "Carteira consolidada · metas da política",
+      value: `${kpisNaMeta}/${d.kpis.length}`,
+      unit: "KPIs na meta",
+      state: kpisFora ? "negative" : kpisAtencao ? "critical" : "positive",
+      footer: kpisFora || kpisAtencao ? [kpisAtencao && `${kpisAtencao} em atenção`, kpisFora && `${kpisFora} fora da meta`].filter(Boolean).join(" · ") : "Todos os KPIs na meta",
+      footerState: kpisFora ? "negative" : kpisAtencao ? "critical" : "positive",
+      wide: true,
+      chart: <MiniScorecard kpis={d.kpis} />,
     },
     r06: {
       title: "Endividamento × Aplicações",
@@ -204,12 +411,25 @@ export function Launchpad() {
       footer: rodapeCov.texto,
       footerState: rodapeCov.state,
     },
+    r12: {
+      title: "Conciliação de Fim de Mês",
+      subtitle: `R12 · Roll-forward de ${mesBase} · DU−1 a DU+3`,
+      value: fmtDec(Math.abs(d.r12.diferenca) < 0.005 ? 0 : d.r12.diferenca, 2),
+      unit: "R$ de diferença no mês",
+      state: r12Fechado ? "positive" : "negative",
+      footer: r12Fechado
+        ? `Saldo final ${fmtCompact(d.r12.mov.saldoFinal)} = Carteira-Mestre`
+        : `Diferença × Carteira-Mestre: ${fmtCompact(d.r12.diferencaMestre)}`,
+      footerState: r12Fechado ? "positive" : "negative",
+      wide: true,
+      chart: <MiniRollForward mov={d.r12.mov} />,
+    },
     r02: {
       title: "Movimentação – Nota Explicativa",
       subtitle: "R02 · CPC 40 / CVM 475",
-      value: fmtMi(d.total),
-      unit: "R$ milhões (consolidado)",
-      footer: `Controladora: ${fmtCompact(d.controladora)}`,
+      value: fmtMi(d.contabil),
+      unit: "R$ milhões (contábil)",
+      footer: `Controladora: ${fmtCompact(d.controladoraContabil)}`,
     },
     cds: {
       title: "Catálogo de CDS Views",
@@ -246,7 +466,11 @@ export function Launchpad() {
           <div className="flex items-stretch gap-4 sm:gap-6 bg-white/70 backdrop-blur rounded-2xl shadow-fiori px-5 py-3">
             <QuickStat label="Carteira consolidada" value={fmtCompact(d.total)} />
             <div className="w-px bg-line-soft" />
-            <QuickStat label="Saldo líquido" value={fmtCompact(d.liquido)} />
+            <QuickStat
+              label="Liquidez imediata"
+              value={fmtCompact(d.liquidez.valor)}
+              title={`${fmtPct(d.liquidez.share, 1)} da carteira · mínimo da política ${fmtPct(d.liquidez.limite, 0)}`}
+            />
             <div className="w-px bg-line-soft hidden sm:block" />
             <QuickStat label="Data-base" value={fmtDate(p.dataBase)} className="hidden sm:block" />
           </div>
@@ -270,15 +494,19 @@ export function Launchpad() {
           <section className="mb-8">
             <SectionTitle>Visão geral</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-              <KpiCard label="Carteira (saldo bruto)" value={fmtCompact(d.total)} sub={`${d.pos.length} operações ativas`} />
-              <KpiCard label="Rendimentos 12m" value={fmtCompact(d.rend12)} sub="Bruto, antes de IR/IOF" color="#256f3a" />
+              <KpiCard
+                label="Carteira consolidada"
+                value={fmtCompact(d.total)}
+                sub={`${d.mestre.length} contratos · saldo bruto`}
+              />
+              <KpiCard label="Rendimentos 12m" value={fmtCompact(d.rend12)} sub="Bruto, antes de IR, IOF e taxas" color="#256f3a" />
               <KpiCard
                 label="% CDI bruto 12m"
-                value={`${fmtDec(d.rent.pctCDIBruto * 100, 1)}%`}
+                value={`${fmtDec(d.bmk.realizado * 100, 1)}%`}
                 sub={`Benchmark ${fmtDec(d.bmk.pct * 100, 1)}% · líquido ${fmtDec(d.rent.pctCDILiquido * 100, 1)}%`}
                 color={d.bmk.situacao === "abaixo" ? "#b44f00" : d.bmk.situacao === "acima" ? "#256f3a" : undefined}
               />
-              <KpiCard label="Rentabilidade real" value={fmtPct(d.rent.rentabReal)} sub={`IPCA 12m ${fmtPct(p.ipca12m)}`} color="#049f9a" />
+              <KpiCard label="Rentabilidade real 12m" value={fmtPct(d.rent.rentabReal)} sub={`Líquida · IPCA 12m ${fmtPct(p.ipca12m)}`} color="#049f9a" />
               <KpiCard
                 label="Índice HHI"
                 value={fmtInt(d.indiceHHI)}
@@ -338,22 +566,24 @@ export function Launchpad() {
               {/* Vencimentos */}
               <Card
                 title="Próximos vencimentos"
-                subtitle="Operações que vencem em até 90 dias"
+                subtitle={`Contratos da Carteira-Mestre que vencem em até 90 dias${d.vencimentos.length > 5 ? ` (5 de ${d.vencimentos.length})` : ""}`}
                 icon={<CalendarClock className="w-5 h-5 text-brand" />}
-                actions={<VerMais onClick={() => navigate("/r01-composicao")} />}
+                actions={<VerMais onClick={() => navigate("/carteira-mestre")} />}
               >
                 {d.vencimentos.length === 0 ? (
                   <Vazio texto="Nenhum vencimento nos próximos 90 dias" />
                 ) : (
                   <ul className="divide-y divide-line-soft -mx-1">
                     {d.vencimentos.slice(0, 5).map((v) => (
-                      <li key={v.op.transacao} className="flex items-center justify-between gap-3 px-1 py-2">
+                      <li key={v.id} className="flex items-center justify-between gap-3 px-1 py-2">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-text truncate">
-                            {v.op.produto} · {v.op.contraparte}
+                          <div className="text-sm font-semibold text-text truncate" title={`${v.produto} · ${v.contraparte}`}>
+                            {v.produto}
+                            {v.moeda !== "BRL" ? ` ${v.moeda}` : ""} · {v.contraparte}
                           </div>
                           <div className="text-xs text-label">
-                            {fmtDate(v.op.dataVencimento)} · {fmtCompact(v.valorBruto)}
+                            {fmtDate(v.vencimento)} · {fmtCompact(v.saldoCurva)}
+                            {v.moeda !== "BRL" ? ` (${v.moeda} ${fmtDec(v.saldoME / 1000, 0)} mil)` : ""}
                           </div>
                         </div>
                         <ObjectStatus inverted icon={false} state={v.prazoRemanescente! <= 30 ? "critical" : "information"}>
@@ -395,7 +625,7 @@ export function Launchpad() {
               {/* Janela fiscal */}
               <Card
                 title="Janela fiscal"
-                subtitle="IOF e mudança de faixa do IR (R04)"
+                subtitle="Renda fixa bancária · IOF e faixa do IR (R04)"
                 icon={<Hourglass className="w-5 h-5 text-[#c87b00]" />}
                 actions={<VerMais onClick={() => navigate("/r04-prazo-fiscal")} />}
               >
@@ -500,17 +730,17 @@ export function Launchpad() {
               <Destaque
                 icon={<Landmark className="w-5 h-5 text-brand" />}
                 titulo="Fonte: SAP S/4HANA TRM"
-                texto="Posições, fluxos e condições lidos das CDS Views do SAP (IFINTRAN, IFINTRSMANAGE, IFINTRANSCNDN)."
+                texto="Posições, fluxos e condições lidos das CDS Views do SAP (IFINTRAN, IFINTRSMANAGE, IFINTRANSCNDN); PTAX, taxas ANBIMA e cotas importadas como dados de mercado."
               />
               <Destaque
                 icon={<CheckCircle2 className="w-5 h-5 text-positive" />}
                 titulo="Conciliação automática"
-                texto="Rendimentos do R03 conciliam com o R05, e o saldo final do R05 com a posição do R01 e com o R02."
+                texto="A Carteira-Mestre consolida R01, R08, R09 e R10; o saldo final do R05 e do R02 bate com ela, e o R12 fecha o roll-forward e o razão (FI-GL) no fim do mês."
               />
               <Destaque
                 icon={<ShieldCheck className="w-5 h-5 text-[#8b47d7]" />}
                 titulo="Normas contábeis"
-                texto="Classificação CPC 48, nota explicativa CPC 40 / CVM 475 e tabelas de IRRF (Lei 11.033) e IOF (Dec. 6.306)."
+                texto="CPC 48 (custo amortizado × valor justo), CPC 02 (variação cambial), nota CPC 40 / CVM 475, IRRF (Lei 11.033), IOF (Dec. 6.306) e come-cotas (Lei 14.754)."
               />
             </div>
           </section>
@@ -527,9 +757,9 @@ export function Launchpad() {
   );
 }
 
-function QuickStat({ label, value, className }: { label: string; value: string; className?: string }) {
+function QuickStat({ label, value, className, title }: { label: string; value: string; className?: string; title?: string }) {
   return (
-    <div className={className}>
+    <div className={className} title={title}>
       <div className="text-xs text-label whitespace-nowrap">{label}</div>
       <div className="text-lg font-bold text-text tabular whitespace-nowrap">{value}</div>
     </div>
@@ -581,5 +811,89 @@ function Destaque({ icon, titulo, texto }: { icon: React.ReactNode; titulo: stri
         <div className="text-[13px] text-label leading-relaxed mt-0.5">{texto}</div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Micrográficos dos tiles 2×1
+// ---------------------------------------------------------------------------
+
+/** Saldo por tipo de contrato (cores de TIPOS_CONTRATO) */
+function MiniBarrasTipo({ dados }: { dados: { tipo: string; curto: string; cor: string; saldo: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={dados} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={6}>
+        <XAxis dataKey="curto" hide />
+        <YAxis hide domain={[0, "dataMax"]} />
+        <Bar dataKey="saldo" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+          {dados.map((x) => (
+            <Cell key={x.tipo} fill={x.cor} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** IR recolhido nos últimos come-cotas (mai/nov) e o próximo, projetado com o último dado disponível (claro) */
+function MiniComeCotas({ dados }: { dados: { data: string; ir: number; projetado: boolean }[] }) {
+  const linhas = dados.map((x) => ({ ...x, rotulo: fmtMonthShort(x.data) }));
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={linhas} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={8}>
+        <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={14} />
+        <YAxis hide domain={[0, "dataMax"]} />
+        <Bar dataKey="ir" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+          {linhas.map((x) => (
+            <Cell key={x.data} fill="#8b47d7" fillOpacity={x.projetado ? 0.35 : 1} stroke={x.projetado ? "#8b47d7" : undefined} strokeDasharray={x.projetado ? "3 2" : undefined} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Status de cada KPI (na meta / atenção / fora) em forma de placar */
+function MiniScorecard({ kpis }: { kpis: { id: string; rotulo: string; status: Semaforo }[] }) {
+  return (
+    <div className="h-full grid grid-cols-2 gap-x-2 gap-y-1 content-center">
+      {kpis.map((k) => (
+        <div key={k.id} className="flex items-center gap-1.5 min-w-0" title={`${k.rotulo}: ${k.status === "ok" ? "na meta" : k.status === "atencao" ? "atenção" : "fora da meta"}`}>
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COR_SEMAFORO[k.status] }} />
+          <span className="text-[11px] leading-4 text-label truncate">{k.rotulo}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Cascata do roll-forward do mês: saldo inicial → aplicações → rendimentos → resgates e come-cotas → saldo final */
+function MiniRollForward({ mov }: { mov: { saldoInicial: number; aplicacoes: number; rendimentos: number; resgatesBrutos: number; comeCotas: number; saldoFinal: number } }) {
+  const a = mov.saldoInicial;
+  const b = a + mov.aplicacoes;
+  const c = b + mov.rendimentos;
+  const e = c - mov.resgatesBrutos - mov.comeCotas;
+  const dados = [
+    { n: "SI", v: [0, a], cor: "#556b82" },
+    { n: "Apl", v: [a, b], cor: "#0070f2" },
+    { n: "Rend", v: [b, c], cor: "#30914c" },
+    { n: "Resg", v: [e, c], cor: "#e26300" },
+    { n: "SF", v: [0, mov.saldoFinal], cor: "#1d2d3e" },
+  ];
+  const lo = Math.min(a, e, mov.saldoFinal);
+  const hi = Math.max(a, b, c, mov.saldoFinal);
+  const folga = (hi - lo) * 0.25 || hi * 0.02;
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={dados} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={4}>
+        <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={14} />
+        <YAxis hide domain={[Math.max(0, lo - folga), hi]} allowDataOverflow />
+        <Bar dataKey="v" radius={2} isAnimationActive={false}>
+          {dados.map((x) => (
+            <Cell key={x.n} fill={x.cor} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }

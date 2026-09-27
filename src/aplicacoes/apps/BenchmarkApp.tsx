@@ -1,12 +1,12 @@
 import clsx from "clsx";
 import { Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "../../shared/components/fiori/Button";
 import { Card } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
-import { NumberInput, Select } from "../../shared/components/fiori/Inputs";
+import { NumberInput, SegmentedButton, Select } from "../../shared/components/fiori/Inputs";
 import { AXIS_STYLE, HeaderKpi } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag } from "../../shared/components/fiori/ObjectStatus";
@@ -20,6 +20,9 @@ import { useBenchmarks } from "../context/BenchmarkContext";
 import { ESCOPOS_BENCHMARK, PCT_MAXIMO, PCT_MINIMO, type Benchmark, type EscopoBenchmark } from "../data/benchmark";
 import { OPERACOES } from "../data/carteira";
 import { relatorioPorId } from "../data/catalogo";
+import { FUNDOS } from "../data/fundos";
+import { TIPOS_TITULO, TITULOS } from "../data/tesouro";
+import { TIME_DEPOSITS } from "../data/timeDeposits";
 import {
   benchmarkDaOperacao,
   compararCarteira,
@@ -32,13 +35,64 @@ import {
   type ComparacaoOperacao,
   type TrechoBenchmark,
 } from "../lib/benchmark";
-import { ativaEm, rentabilidade, taxaContratada, type RentabOp } from "../lib/finance";
+import {
+  contratosMestre,
+  rentabilidadeMestre,
+  taxaFundoTexto,
+  taxaTDTexto,
+  taxaTituloTexto,
+  TIPOS_CONTRATO,
+  type RentabContrato,
+  type TipoContrato,
+} from "../lib/carteiraMestre";
+import { taxaContratada } from "../lib/finance";
 
 const rel = relatorioPorId("benchmark");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
-const PORTFOLIOS = [...new Set(OPERACOES.map((o) => o.portfolio))].sort();
-const PRODUTOS = [...new Set(OPERACOES.map((o) => o.produto))].sort();
+/** Contrato cadastrado (qualquer data) com a chave do benchmark: tipo, produto, portfolio e taxa contratada */
+interface ContratoBenchmark {
+  transacao: string;
+  tipo: TipoContrato;
+  produto: string;
+  portfolio: string;
+  taxa: string;
+}
+
+const nomeTitulo = (tipo: string) => TIPOS_TITULO.find((x) => x.tipo === tipo)?.nome ?? tipo;
+/** Títulos públicos na ordem do Tesouro (Selic, Prefixado, …); demais produtos em ordem alfabética */
+const ordemProduto = (produto: string) => TIPOS_TITULO.findIndex((x) => x.nome === produto);
+
+/** Todos os contratos da Carteira-Mestre: renda fixa bancária, Tesouro Direto, fundos e time deposits */
+const CONTRATOS: ContratoBenchmark[] = [
+  ...OPERACOES.map((o) => ({ transacao: o.transacao, tipo: "Renda fixa bancária" as const, produto: o.produto, portfolio: o.portfolio, taxa: taxaContratada(o) })),
+  ...TITULOS.map((t) => ({ transacao: t.transacao, tipo: "Tesouro Direto" as const, produto: nomeTitulo(t.tipo), portfolio: t.portfolio, taxa: taxaTituloTexto(t) })),
+  ...FUNDOS.map((f) => ({ transacao: f.transacao, tipo: "Fundo de investimento" as const, produto: f.produto, portfolio: f.portfolio, taxa: taxaFundoTexto(f) })),
+  ...TIME_DEPOSITS.map((d) => ({ transacao: d.transacao, tipo: "Time deposit" as const, produto: "Time deposit", portfolio: d.portfolio, taxa: taxaTDTexto(d) })),
+];
+const POR_TRANSACAO = new Map(CONTRATOS.map((c) => [c.transacao, c]));
+
+const INFO_TIPO = Object.fromEntries(TIPOS_CONTRATO.map((t, i) => [t.tipo, { ...t, ordem: i }])) as Record<
+  TipoContrato,
+  (typeof TIPOS_CONTRATO)[number] & { ordem: number }
+>;
+
+/** Portfolios de todos os tipos de contrato, com os tipos que cada um contém */
+const PORTFOLIOS = [...new Set(CONTRATOS.map((c) => c.portfolio))].sort().map((portfolio) => ({
+  portfolio,
+  tipos: TIPOS_CONTRATO.filter((t) => CONTRATOS.some((c) => c.portfolio === portfolio && c.tipo === t.tipo)).map((t) => t.curto),
+}));
+
+/** Tipos de produto (chave do benchmark), na ordem dos tipos de contrato */
+const PRODUTOS: { produto: string; tipo: TipoContrato }[] = [...new Map(CONTRATOS.map((c) => [c.produto, c.tipo])).entries()]
+  .map(([produto, tipo]) => ({ produto, tipo }))
+  .sort((a, b) => INFO_TIPO[a.tipo].ordem - INFO_TIPO[b.tipo].ordem || ordemProduto(a.produto) - ordemProduto(b.produto) || a.produto.localeCompare(b.produto, "pt-BR"));
+const TIPO_DO_PRODUTO = new Map(PRODUTOS.map((x) => [x.produto, x.tipo]));
+
+function rotuloProduto(produto: string): string {
+  const tipo = TIPO_DO_PRODUTO.get(produto);
+  return tipo && tipo !== produto ? `${produto} (${tipo})` : produto;
+}
 
 const ROTULO_ESCOPO: Record<EscopoBenchmark, string> = {
   carteira: "Carteira",
@@ -60,9 +114,9 @@ function opcoesValor(escopo: EscopoBenchmark): { value: string; label: string }[
     case "empresa":
       return Object.entries(EMPRESAS).map(([k, e]) => ({ value: k, label: `${k} – ${e.nome}` }));
     case "portfolio":
-      return PORTFOLIOS.map((x) => ({ value: x, label: x }));
+      return PORTFOLIOS.map((x) => ({ value: x.portfolio, label: `${x.portfolio} (${x.tipos.join(", ")})` }));
     case "produto":
-      return PRODUTOS.map((x) => ({ value: x, label: x }));
+      return PRODUTOS.map((x) => ({ value: x.produto, label: rotuloProduto(x.produto) }));
   }
 }
 
@@ -79,6 +133,7 @@ interface Rascunho {
   valor: string;
   pct: number; // em % (102 = 102% do CDI)
   vigenciaInicio: string;
+  nota: string;
 }
 
 type Erros = Partial<Record<"descricao" | "escopo" | "valor" | "pct" | "vigenciaInicio", string>>;
@@ -126,7 +181,10 @@ function semPropagar(fn: () => void) {
 }
 
 interface LinhaOp {
-  r: RentabOp;
+  r: RentabContrato;
+  /** taxa contratada, como exibida */
+  taxa: string;
+  portfolio: string;
   /** regra vigente no último dia do período da operação */
   regra: Benchmark | null;
   cmp: ComparacaoOperacao;
@@ -137,37 +195,66 @@ export function BenchmarkApp() {
   const { cadastro, salvar, remover, restaurar, substituir, alterado } = useBenchmarks();
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
 
+  const [visaoGrafico, setVisaoGrafico] = useState<"tipo" | "produto">("tipo");
+  const [filtroTipo, setFiltroTipo] = useState<TipoContrato | "todos">("todos");
+
   const inicio = lastMonthEnds(p.dataBase, 13)[0];
-  const rentab = useMemo(() => rentabilidade(OPERACOES, inicio, p.dataBase, p), [inicio, p]);
+  // Todos os contratos da Carteira-Mestre (renda fixa, Tesouro Direto, fundos e time deposits), inclusive os liquidados no período
+  const rentab = useMemo(() => rentabilidadeMestre(inicio, p.dataBase, p), [inicio, p]);
+  const ativos = useMemo(() => contratosMestre(p.dataBase, p), [p]);
 
   const d = useMemo(() => {
     const linhas: LinhaOp[] = rentab.map((r) => {
       const cmp = compararOperacao(r, cadastro, p);
-      return { r, regra: cmp.trechos[cmp.trechos.length - 1]?.regra ?? null, cmp };
+      const info = POR_TRANSACAO.get(r.op.transacao);
+      return { r, taxa: info?.taxa ?? "", portfolio: r.op.portfolio, regra: cmp.trechos[cmp.trechos.length - 1]?.regra ?? null, cmp };
     });
     const carteira = compararCarteira(rentab, cadastro, p);
-    const ativas = OPERACOES.filter((o) => ativaEm(o, p.dataBase));
     const cobertura = new Map<string, number>();
-    for (const o of ativas) {
-      const b = benchmarkDaOperacao(o, cadastro, p.dataBase);
+    for (const c of ativos) {
+      const b = benchmarkDaOperacao(c.chave, cadastro, p.dataBase);
       if (b) cobertura.set(b.id, (cobertura.get(b.id) ?? 0) + 1);
     }
-    const porProduto = PRODUTOS.map((produto) => {
+    const porTipo = TIPOS_CONTRATO.map((t) => {
+      const rs = rentab.filter((r) => r.tipo === t.tipo);
+      const c = compararCarteira(rs, cadastro, p);
+      return { chave: t.curto, tipo: t.tipo, cor: t.cor, realizado: c.realizado * 100, benchmark: c.pct * 100, qtd: rs.length, excesso: c.excesso };
+    }).filter((x) => x.qtd > 0);
+    const porProduto = PRODUTOS.map(({ produto, tipo }) => {
       const rs = rentab.filter((r) => r.op.produto === produto);
       const c = compararCarteira(rs, cadastro, p);
-      return { produto, realizado: c.realizado * 100, benchmark: c.pct * 100, qtd: rs.length };
+      return { chave: produto, tipo, cor: INFO_TIPO[tipo].cor, realizado: c.realizado * 100, benchmark: c.pct * 100, qtd: rs.length, excesso: c.excesso };
     })
       .filter((x) => x.qtd > 0)
-      .sort((a, b) => b.realizado - a.realizado);
+      .sort((a, b) => INFO_TIPO[a.tipo].ordem - INFO_TIPO[b.tipo].ordem || b.realizado - a.realizado);
     return {
       linhas,
       carteira,
       cobertura,
+      porTipo,
       porProduto,
       abaixo: linhas.filter((l) => l.cmp.situacao === "abaixo").length,
       comVigenciaNoPeriodo: linhas.filter((l) => l.cmp.trechos.length > 1).length,
     };
-  }, [rentab, cadastro, p]);
+  }, [rentab, ativos, cadastro, p]);
+
+  const linhasTabela = useMemo(() => (filtroTipo === "todos" ? d.linhas : d.linhas.filter((l) => l.r.tipo === filtroTipo)), [d.linhas, filtroTipo]);
+  const totalTabela = useMemo(
+    () => (filtroTipo === "todos" ? d.carteira : compararCarteira(linhasTabela.map((l) => l.r), cadastro, p)),
+    [filtroTipo, d.carteira, linhasTabela, cadastro, p],
+  );
+  const dadosGrafico = visaoGrafico === "tipo" ? d.porTipo : d.porProduto;
+  // Escala do eixo em % do CDI com marcas redondas (inclui 0 e 100%; negativos quando algum realizado for negativo)
+  const escala = useMemo(() => {
+    const vals = dadosGrafico.flatMap((x) => [x.realizado, x.benchmark]);
+    const passo = Math.max(...vals) - Math.min(0, ...vals) > 200 ? 50 : 20;
+    // realizados levemente negativos (ex.: −0,1%) não abrem uma faixa negativa inteira no eixo
+    const lo = Math.min(...vals) < -1 ? Math.floor(Math.min(...vals) / passo) * passo : 0;
+    const hi = Math.max(120, Math.ceil(Math.max(...vals) / passo) * passo);
+    const ticks: number[] = [];
+    for (let v = lo; v <= hi + 1e-9; v += passo) ticks.push(v);
+    return { domain: [lo, hi] as [number, number], ticks };
+  }, [dadosGrafico]);
 
   const ordenado = useMemo(
     () =>
@@ -182,9 +269,17 @@ export function BenchmarkApp() {
   );
 
   const novo = () =>
-    setRascunho({ id: null, descricao: "", escopo: "produto", valor: PRODUTOS[0], pct: 100, vigenciaInicio: `${p.dataBase.slice(0, 4)}-01-01` });
+    setRascunho({ id: null, descricao: "", escopo: "produto", valor: PRODUTOS[0].produto, pct: 100, vigenciaInicio: `${p.dataBase.slice(0, 4)}-01-01`, nota: "" });
   const editar = (b: Benchmark) =>
-    setRascunho({ id: b.id, descricao: b.descricao, escopo: b.escopo, valor: b.valor, pct: Math.round(b.pctCDI * 10000) / 100, vigenciaInicio: b.vigenciaInicio });
+    setRascunho({
+      id: b.id,
+      descricao: b.descricao,
+      escopo: b.escopo,
+      valor: b.valor,
+      pct: Math.round(b.pctCDI * 10000) / 100,
+      vigenciaInicio: b.vigenciaInicio,
+      nota: b.nota ?? "",
+    });
 
   const excluir = (b: Benchmark) => {
     if (b.escopo === "carteira" && temCarteiraVigente(cadastro, p.dataBase) && !temCarteiraVigente(cadastro.filter((x) => x.id !== b.id), p.dataBase)) {
@@ -216,6 +311,7 @@ export function BenchmarkApp() {
       valor: r.escopo === "carteira" ? "" : r.valor,
       pctCDI: Math.round(r.pct * 100) / 10000,
       vigenciaInicio: r.vigenciaInicio,
+      ...(r.nota.trim() ? { nota: r.nota.trim() } : {}),
     };
     salvar(b);
     setRascunho(null);
@@ -237,25 +333,47 @@ export function BenchmarkApp() {
             { titulo: "% do CDI", tipo: "decimal" },
             { titulo: "Taxa equivalente (% a.a.)", tipo: "decimal", largura: 18 },
             { titulo: "Vigência desde", tipo: "data" },
-            { titulo: "Operações ativas", tipo: "inteiro" },
+            { titulo: "Contratos ativos", tipo: "inteiro" },
+            { titulo: "Justificativa", largura: 60 },
           ],
           linhas: ordenado.map((b) => [
             b.descricao,
             ESCOPOS_BENCHMARK.find((e) => e.value === b.escopo)?.label ?? b.escopo,
-            aplicaSeA(b),
+            b.escopo === "produto" ? rotuloProduto(b.valor) : aplicaSeA(b),
             b.pctCDI * 100,
             taxaEquivalenteBenchmark(b.pctCDI, p.cdi) * 100,
             b.vigenciaInicio,
             d.cobertura.get(b.id) ?? 0,
+            b.nota ?? "",
           ]),
+          notas: [`Contratos ativos em ${fmtDate(p.dataBase)} na Carteira-Mestre (renda fixa bancária, Tesouro Direto, fundos e time deposits) aos quais a regra se aplica.`],
+        },
+        {
+          nome: "Por tipo de contrato",
+          titulo: "Realizado × benchmark por tipo de contrato – últimos 12 meses",
+          subtitulo: `${fmtDate(inicio)} a ${fmtDate(p.dataBase)}`,
+          colunas: [
+            { titulo: "Tipo de contrato", largura: 26 },
+            { titulo: "Contratos", tipo: "inteiro" },
+            { titulo: "Realizado (% CDI)", tipo: "decimal" },
+            { titulo: "Benchmark (% CDI)", tipo: "decimal" },
+            { titulo: "Excesso (R$)", tipo: "moeda" },
+          ],
+          linhas: d.porTipo.map((x) => [x.tipo, x.qtd, x.realizado, x.benchmark, x.excesso]),
+          total: ["TOTAL", d.linhas.length, d.carteira.realizado * 100, d.carteira.pct * 100, d.carteira.excesso],
+          notas: ["Time deposits: resultado em R$ (juros em moeda estrangeira + variação cambial) sobre o saldo convertido pela PTAX; pode ser negativo quando o real se aprecia."],
         },
         {
           nome: "Realizado x benchmark",
           titulo: "Rentabilidade realizada × benchmark – últimos 12 meses",
           subtitulo: `${fmtDate(inicio)} a ${fmtDate(p.dataBase)}`,
           colunas: [
+            { titulo: "Código", largura: 12 },
             { titulo: "Transação", largura: 14 },
+            { titulo: "Tipo de contrato", largura: 22 },
             { titulo: "Aplicação", largura: 34 },
+            { titulo: "Portfolio", largura: 16 },
+            { titulo: "Status", largura: 12 },
             { titulo: "Regra aplicada (fim do período)", largura: 30 },
             { titulo: "Regra cadastrada (% CDI, média do período)", tipo: "decimal", largura: 18 },
             { titulo: "Benchmark no período (% CDI)", tipo: "decimal", largura: 16 },
@@ -266,8 +384,12 @@ export function BenchmarkApp() {
             { titulo: "Situação", largura: 20 },
           ],
           linhas: d.linhas.map((l) => [
+            l.r.codigo,
             l.r.op.transacao,
-            `${l.r.op.produto} · ${l.r.op.contraparte}`,
+            l.r.tipo,
+            `${l.r.produto} · ${l.r.contraparte}`,
+            l.portfolio,
+            l.r.status,
             l.regra?.descricao ?? "100% do CDI (sem regra)",
             l.cmp.pctRegra * 100,
             l.cmp.pct * 100,
@@ -279,6 +401,10 @@ export function BenchmarkApp() {
           ]),
           total: [
             "TOTAL",
+            "",
+            "",
+            "",
+            "",
             "",
             "",
             d.carteira.pctRegra * 100,
@@ -293,6 +419,7 @@ export function BenchmarkApp() {
             "Rendimento do benchmark = capital base × (Π (1 + DI diário × % do CDI da regra vigente no dia) − 1), nos dias úteis em que a aplicação esteve ativa no período; DI diário = (1 + CDI do dia)^(1/252) − 1.",
             "Benchmark no período (% CDI) = rendimento do benchmark ÷ (capital base × CDI do período) – mesma base do realizado; uma aplicação contratada ao mesmo % do CDI fica em linha.",
             "Taxa equivalente = (1 + ((1 + CDI)^(1/252) − 1) × % do CDI)^252 − 1 (capitalização diária).",
+            "Rendimento realizado = variação do saldo bruto (curva na renda fixa e nos títulos, cota nos fundos, saldo em moeda × PTAX nos time deposits) + fluxos recebidos no período (cupons, resgates, come-cotas).",
           ],
         },
       ],
@@ -303,9 +430,14 @@ export function BenchmarkApp() {
     {
       key: "desc",
       header: "Descrição",
-      minWidth: 200,
+      minWidth: 240,
       value: (b) => b.descricao,
-      render: (b) => <span className="font-semibold text-text">{b.descricao}</span>,
+      render: (b) => (
+        <div className="max-w-[26rem]">
+          <div className="font-semibold text-text">{b.descricao}</div>
+          {b.nota && <div className="text-xs text-label leading-snug mt-0.5 whitespace-normal">{b.nota}</div>}
+        </div>
+      ),
     },
     {
       key: "escopo",
@@ -313,7 +445,13 @@ export function BenchmarkApp() {
       value: (b) => ESCOPOS_BENCHMARK.find((e) => e.value === b.escopo)?.prioridade ?? 0,
       render: (b) => <Tag color={COR_ESCOPO[b.escopo]}>{ROTULO_ESCOPO[b.escopo]}</Tag>,
     },
-    { key: "valor", header: "Aplica-se a", minWidth: 160, value: (b) => aplicaSeA(b) },
+    {
+      key: "valor",
+      header: "Aplica-se a",
+      minWidth: 170,
+      value: (b) => aplicaSeA(b),
+      render: (b) => <AplicaSeA b={b} />,
+    },
     {
       key: "pct",
       header: "% do CDI",
@@ -332,8 +470,8 @@ export function BenchmarkApp() {
     { key: "vig", header: "Vigência desde", align: "right", value: (b) => b.vigenciaInicio, render: (b) => fmtDate(b.vigenciaInicio) },
     {
       key: "ops",
-      header: "Operações ativas",
-      headerTitle: "Operações ativas na data-base às quais esta regra se aplica",
+      header: "Contratos ativos",
+      headerTitle: "Contratos ativos na data-base (Carteira-Mestre: renda fixa, Tesouro Direto, fundos e time deposits) aos quais esta regra se aplica",
       align: "right",
       value: (b) => d.cobertura.get(b.id) ?? 0,
       render: (b) => {
@@ -359,19 +497,26 @@ export function BenchmarkApp() {
       key: "op",
       header: "Aplicação",
       sticky: true,
-      minWidth: 200,
-      value: (l) => l.r.op.contraparte,
+      minWidth: 230,
+      value: (l) => `${l.r.produto} ${l.r.contraparte}`,
       render: (l) => (
         <div>
           <div className="font-semibold text-text">
-            {l.r.op.produto} · {l.r.op.contraparte}
+            {l.r.produto} · {l.r.contraparte}
           </div>
           <div className="text-xs text-label">
-            {l.r.op.transacao} · {taxaContratada(l.r.op)} · {l.r.op.portfolio}
+            {l.r.codigo} · {l.taxa} · {l.portfolio}
+            {l.r.status === "Liquidada" && <span className="text-critical-strong"> · liquidada em {fmtDate(l.r.fim)}</span>}
           </div>
         </div>
       ),
-      total: () => "Carteira",
+      total: () => (filtroTipo === "todos" ? "Carteira consolidada" : INFO_TIPO[filtroTipo].curto),
+    },
+    {
+      key: "tipo",
+      header: "Tipo de contrato",
+      value: (l) => INFO_TIPO[l.r.tipo].ordem,
+      render: (l) => <Tag color={INFO_TIPO[l.r.tipo].cor}>{INFO_TIPO[l.r.tipo].curto}</Tag>,
     },
     {
       key: "regra",
@@ -404,7 +549,7 @@ export function BenchmarkApp() {
           <div className="text-xs text-label">regra {fmtDec(l.cmp.pctRegra * 100, 1)}%</div>
         </div>
       ),
-      total: () => `${fmtDec(d.carteira.pct * 100, 1)}%`,
+      total: () => `${fmtDec(totalTabela.pct * 100, 1)}%`,
     },
     {
       key: "real",
@@ -413,7 +558,7 @@ export function BenchmarkApp() {
       align: "right",
       value: (l) => l.cmp.realizado,
       render: (l) => <span className="font-semibold">{fmtDec(l.cmp.realizado * 100, 1)}%</span>,
-      total: () => `${fmtDec(d.carteira.realizado * 100, 1)}%`,
+      total: () => `${fmtDec(totalTabela.realizado * 100, 1)}%`,
     },
     {
       key: "dif",
@@ -421,7 +566,7 @@ export function BenchmarkApp() {
       align: "right",
       value: (l) => l.cmp.realizado - l.cmp.pct,
       render: (l) => <Diferenca v={l.cmp.realizado - l.cmp.pct} />,
-      total: () => <Diferenca v={d.carteira.realizado - d.carteira.pct} />,
+      total: () => <Diferenca v={totalTabela.realizado - totalTabela.pct} />,
     },
     {
       key: "exc",
@@ -430,14 +575,14 @@ export function BenchmarkApp() {
       align: "right",
       value: (l) => l.cmp.excesso,
       render: (l) => <span className={corExcesso(l.cmp.excesso)}>{fmtNum(l.cmp.excesso, { parens: true })}</span>,
-      total: () => <span className={corExcesso(d.carteira.excesso)}>{fmtNum(d.carteira.excesso, { parens: true })}</span>,
+      total: () => <span className={corExcesso(totalTabela.excesso)}>{fmtNum(totalTabela.excesso, { parens: true })}</span>,
     },
     {
       key: "sit",
       header: "Situação",
       value: (l) => l.cmp.situacao,
       render: (l) => <ObjectStatus state={SITUACAO_STATE[l.cmp.situacao]}>{SITUACAO_TEXTO[l.cmp.situacao]}</ObjectStatus>,
-      total: () => <ObjectStatus state={SITUACAO_STATE[d.carteira.situacao]}>{SITUACAO_TEXTO[d.carteira.situacao]}</ObjectStatus>,
+      total: () => <ObjectStatus state={SITUACAO_STATE[totalTabela.situacao]}>{SITUACAO_TEXTO[totalTabela.situacao]}</ObjectStatus>,
     },
   ];
 
@@ -483,7 +628,13 @@ export function BenchmarkApp() {
             state={d.carteira.excesso >= 0 ? "positive" : "negative"}
             sub="Rendimento 12 meses"
           />
-          <HeaderKpi label="Abaixo do benchmark" value={String(d.abaixo)} unit={`de ${d.linhas.length}`} state={d.abaixo ? "critical" : "positive"} sub="Aplicações nos 12 meses" />
+          <HeaderKpi
+            label="Abaixo do benchmark"
+            value={String(d.abaixo)}
+            unit={`de ${d.linhas.length}`}
+            state={d.abaixo ? "critical" : "positive"}
+            sub="Contratos nos 12 meses (todos os tipos)"
+          />
         </>
       }
     >
@@ -491,8 +642,9 @@ export function BenchmarkApp() {
         Cadastre a taxa de benchmark de cada aplicação como <strong>percentual do CDI</strong>. A regra mais específica
         vence: <strong>tipo de produto › portfolio › empresa › carteira consolidada</strong>; entre regras do mesmo nível,
         vale a de vigência mais recente. O rendimento do benchmark é capitalizado <strong>dia a dia</strong> com a regra
-        vigente em cada dia, como uma aplicação pós-fixada em % do CDI, e é usado no R01 (composição), R03 (rentabilidade),
-        R05 (evolução mensal) e nos alertas. Nesta demo o cadastro fica salvo neste navegador.
+        vigente em cada dia, como uma aplicação pós-fixada em % do CDI, e vale para <strong>todos os contratos da
+        Carteira-Mestre</strong> – renda fixa bancária, Tesouro Direto, fundos e time deposits. É usado no R01, R03, R05,
+        R09, no Painel de KPIs e nos alertas. Nesta demo o cadastro fica salvo neste navegador.
       </MessageStrip>
       {!temCarteiraVigente(cadastro, p.dataBase) && (
         <MessageStrip design="critical">
@@ -515,20 +667,97 @@ export function BenchmarkApp() {
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-        <Card className="xl:col-span-3" title="Realizado × benchmark por produto" subtitle={`% do CDI bruto · ${fmtDate(inicio)} a ${fmtDate(p.dataBase)}`}>
-          <div className="h-80 -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={d.porProduto} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={2}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="produto" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} angle={-35} textAnchor="end" height={78} />
-                <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={44} domain={[(min: number) => Math.max(0, Math.floor(min / 10) * 10 - 10), "auto"]} tickFormatter={(v: number) => `${v}%`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]} />
-                <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                <Bar dataKey="realizado" name="Realizado" fill="#0070f2" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="benchmark" name="Benchmark" fill="#a8b2bd" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
+        <Card
+          className="xl:col-span-3"
+          title={visaoGrafico === "tipo" ? "Realizado × benchmark por tipo de contrato" : "Realizado × benchmark por produto"}
+          subtitle={`% do CDI bruto · ${fmtDate(inicio)} a ${fmtDate(p.dataBase)}`}
+          actions={
+            <SegmentedButton
+              value={visaoGrafico}
+              onChange={setVisaoGrafico}
+              items={[
+                { value: "tipo", label: "Tipo" },
+                { value: "produto", label: "Produto" },
+              ]}
+            />
+          }
+        >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-label mb-2">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex gap-0.5">
+                {TIPOS_CONTRATO.map((t) => (
+                  <span key={t.tipo} className="w-2 h-2.5 rounded-[2px]" style={{ backgroundColor: t.cor }} />
+                ))}
+              </span>
+              Realizado (cor do tipo de contrato)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[2px] bg-[#a8b2bd]" />
+              Benchmark cadastrado
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-4 border-t border-dashed border-[#556b82]" />
+              100% do CDI
+            </span>
           </div>
+          {visaoGrafico === "tipo" ? (
+            <div className="h-72 -ml-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dadosGrafico} margin={{ top: 16, right: 8, left: 0, bottom: 0 }} barGap={3}>
+                  <CartesianGrid vertical={false} stroke="#e5e5e5" />
+                  <XAxis dataKey="chave" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                  <YAxis
+                    tick={AXIS_STYLE}
+                    tickLine={false}
+                    axisLine={false}
+                    width={44}
+                    domain={escala.domain}
+                    ticks={escala.ticks}
+                    tickFormatter={(v: number) => `${fmtDec(v, 0)}%`}
+                  />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]} />
+                  <ReferenceLine y={100} stroke="#556b82" strokeDasharray="4 3" />
+                  <Bar dataKey="realizado" name="Realizado" radius={[3, 3, 0, 0]} maxBarSize={44} isAnimationActive={false}>
+                    {dadosGrafico.map((x) => (
+                      <Cell key={x.chave} fill={x.cor} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="benchmark" name="Benchmark" fill="#a8b2bd" radius={[3, 3, 0, 0]} maxBarSize={44} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="-ml-2" style={{ height: Math.max(288, dadosGrafico.length * 30 + 40) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dadosGrafico} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 0 }} barGap={1} barCategoryGap={6}>
+                  <CartesianGrid horizontal={false} stroke="#e5e5e5" />
+                  <XAxis
+                    type="number"
+                    tick={AXIS_STYLE}
+                    tickLine={false}
+                    axisLine={{ stroke: "#a8b2bd" }}
+                    domain={escala.domain}
+                    ticks={escala.ticks}
+                    tickFormatter={(v: number) => `${fmtDec(v, 0)}%`}
+                  />
+                  <YAxis type="category" dataKey="chave" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={false} width={158} interval={0} tickFormatter={rotuloCurtoProduto} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]} />
+                  <ReferenceLine x={100} stroke="#556b82" strokeDasharray="4 3" />
+                  <Bar dataKey="realizado" name="Realizado" radius={[0, 3, 3, 0]} isAnimationActive={false}>
+                    {dadosGrafico.map((x) => (
+                      <Cell key={x.chave} fill={x.cor} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="benchmark" name="Benchmark" fill="#a8b2bd" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          <p className="text-xs text-label mt-2 leading-relaxed">
+            Títulos públicos pelo valor na curva (a marcação a mercado fica fora da comparação); fundos pela cota, líquida das
+            taxas de administração e performance; time deposits pelo resultado em R$ (juros em moeda estrangeira + variação
+            cambial), que cai – e pode ficar negativo – quando o real se aprecia.
+          </p>
         </Card>
 
         <Card className="xl:col-span-2" title="Como o benchmark é aplicado" subtitle="Exemplo com as regras atuais">
@@ -565,11 +794,23 @@ export function BenchmarkApp() {
       </div>
 
       <Card
-        title="Rentabilidade × benchmark por aplicação"
-        subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · rendimento total ${fmtBRL(d.linhas.reduce((s, l) => s + l.r.rendimento, 0))}${d.comVigenciaNoPeriodo ? ` · ${d.comVigenciaNoPeriodo} aplicação(ões) com mudança de regra no período` : ""}`}
+        title="Rentabilidade × benchmark por contrato"
+        subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · ${linhasTabela.length} contrato(s) · rendimento ${fmtBRL(linhasTabela.reduce((s, l) => s + l.r.rendimento, 0))}${d.comVigenciaNoPeriodo ? ` · ${d.comVigenciaNoPeriodo} com mudança de regra no período` : ""}`}
         bodyClassName="px-0 pb-0"
+        actions={
+          <Select
+            ariaLabel="Tipo de contrato"
+            className="w-44"
+            value={filtroTipo}
+            onChange={setFiltroTipo}
+            options={[
+              { value: "todos" as const, label: "Todos os tipos" },
+              ...TIPOS_CONTRATO.map((t) => ({ value: t.tipo, label: t.tipo })),
+            ]}
+          />
+        }
       >
-        <DataTable columns={colunasOps} rows={d.linhas} rowKey={(l) => l.r.op.transacao} showTotals maxHeight={520} defaultSort={{ key: "dif", dir: "asc" }} />
+        <DataTable columns={colunasOps} rows={linhasTabela} rowKey={(l) => l.r.codigo} showTotals maxHeight={560} defaultSort={{ key: "dif", dir: "asc" }} />
       </Card>
 
       {rascunho && (
@@ -577,6 +818,33 @@ export function BenchmarkApp() {
       )}
     </ReportPage>
   );
+}
+
+/** Rótulo do eixo do gráfico por produto (nomes longos do Tesouro abreviados) */
+function rotuloCurtoProduto(produto: string): string {
+  return produto.replace("com Juros Semestrais", "c/ juros").replace("Fundo crédito privado", "Fundo créd. privado");
+}
+
+function AplicaSeA({ b }: { b: Benchmark }) {
+  if (b.escopo === "produto") {
+    const tipo = TIPO_DO_PRODUTO.get(b.valor);
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span>{b.valor}</span>
+        {tipo && <Tag color={INFO_TIPO[tipo].cor}>{INFO_TIPO[tipo].curto}</Tag>}
+      </div>
+    );
+  }
+  if (b.escopo === "portfolio") {
+    const pf = PORTFOLIOS.find((x) => x.portfolio === b.valor);
+    return (
+      <div>
+        <div>{b.valor}</div>
+        {pf && <div className="text-xs text-label">{pf.tipos.join(" · ")}</div>}
+      </div>
+    );
+  }
+  return <span>{aplicaSeA(b)}</span>;
 }
 
 function Diferenca({ v }: { v: number }) {
@@ -731,6 +999,16 @@ function DialogoBenchmark({
               <input type="date" value={r.vigenciaInicio} onChange={(e) => set({ vigenciaInicio: e.target.value })} className={inputCls(visiveis.vigenciaInicio)} />
             </Campo>
           </div>
+          <Campo label="Justificativa (opcional)">
+            <textarea
+              value={r.nota}
+              onChange={(e) => set({ nota: e.target.value })}
+              placeholder="Ex.: custo de oportunidade em R$ de aplicações no exterior"
+              maxLength={240}
+              rows={2}
+              className="w-full rounded-[var(--radius-field)] border border-field bg-white px-2.5 py-2 text-sm text-text focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)] resize-none"
+            />
+          </Campo>
           <div className="rounded-lg bg-[#f5f6f7] px-3 py-2.5 text-[13px] text-label">
             Equivale a <strong className="text-text tabular">{Number.isFinite(r.pct) ? fmtPct(taxaEquivalenteBenchmark(r.pct / 100, cdi)) : "—"} a.a.</strong> com o
             CDI vigente de {fmtPct(cdi)} a.a. (importado do SAP), capitalizado diariamente. Faixa permitida: {fmtDec(PCT_MINIMO * 100, 0)}% a{" "}

@@ -44,6 +44,7 @@ import {
   totalDivida,
 } from "../lib/divida";
 import { checagensIntegridade, checklistFechamento, conciliacaoExtratos, conciliacaoGL } from "../lib/fechamento";
+import { avaliarKpisCaptacoes } from "./KpisCaptacoes";
 
 // ---------------------------------------------------------------------------
 // Helpers locais
@@ -289,6 +290,9 @@ export function LaunchpadCaptacoes() {
     ? `${covDestaque.cov.indicador}: ${fmtCovenant(covDestaque, covDestaque.valor)} (limite ${covDestaque.cov.tipo === "max" ? "≤" : "≥"} ${fmtCovenant(covDestaque, covDestaque.cov.limite, covDestaque.cov.formato === "pct" ? 0 : 1)})`
     : undefined;
 
+  // Painel de KPIs: a mesma avaliação da tela (valores na data-base, sem as séries)
+  const kpis = useMemo(() => avaliarKpisCaptacoes(p, covenants).resumo, [p, covenants]);
+
   const reclassIds = [...reclassificados].sort();
   const checagensPendentes = d.checagens.length - d.checagensOk;
   const ano = db.slice(0, 4);
@@ -367,6 +371,15 @@ export function LaunchpadCaptacoes() {
       value: fmtDec(d.custoMedio * 100, 2),
       unit: "% a.a. (juros + correção)",
       footer: `Encargos ${ano}: ${fmtCompact(d.encargos)}`,
+    },
+    kpis: {
+      title: "Painel de KPIs",
+      subtitle: "Dívida · metas e tendência",
+      value: `${kpis.ok}/${kpis.comMeta}`,
+      unit: "KPIs na meta",
+      state: kpis.estado,
+      footer: kpis.rodape,
+      footerState: kpis.estado === "positive" ? undefined : kpis.estado,
     },
     c04: {
       title: "Covenants",
