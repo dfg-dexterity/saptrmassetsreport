@@ -1,6 +1,20 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 
+/**
+ * Padding padrão do corpo do cartão, omitindo os eixos que `bodyClassName` já define (ex.: "px-0 pb-0" para tabelas
+ * de borda a borda) – sem isso, a classe padrão prevaleceria na folha de estilos.
+ */
+function paddingPadrao(temCabecalho: boolean, extra?: string): string {
+  const tokens = (extra ?? "").split(/\s+/).map((t) => t.replace(/!$/, "").replace(/^!/, "").replace(/^[a-z]+:/, ""));
+  const define = (...prefixos: string[]) => tokens.some((t) => prefixos.some((pr) => t.startsWith(`${pr}-`)));
+  const out: string[] = [];
+  if (!define("p", "px")) out.push("px-4");
+  if (!define("p", "py", "pb")) out.push("pb-4");
+  if (!temCabecalho && !define("p", "py", "pt")) out.push("pt-4");
+  return out.join(" ");
+}
+
 /** Cartão no padrão Horizon (sap.f.Card / Integration Card) */
 export function Card({
   title,
@@ -38,7 +52,7 @@ export function Card({
           </div>
         </header>
       )}
-      <div className={clsx(title || actions ? "px-4 pb-4" : "p-4", bodyClassName)}>{children}</div>
+      <div className={clsx(paddingPadrao(Boolean(title || actions), bodyClassName), bodyClassName)}>{children}</div>
     </section>
   );
 }

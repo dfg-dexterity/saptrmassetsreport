@@ -386,7 +386,7 @@ export function LaunchpadCaptacoes() {
       footer: checagensPendentes
         ? plural(checagensPendentes, "checagem pendente", "checagens pendentes")
         : d.aprovado
-          ? "Período aprovado"
+          ? "Aprovado"
           : "Pronto para aprovação",
       footerState: checagensPendentes ? "critical" : "positive",
     },

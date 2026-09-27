@@ -672,7 +672,8 @@ export function C02Cronograma() {
 
   const colPerfil: Column<LinhaPerfil>[] = [
     colContrato<LinhaPerfil>((x) => `${x.pos.c.descricaoAmortizacao}`),
-    num("circ", "Circulante (12 meses)", (x) => x.circulante, { bold: true, minWidth: 150 }),
+    // total do circulante e total geral = os mesmos números da aba CP × LP (principal circulante e principal atualizado)
+    num("circ", "Circulante (12 meses)", (x) => x.circulante, { bold: true, minWidth: 150, total: () => fmtInteiroMil(m.pc12 + m.pReclass) }),
     ...d.faixas.map((f) =>
       num<LinhaPerfil>(f.key, f.rotulo, (x) => soma(f.anos, (a) => x.porAno.get(a) ?? 0), {
         minWidth: f.anos.length > 1 || f.rotulo.length > 6 ? 120 : 88,
@@ -697,7 +698,7 @@ export function C02Cronograma() {
           </span>
         );
       },
-      total: (rows) => fmtValor(soma(rows, (x) => x.total)),
+      total: () => fmtInteiroMil(m.pa),
     },
   ];
 
@@ -747,11 +748,7 @@ export function C02Cronograma() {
   const graficoMeses = d.meses.map((mes) => ({ mes: mes.mes, principal: miOuNulo(mes.principal), juros: miOuNulo(mes.juros) }));
   const graficoAnos = d.anosFluxo.map((a) => ({ ano: String(a.ano), rotulo: a.rotulo, principal: miOuNulo(a.principal), juros: miOuNulo(a.juros) }));
   const perfilOrdenado = d.perfil;
-  const totaisPerfil = {
-    circulante: soma(d.perfil, (l) => l.circulante),
-    faixas: d.faixas.map((f) => soma(d.perfil, (l) => soma(f.anos, (a) => l.porAno.get(a) ?? 0))),
-    total: soma(d.perfil, (l) => l.total),
-  };
+  const totaisPerfil = { faixas: d.faixas.map((f) => soma(d.perfil, (l) => soma(f.anos, (a) => l.porAno.get(a) ?? 0))) };
 
   return (
     <ReportPage
@@ -1078,10 +1075,10 @@ export function C02Cronograma() {
                 <li className="px-4 py-3 bg-[#f5f6f7]">
                   <div className="flex items-start justify-between gap-3">
                     <div className="text-sm font-bold text-text">Total ({d.perfil.length})</div>
-                    <div className="text-sm font-bold text-text tabular">{fmtValor(totaisPerfil.total)}</div>
+                    <div className="text-sm font-bold text-text tabular">{fmtInteiroMil(m.pa)}</div>
                   </div>
                   <dl className="grid grid-cols-3 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
-                    <PopIn rotulo="12 meses" valor={fmtValor(totaisPerfil.circulante)} />
+                    <PopIn rotulo="12 meses" valor={fmtInteiroMil(m.pc12 + m.pReclass)} />
                     {d.faixas.map((f, i) => (
                       <PopIn key={f.key} rotulo={f.rotulo} valor={fmtValor(totaisPerfil.faixas[i])} />
                     ))}
