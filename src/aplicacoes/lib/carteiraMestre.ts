@@ -178,7 +178,9 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
   for (const op of OPERACOES) {
     if (!noEscopo(op.empresa, escopo) || !ativaEm(op, data)) continue;
     const x = calcularPosicao(op, data, p);
-    const liq = x.rendimento - x.iof - x.ir;
+    // IOF só quando realizado (resgate antes de 30 dias): na posição, IR sobre o rendimento pela alíquota vigente
+    const irRF = x.rendimento * x.aliqIR;
+    const liq = x.rendimento - irRF;
     out.push({
       id: op.transacao,
       codigo: op.transacao,
@@ -201,8 +203,8 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
       saldoMercado: x.valorJusto,
       mtm: x.ajusteVJ,
       rendimentoBruto: x.rendimento,
-      iof: x.iof,
-      ir: x.ir,
+      iof: 0,
+      ir: irRF,
       taxas: 0,
       rendimentoLiquido: liq,
       valorContabil: x.valorContabil,
@@ -227,6 +229,8 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
     if (!noEscopo(t.empresa, escopo)) continue;
     const x = posicaoTitulo(t, data, p);
     if (!x.ativo) continue;
+    const irT = irAcumTitulo(t, data, p);
+    const liqT = x.rendimentoBruto - irT - x.taxas;
     out.push({
       id: t.transacao,
       codigo: t.id,
@@ -249,10 +253,10 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
       saldoMercado: x.saldoMercado,
       mtm: x.mtm,
       rendimentoBruto: x.rendimentoBruto,
-      iof: x.iof,
-      ir: x.ir,
+      iof: 0,
+      ir: irT,
       taxas: x.taxas,
-      rendimentoLiquido: x.rendimentoLiquido,
+      rendimentoLiquido: liqT,
       valorContabil: x.valorContabil,
       cpc48: t.cpc48,
       // VJ por resultado (mantido para negociação) é circulante, como na renda fixa (CPC 26, item 66)
@@ -261,8 +265,8 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
       prazoRemanescente: x.prazoRemanescente,
       saldoME: x.saldoCurva,
       agioDesagio: x.saldoCurva > 0 ? x.mtm / x.saldoCurva : 0,
-      rentabLiqPeriodo: x.rendimentoLiquido / x.valorCompra,
-      rentabLiqAA: anualizar(x.rendimentoLiquido / x.valorCompra, x.diasCorridos),
+      rentabLiqPeriodo: liqT / x.valorCompra,
+      rentabLiqAA: anualizar(liqT / x.valorCompra, x.diasCorridos),
       taxaContratada: taxaTituloTexto(t),
       taxaAA: taxaTituloAA(t, p),
       aliqIR: aliquotaIR(x.diasCorridos, "Regressivo"),
@@ -276,6 +280,9 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
     if (!noEscopo(f.empresa, escopo)) continue;
     const x = posicaoFundo(f, data, p);
     if (!x.ativo) continue;
+    const irF = irAcumFundo(f, data, p);
+    const liqF = x.rendimentoBruto - irF;
+    const rentF = f.valorAplicado > 0 ? liqF / f.valorAplicado : 0;
     out.push({
       id: f.transacao,
       codigo: f.id,
@@ -298,10 +305,10 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
       saldoMercado: x.saldo,
       mtm: 0,
       rendimentoBruto: x.rendimentoBruto,
-      iof: x.iof,
-      ir: x.irTotal,
+      iof: 0,
+      ir: irF,
       taxas: 0,
-      rendimentoLiquido: x.rendimentoLiquido,
+      rendimentoLiquido: liqF,
       valorContabil: x.saldo,
       cpc48: f.cpc48,
       circulante: true,
@@ -309,8 +316,8 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
       prazoRemanescente: null,
       saldoME: x.saldo,
       agioDesagio: 0,
-      rentabLiqPeriodo: x.rentabLiquida,
-      rentabLiqAA: anualizar(x.rentabLiquida, x.diasCorridos),
+      rentabLiqPeriodo: rentF,
+      rentabLiqAA: anualizar(rentF, x.diasCorridos),
       taxaContratada: taxaFundoTexto(f),
       taxaAA: taxaFundoAA(f, p),
       aliqIR: x.aliquotaIR,
@@ -641,14 +648,20 @@ function irAcumTitulo(t: TituloPublico, d: string, p: Premissas): number {
   const eventos = eventosTitulo(t, p);
   const venc = eventos[eventos.length - 1];
   if (d >= venc.data) return eventos.reduce((a, e) => a + e.ir, 0);
-  return posicaoTitulo(t, d, p).ir;
+  // IR retido nos cupons + provisão sobre o rendimento ainda não tributado (sem IOF provisório: só se realizado)
+  const x = posicaoTitulo(t, d, p);
+  const recebidos = eventos.filter((e) => e.data <= d);
+  const baseCupons = recebidos.reduce((a, e) => a + e.base, 0);
+  const irCupons = recebidos.reduce((a, e) => a + e.ir, 0);
+  return irCupons + Math.max(0, x.rendimentoBruto - baseCupons) * aliquotaIR(x.diasCorridos, "Regressivo");
 }
 
 function irAcumFundo(f: Fundo, d: string, p: Premissas): number {
   if (d <= f.dataAplicacao) return 0;
   const h = historicoFundo(f, p);
   if (h.resgate && d >= h.resgate.data) return h.comeCotas.reduce((a, c) => a + c.ir, 0) + h.resgate.irComplementar;
-  return posicaoFundo(f, d, p).irTotal;
+  const x = posicaoFundo(f, d, p);
+  return Math.max(0, x.rendimentoBruto) * x.aliquotaIR;
 }
 
 function irAcumTD(td: TimeDeposit, d: string, p: Premissas): number {

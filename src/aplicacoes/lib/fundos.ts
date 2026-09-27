@@ -29,6 +29,19 @@ function diasUteisDoMes(mes: string): number {
   return n;
 }
 
+/** Cristalização da taxa de performance: último dia útil de junho e de dezembro (dias em número) */
+function datasCristalizacao(de: string, ate: string): number[] {
+  const out: number[] = [];
+  for (let y = Number(de.slice(0, 4)); y <= Number(ate.slice(0, 4)); y++) {
+    for (const m of [6, 12]) {
+      let d = toDay(endOfMonth(y, m));
+      while (!isBusinessDay(d)) d--;
+      out.push(d);
+    }
+  }
+  return out;
+}
+
 function horizonte(f: Fundo, p: Premissas): string {
   return f.dataResgate ?? addDays(p.dataBase > "2026-03-31" ? p.dataBase : "2026-03-31", 400);
 }
@@ -47,6 +60,16 @@ function serieCota(f: Fundo, p: Premissas): SerieCota {
   let fatorBruto = 1;
   let fatorLiquido = 1;
   let taxaAc = 0;
+  // performance (CVM 175): provisão diária de taxaPerf × excedente da cota (líquida de adm.) sobre a cota-base
+  // corrigida pelo benchmark, nunca abaixo da última cota cristalizada (linha-d'água); revertida se o excedente cai;
+  // cristalizada no último dia útil de junho e dezembro
+  let cotaAdm = f.cotaAplicacao;
+  let cotaBase = f.cotaAplicacao;
+  let fatorBench = 1;
+  let admAc = 0;
+  let perfCristal = 0;
+  let provisao = 0;
+  const cristaliza = new Set(datasCristalizacao(f.dataAplicacao, fromDay(d0 + n)));
   for (let i = 1; i <= n; i++) {
     const dia = d0 + i - 1; // o dia útil `dia` rende de `dia` para `dia + 1`
     let c = cota[i - 1];
@@ -59,27 +82,49 @@ function serieCota(f: Fundo, p: Premissas): SerieCota {
       const fx = ptaxNaData(f.modelo.moeda, fromDay(dia + 1), p) / ptax0;
       c = f.cotaAplicacao * fx * fatorLiquido;
       taxaAc = f.cotaAplicacao * fx * (fatorBruto - fatorLiquido);
-    } else if (isBusinessDay(dia)) {
-      const di = Math.pow(1 + cdiAnual(dia, p), 1 / 252) - 1;
-      let bruto: number;
-      let bench = 1 + di;
-      const m = f.modelo;
-      if (m.tipo === "pctCDI") bruto = 1 + di * m.pctBruto;
-      else if (m.tipo === "cdiMais") bruto = (1 + di) * Math.pow(1 + m.spread, 1 / 252);
-      else {
-        const mes = fromDay(dia).slice(0, 7);
-        const r = RETORNOS_MENSAIS[m.serie][mes];
-        if (r === undefined || mes > mesBase) bruto = (1 + di) * Math.pow(1 + m.projecaoSpreadCDI, 1 / 252);
+    } else {
+      if (isBusinessDay(dia)) {
+        const di = Math.pow(1 + cdiAnual(dia, p), 1 / 252) - 1;
+        let bruto: number;
+        let bench = 1 + di;
+        const m = f.modelo;
+        if (m.tipo === "pctCDI") bruto = 1 + di * m.pctBruto;
+        else if (m.tipo === "cdiMais") bruto = (1 + di) * Math.pow(1 + m.spread, 1 / 252);
         else {
-          const du = diasUteisDoMes(mes);
-          bruto = Math.pow(1 + r + m.alfaMensal, 1 / du);
-          if (m.serie === "ibovespa") bench = Math.pow(1 + r, 1 / du);
+          const mes = fromDay(dia).slice(0, 7);
+          const r = RETORNOS_MENSAIS[m.serie][mes];
+          if (r === undefined || mes > mesBase) {
+            bruto = (1 + di) * Math.pow(1 + m.projecaoSpreadCDI, 1 / 252);
+            // Ibovespa sem projeção: o fundo de ações é projetado "em linha" com o próprio índice (sem performance)
+            if (m.serie === "ibovespa") bench = bruto;
+          } else {
+            const du = diasUteisDoMes(mes);
+            bruto = Math.pow(1 + r + m.alfaMensal, 1 / du);
+            if (m.serie === "ibovespa") bench = Math.pow(1 + r, 1 / du);
+          }
+        }
+        const fatorAdm = Math.pow(1 - f.taxaAdm, 1 / 252);
+        admAc += cotaAdm * bruto * (1 - fatorAdm);
+        cotaAdm = cotaAdm * bruto * fatorAdm;
+        fatorBench *= bench;
+      }
+      if (f.taxaPerf > 0) {
+        const alvo = Math.max(cotaBase * fatorBench, cotaBase);
+        provisao = f.taxaPerf * Math.max(0, cotaAdm - alvo);
+        if (cristaliza.has(dia + 1) && provisao > 0) {
+          // cristalização: a provisão vira taxa paga, a cota-base passa a ser a cota do dia
+          cotaAdm -= provisao;
+          perfCristal += provisao;
+          provisao = 0;
+          cotaBase = cotaAdm;
+          fatorBench = 1;
+        } else if (cristaliza.has(dia + 1)) {
+          fatorBench = 1;
+          cotaBase = Math.max(cotaBase, cotaAdm);
         }
       }
-      const perf = f.taxaPerf * Math.max(0, bruto - bench);
-      const liquido = (bruto - perf) * Math.pow(1 - f.taxaAdm, 1 / 252);
-      taxaAc += c * (bruto - liquido);
-      c = c * liquido;
+      c = cotaAdm - provisao;
+      taxaAc = admAc + perfCristal + provisao;
     }
     cota[i] = c;
     taxaPorCota[i] = taxaAc;

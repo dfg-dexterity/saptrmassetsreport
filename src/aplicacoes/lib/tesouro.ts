@@ -251,7 +251,10 @@ export interface PosicaoTitulo {
   taxas: number;
   rendimentoLiquido: number;
   valorContabil: number;
+  /** duration de taxa (Macaulay, anos úteis); LFT = 0 – pós-fixada, reprecificada diariamente pela Selic */
   duration: number;
+  /** LFT: duration do ágio/deságio (spread sobre a Selic); demais títulos = duration */
+  durationSpread: number;
   proximoCupom: EventoTitulo | null;
 }
 
@@ -302,7 +305,8 @@ export function posicaoTitulo(t: TituloPublico, iso: string, p: Premissas): Posi
     taxas,
     rendimentoLiquido: rendimentoBruto - iof - ir - taxas,
     valorContabil: t.cpc48 === "Custo Amortizado" ? saldoCurva : saldoMercado,
-    duration: ativo ? durationTitulo(t, iso, tm) : 0,
+    duration: ativo && t.tipo !== "LFT" ? durationTitulo(t, iso, tm) : 0,
+    durationSpread: ativo ? durationTitulo(t, iso, tm) : 0,
     proximoCupom: proximo,
   };
 }

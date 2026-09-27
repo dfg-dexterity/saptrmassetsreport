@@ -61,6 +61,8 @@ export function concentracaoPorGrupo(cs: ContratoMestre[]): GrupoExposicao[] {
   const total = totalMestre(cs);
   const map = new Map<string, GrupoExposicao>();
   for (const c of cs) {
+    // cotas de fundos são patrimônio segregado (CVM 175), não risco de crédito do gestor: têm limite próprio (≤ 20%)
+    if (c.tipo === "Fundo de investimento") continue;
     const g = map.get(c.grupo) ?? {
       grupo: c.grupo,
       rating: c.rating,
@@ -157,7 +159,7 @@ export function valorRegraPolitica(id: string, c: ContratoMestre): boolean {
     case "pre":
       return c.indexador === "Pré";
     case "exterior":
-      return c.moeda !== "BRL" || c.indexador === "USD" || c.indexador === "EUR";
+      return exposicaoCambial(c);
     case "rv":
       return c.chave.produto === "Fundo de ações" || c.chave.produto === "Fundo multimercado";
     default:
@@ -341,6 +343,7 @@ export function custoMedioDivida(p: Premissas): number {
 }
 
 export interface Carry {
+  /** saldo das aplicações em R$ (base do carry) */
   saldo: number;
   taxaBruta: number;
   aliquotaMediaIR: number;
@@ -348,10 +351,22 @@ export interface Carry {
   custoDivida: number;
   carryBruto: number; // p.p.
   custoCarregamento: number; // R$ a.a.
+  /** exposição cambial fora do carry (time deposits e fundo cambial): taxa em moeda estrangeira não comparável ao custo em R$ */
+  saldoCambial: number;
 }
 
-/** Carry da carteira consolidada (Carteira-Mestre) contra o custo médio da dívida */
-export function calcularCarry(cs: ContratoMestre[], p: Premissas): Carry {
+/** Exposição cambial: contrato em moeda estrangeira ou fundo indexado a moeda estrangeira */
+export function exposicaoCambial(c: ContratoMestre): boolean {
+  return c.moeda !== "BRL" || c.indexador === "USD" || c.indexador === "EUR";
+}
+
+/**
+ * Carry das aplicações em R$ (Carteira-Mestre) contra o custo médio da dívida. A exposição cambial fica fora: a taxa
+ * em USD/EUR, sem a variação da moeda, não é comparável ao custo da dívida em R$.
+ */
+export function calcularCarry(todos: ContratoMestre[], p: Premissas): Carry {
+  const cs = todos.filter((x) => !exposicaoCambial(x));
+  const saldoCambial = todos.filter(exposicaoCambial).reduce((s, x) => s + x.saldoCurva, 0);
   const saldo = cs.reduce((s, x) => s + x.saldoCurva, 0);
   const peso = (fn: (x: ContratoMestre) => number) => (saldo > 0 ? cs.reduce((s, x) => s + fn(x) * x.saldoCurva, 0) / saldo : 0);
   const taxaBruta = peso((x) => x.taxaAA);
@@ -367,5 +382,6 @@ export function calcularCarry(cs: ContratoMestre[], p: Premissas): Carry {
     custoDivida,
     carryBruto,
     custoCarregamento: saldo * carryBruto,
+    saldoCambial,
   };
 }

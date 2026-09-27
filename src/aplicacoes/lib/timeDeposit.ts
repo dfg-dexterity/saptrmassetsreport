@@ -65,7 +65,8 @@ export function posicaoTimeDeposit(td: TimeDeposit, iso: string, p: Premissas): 
   const ptaxBaseMes = antMes >= td.dataAplicacao ? ptaxAnt : td.ptaxAplicacao;
   const variacaoCambialMes = ativo ? saldoAntME * (ptax - ptaxBaseMes) : 0;
   const rendimentoBruto = ativo ? saldoBRL - principalBRL : 0;
-  const iofCambio = ativo ? principalBRL * P.iofCambio : 0;
+  const aliqIof = td.dataAplicacao >= P.inicioIofInvestimento ? P.iofCambio : P.iofCambioGeral;
+  const iofCambio = ativo ? principalBRL * aliqIof : 0;
   // tarifa em US$ convertida pela taxa da remessa (a do próprio contrato nos TDs em USD)
   const tarifa = ativo ? P.tarifaUSD * (td.moeda === "USD" ? td.ptaxAplicacao : ptaxNaData("USD", td.dataAplicacao, p)) : 0;
   const irpjCsll = Math.max(0, rendimentoBruto - iofCambio - tarifa) * ALIQUOTA_IRPJ_CSLL;

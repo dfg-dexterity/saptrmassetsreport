@@ -6,8 +6,15 @@ import type { ClassificacaoCPC48, Rating } from "./carteira";
  */
 
 export const PARAMETROS_TIME_DEPOSIT = {
-  /** IOF câmbio na remessa (Decreto 6.306/2007 – alíquota geral) */
-  iofCambio: 0.0038,
+  /**
+   * IOF câmbio na remessa para investimento no exterior: 1,10% (Decreto 6.306/2007, art. 15-B, XXI-A, na redação do
+   * Decreto 12.499/2025 – eficácia restabelecida pelo STF em 16/07/2025). Todas as remessas da carteira são posteriores.
+   */
+  iofCambio: 0.011,
+  /** Alíquota geral do IOF câmbio (0,38%), vigente antes de 16/07/2025 para essas remessas – referência */
+  iofCambioGeral: 0.0038,
+  /** Início da alíquota de 1,10% para remessas de investimento */
+  inicioIofInvestimento: "2025-07-16",
   /** Base de dias – convenção de mercado USD/EUR (ACT/360) */
   baseDias: 360,
   /** Tarifa bancária por operação (SWIFT/wire), em US$ */
