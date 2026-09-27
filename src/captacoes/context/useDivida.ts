@@ -56,7 +56,7 @@ export function calcularAlertasCaptacoes(p: PremissasMercado): Alerta[] {
           : `${a.cov.indicador} descumprido em ${fmtDate(a.dataApuracao)} – waiver obtido`,
         descricao: a.reclassifica
           ? `${valor} vs limite ${a.cov.tipo === "max" ? "≤" : "≥"} ${limite}. Sem waiver até a data-base (CPC 26, item 74): ${a.cov.contratos.join(", ")}.`
-          : `${valor} vs limite ${limite}. Waiver do ${a.waiver?.credor} em ${fmtDate(a.waiver?.obtidoEm)}.`,
+          : `${valor} vs limite ${a.cov.tipo === "max" ? "≤" : "≥"} ${limite}. Waiver do ${a.waiver?.credor} em ${fmtDate(a.waiver?.obtidoEm)}.`,
         rota: "/c04-covenants",
       });
     } else {

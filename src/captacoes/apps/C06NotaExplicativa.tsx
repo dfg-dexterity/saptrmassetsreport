@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { ChevronRight, Copy } from "lucide-react";
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "../../shared/components/fiori/Button";
@@ -87,6 +87,13 @@ function listaPt(itens: string[]): string {
 function minuscula(s: string): string {
   if (!s || (s.length > 1 && s[1] === s[1].toUpperCase() && s[1] !== s[1].toLowerCase())) return s;
   return s[0].toLowerCase() + s.slice(1);
+}
+
+/** Garantias no meio da frase: "espécie quirografária", "sem garantia real" ou "garantias: …" */
+function garantiasTexto(g: string): string {
+  if (/^quirograf/i.test(g)) return "espécie quirografária (sem garantia real)";
+  if (/^sem /i.test(g)) return minuscula(g);
+  return `garantias: ${minuscula(g)}`;
 }
 
 /** Encerra a frase com ponto sem duplicar o de "a.a." */
@@ -592,12 +599,16 @@ export function C06NotaExplicativa() {
 
     push("secao", "c) Movimentação");
     const captTxt = d.novas.length
-      ? `a Companhia captou ${rsMil(tm.captacoes)} (${listaPt(d.novas.map((l) => `${minuscula(l.c.instrumento)}, ${l.c.id}`))}), com custos de transação de ${rsMil(-tm.custosTransacao)}`
+      ? `a Companhia captou ${rsMil(tm.captacoes)} ${
+          d.novas.length === 1
+            ? `(${minuscula(d.novas[0].c.instrumento)}, ${d.novas[0].c.id})`
+            : `em ${d.novas.length} operações (${listaPt(d.novas.map((l) => l.c.id))})`
+        }, com custos de transação de ${rsMil(-tm.custosTransacao)}`
       : "não houve novas captações";
     const capTxt = tm.capitalizados >= 500 ? `, dos quais ${rsMil(tm.capitalizados)} capitalizados no imobilizado em andamento (CPC 20)` : "";
     push(
       "p",
-      `No período de ${fmtDate(ab)} a ${fmtDate(db)}, ${captTxt}. Foram apropriados encargos de ${rsMil(encargosPeriodo)} – juros de ${rsMil(tm.juros)}, atualização monetária de ${rsMil(tm.atualizacaoMonetaria)} e custos de transação de ${rsMil(tm.apropriacaoCustos)}${capTxt}. Os pagamentos somaram ${rsMil(-tm.pagamentoPrincipal)} de principal e ${rsMil(-tm.pagamentoJuros)} de juros${d.liquidados.length ? `, incluindo a liquidação ${d.liquidados.length === 1 ? "do contrato" : "dos contratos"} ${listaPt(d.liquidados.map((l) => l.c.id))}` : ""}. O saldo passou de ${rsMil(tm.saldoInicial)} para ${rsMil(tm.saldoFinal)}.`,
+      `No período de ${fmtDate(ab)} a ${fmtDate(db)}, ${captTxt}. Foram apropriados encargos de ${rsMil(encargosPeriodo)} (juros de ${rsMil(tm.juros)}, atualização monetária de ${rsMil(tm.atualizacaoMonetaria)} e custos de transação de ${rsMil(tm.apropriacaoCustos)})${capTxt}. Os pagamentos somaram ${rsMil(-tm.pagamentoPrincipal)} de principal e ${rsMil(-tm.pagamentoJuros)} de juros${d.liquidados.length ? `, incluindo a liquidação ${d.liquidados.length === 1 ? "do contrato" : "dos contratos"} ${listaPt(d.liquidados.map((l) => l.c.id))}` : ""}. O saldo passou de ${rsMil(tm.saldoInicial)} para ${rsMil(tm.saldoFinal)}.`,
     );
 
     push("secao", "d) Cronograma de vencimentos do não circulante");
@@ -622,7 +633,7 @@ export function C06NotaExplicativa() {
           : "";
       push(
         "li",
-        `${c.instrumento} (${c.id})${forma}: captação de ${rsMil(c.valorCaptado)} em ${fmtDate(c.dataCaptacao)}, vencimento em ${fmtDate(c.vencimento)}, remuneração de ${taxaContratadaDivida(c)}; garantias: ${minuscula(c.garantias)}${c.lastro ? `; lastro: ${minuscula(c.lastro)}` : ""}; finalidade: ${minuscula(c.finalidade)}.`,
+        `${c.id} – ${c.instrumento}${forma}: captação de ${rsMil(c.valorCaptado)} em ${fmtDate(c.dataCaptacao)}, vencimento em ${fmtDate(c.vencimento)}, remuneração de ${taxaContratadaDivida(c)}; ${garantiasTexto(c.garantias)}${c.lastro ? `; lastro: ${minuscula(c.lastro)}` : ""}; finalidade: ${minuscula(c.finalidade)}.`,
       );
     }
 
@@ -1204,7 +1215,7 @@ export function C06NotaExplicativa() {
         <>
           {reclassDb.length > 0 && (
             <MessageStrip design="negative">
-              <strong>Reclassificação para o circulante (CPC 26, item 74).</strong> {notaReclass(reclassDb, db, true)}
+              <strong>Reclassificação para o circulante.</strong> {notaReclass(reclassDb, db, true)}
             </MessageStrip>
           )}
           <Card
@@ -1664,7 +1675,43 @@ export function C06NotaExplicativa() {
           )}
 
           <Card title="Cláusulas restritivas financeiras" subtitle={`Situação na data-base ${fmtDate(db)} · última apuração de cada índice`} bodyClassName="px-0 pb-0">
-            <DataTable columns={colCovenants} rows={apuracoes} rowKey={(a) => a.cov.id} />
+            <div className="hidden lg:block">
+              <DataTable columns={colCovenants} rows={apuracoes} rowKey={(a) => a.cov.id} />
+            </div>
+            {/* Pop-in (sap.m.Table responsiva) em telas estreitas */}
+            <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+              {apuracoes.map((a) => {
+                const sit = situacaoCovenant(a);
+                return (
+                  <li key={a.cov.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-text">{a.cov.indicador}</div>
+                        <div className="text-xs text-label leading-snug mt-0.5">{a.cov.formula}</div>
+                      </div>
+                      <ObjectStatus state={sit.state} className="shrink-0">
+                        {sit.texto}
+                      </ObjectStatus>
+                    </div>
+                    <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+                      <PopIn rotulo="Limite" valor={`${a.cov.tipo === "max" ? "≤" : "≥"} ${fmtLimite(a)}`} />
+                      <PopIn rotulo={`Apurado ${fmtDate(a.dataApuracao)}`} valor={a.dataApuracao ? fmtCov(a, a.valor) : "—"} />
+                      <PopIn rotulo="Folga" valor={<span className={a.folga >= 0 ? "text-positive" : "text-negative"}>{fmtFolga(a)}</span>} />
+                    </dl>
+                    <div className="flex flex-wrap items-center gap-1 mt-2">
+                      {a.cov.contratos.map((c) => (
+                        <Tag key={c}>{c}</Tag>
+                      ))}
+                      {a.waiver && (
+                        <span className="text-xs text-label ml-1">
+                          Waiver {a.waiver.credor} em {fmtDate(a.waiver.obtidoEm)}
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
             <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft">
               Índices apurados com base nas demonstrações financeiras consolidadas: trimestrais (DL/EBITDA, EBITDA/despesa financeira e
               (DL + imóveis a pagar)/PL) e anuais (ICSD e índice de capitalização). O descumprimento sem waiver obtido até a data do balanço
@@ -1745,9 +1792,11 @@ interface LinhaNota {
 
 /** Tabela no padrão de nota explicativa (R$ mil, negativos entre parênteses) com a 1ª coluna fixa */
 function NotaTabela({ cabecalho, linhas, minWidth = 520, primeira = "R$ mil" }: { cabecalho: string[]; linhas: LinhaNota[]; minWidth?: number; primeira?: string }) {
+  // No celular a largura mínima é menor, para que a 1ª coluna (fixa) não esconda os valores
+  const larguras = { "--mw": `${Math.min(minWidth, 150 + 85 * cabecalho.length)}px`, "--mw-sm": `${minWidth}px` } as CSSProperties;
   return (
     <div className="overflow-x-auto fiori-scroll">
-      <table className="w-full text-sm border-separate border-spacing-0" style={{ minWidth }}>
+      <table className="w-full text-sm border-separate border-spacing-0 min-w-[var(--mw)] sm:min-w-[var(--mw-sm)]" style={larguras}>
         <thead>
           <tr className="text-[13px]">
             <th className="sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd]">{primeira}</th>
@@ -1776,6 +1825,15 @@ function NotaTabela({ cabecalho, linhas, minWidth = 520, primeira = "R$ mil" }: 
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function PopIn({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-label truncate">{rotulo}</dt>
+      <dd className="text-text font-semibold tabular">{valor}</dd>
     </div>
   );
 }
