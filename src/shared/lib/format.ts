@@ -2,9 +2,14 @@ const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL",
 const brl2 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const int = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
+/** Sinal de menos tipográfico (U+2212) em vez do hífen, em todos os formatadores */
+function menos(s: string): string {
+  return s.replace("-", "\u2212");
+}
+
 export function fmtBRL(v: number, decimals = false): string {
   if (!Number.isFinite(v)) return "—";
-  return (decimals ? brl2 : brl).format(v);
+  return menos((decimals ? brl2 : brl).format(v));
 }
 
 /** Valor sem símbolo, sem casas decimais, negativos entre parênteses (padrão de nota explicativa). */
@@ -13,7 +18,7 @@ export function fmtNum(v: number, opts: { parens?: boolean; dash?: boolean } = {
   const r = Math.round(v) || 0; // evita "-0"
   if (opts.dash && r === 0) return "–";
   if (opts.parens && r < 0) return `(${int.format(Math.abs(r))})`;
-  return int.format(r);
+  return menos(int.format(r));
 }
 
 /** Valores em R$ mil (nota explicativa) */
@@ -25,11 +30,11 @@ export function fmtMil(v: number): string {
 export function fmtCompact(v: number): string {
   if (!Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
-  const sign = v < 0 ? "-" : "";
-  if (abs >= 1e9) return `${sign}R$ ${(abs / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} bi`;
-  if (abs >= 1e6) return `${sign}R$ ${(abs / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
-  if (abs >= 1e3) return `${sign}R$ ${(abs / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
-  return `${sign}R$ ${abs.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+  const sign = v < 0 ? "\u2212" : "";
+  if (abs >= 1e9) return `${sign}R$\u00a0${(abs / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}\u00a0bi`;
+  if (abs >= 1e6) return `${sign}R$\u00a0${(abs / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mi`;
+  if (abs >= 1e3) return `${sign}R$\u00a0${(abs / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mil`;
+  return `${sign}R$\u00a0${abs.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
 }
 
 /** Número compacto sem moeda: 68,4 (mi) */
@@ -46,7 +51,7 @@ function semZeroNegativo(v: number, digits: number): number {
 
 export function fmtPct(frac: number, digits = 2): string {
   if (!Number.isFinite(frac)) return "—";
-  return `${semZeroNegativo(frac * 100, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`;
+  return `${menos(semZeroNegativo(frac * 100, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits }))}%`;
 }
 
 /** Percentual do CDI a partir de fração (1.042 → 104,2% CDI) */
@@ -57,14 +62,14 @@ export function fmtPctCDI(frac: number, digits = 1): string {
 
 export function fmtX(v: number, digits = 2): string {
   if (!Number.isFinite(v)) return "—";
-  return `${semZeroNegativo(v, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}x`;
+  return `${menos(semZeroNegativo(v, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits }))}x`;
 }
 
 export function fmtInt(v: number): string {
-  return int.format(v);
+  return menos(int.format(v));
 }
 
 export function fmtDec(v: number, digits = 2): string {
   if (!Number.isFinite(v)) return "—";
-  return semZeroNegativo(v, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return menos(semZeroNegativo(v, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
 }

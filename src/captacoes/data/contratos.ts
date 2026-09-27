@@ -427,3 +427,21 @@ export const GRUPO_MODALIDADE: Record<Modalidade, string> = {
   "BNDES FINAME": "BNDES",
   CCB: "CCB",
 };
+
+/** Cor de cada grupo de modalidade – a mesma em todas as telas de Captações (Launchpad, C00–C06) */
+export const COR_MODALIDADE: Record<string, string> = {
+  Debêntures: "#168eff",
+  BNDES: "#c87b00",
+  CRA: "#75980b",
+  CCB: "#df1278",
+  CRI: "#8b47d7",
+};
+
+/** Cor de cada indexador (paleta sequencial própria, distinta da de modalidades) */
+export const COR_INDEXADOR: Record<IndexadorDivida, string> = {
+  CDI: "#0b4f6c",
+  IPCA: "#1f8a8a",
+  TJLP: "#4fb3a9",
+  TLP: "#8fd3c7",
+  "Pré": "#556b82",
+};

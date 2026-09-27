@@ -150,7 +150,7 @@ export function checagensIntegridade(
       id: "vencidos",
       descricao: "Contratos vencidos liquidados (saldo zero)",
       ok: vencidosAbertos.length === 0,
-      detalhe: vencidos.length ? `${vencidos.length} contrato(s) vencido(s): ${vencidos.map((c) => c.id).join(", ")}` : "Nenhum contrato vencido",
+      detalhe: vencidos.length ? `${vencidos.length} ${vencidos.length === 1 ? "contrato vencido" : "contratos vencidos"}: ${vencidos.map((c) => c.id).join(", ")}` : "Nenhum contrato vencido",
     },
     {
       id: "cronograma",
@@ -168,7 +168,7 @@ export function checagensIntegridade(
       id: "gl",
       descricao: `TRM × FI-GL dentro da tolerância (R$ ${fmt(TOLERANCIA_CONCILIACAO)})`,
       ok: glDiv.length === 0,
-      detalhe: glDiv.length ? `${glDiv.length} conta(s) divergente(s): ${glDiv.map((l) => l.conta.conta).join(", ")}` : `${gl.length} contas conciliadas`,
+      detalhe: glDiv.length ? `${glDiv.length} ${glDiv.length === 1 ? "conta divergente" : "contas divergentes"}: ${glDiv.map((l) => l.conta.conta).join(", ")}` : `${gl.length} contas conciliadas`,
     },
     {
       id: "extratos",
