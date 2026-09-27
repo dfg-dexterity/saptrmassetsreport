@@ -1,15 +1,18 @@
 # Guia técnico – produto Captações Financeiras
 
-Este guia orienta a implementação das telas do produto **Captações Financeiras** (demo Fiori Horizon do Reporting
-Pack). O produto é **separado** do produto Aplicações Financeiras: tem página própria (`captacoes.html`), rotas,
+Este guia orienta a implementação das telas do produto **Captações Financeiras** (demo do Reporting Pack com a identidade
+visual da Dexterity). O produto é **separado** do produto Aplicações Financeiras: tem página própria (`captacoes.html`), rotas,
 Launchpad e relatórios próprios, mas reutiliza os componentes compartilhados em `src/shared`.
 
 ## Regras gerais
 
 - Interface 100% em português do Brasil, números no padrão pt-BR (use os formatadores de `src/shared/lib/format.ts`).
-- Visual SAP Fiori Horizon: use **somente** os componentes de `src/shared/components/fiori` e as classes Tailwind com os
-  tokens do tema (`text-text`, `text-label`, `text-link`, `bg-page`, `bg-white`, `border-line-soft`, `text-positive`,
-  `text-critical`, `text-negative`, `bg-selected`, `shadow-fiori`, `rounded-[var(--radius-card)]` …). Nada de novas
+- Visual Dexterity (tema escuro do site, `src/styles/dexterity.css`): use **somente** os componentes de
+  `src/shared/components/fiori` e as classes Tailwind com os tokens do tema (`text-text`, `text-suave`, `text-label`,
+  `text-link`, `bg-page`, `bg-surface`, `bg-surface-2`, `bg-surface-3`, `border-line-soft`, `border-line`,
+  `text-positive`, `text-critical`, `text-negative`, `bg-selected`, `font-display`, `font-mono` …). Cantos vivos (sem
+  `rounded-full` fora de ponto de status e spinner), filete de 1px no lugar de sombra, cerceta como cor de ação (em
+  texto, `text-link`), alta/baixa em cerceta/âmbar e vermelho só para limite excedido ou divergência. Nada de novas
   dependências npm.
 - Gráficos com Recharts **sempre** com `isAnimationActive={false}` em `Bar`/`Line`/`Area`/`Pie` (a página precisa estar
   completa no primeiro quadro). Eixos com `tick={AXIS_STYLE}`; paleta `CHART_COLORS` / `CHART_SEMANTIC` de `Kpi.tsx`.
