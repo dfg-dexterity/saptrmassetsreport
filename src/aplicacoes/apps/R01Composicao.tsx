@@ -269,7 +269,7 @@ export function R01Composicao() {
       }
     >
       {/* Filter bar */}
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
           <FilterField label="Empresa">
             <Select value={escopo} onChange={(v) => { setEscopo(v); setSelecionada(null); }} options={ESCOPOS} />
@@ -347,14 +347,14 @@ export function R01Composicao() {
             {porCpc.map((f) => (
               <div
                 key={f.chave}
-                style={{ width: `${f.share * 100}%`, backgroundColor: f.chave === "Custo Amortizado" ? "#0070f2" : f.chave === "VJ por ORA" ? "#788fa6" : "#e76500" }}
+                style={{ width: `${f.share * 100}%`, backgroundColor: f.chave === "Custo Amortizado" ? "#009994" : f.chave === "VJ por ORA" ? "#908c85" : "#ffa436" }}
                 title={f.chave}
               />
             ))}
           </div>
           <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {porCpc.map((f) => (
-              <li key={f.chave} className="rounded-lg bg-[#f5f6f7] px-3 py-2">
+              <li key={f.chave} className="rounded-lg bg-surface-3 px-3 py-2">
                 <div className="text-xs text-label">{f.chave}</div>
                 <div className="text-lg font-bold text-text tabular">{fmtPct(f.share, 1)}</div>
                 <div className="text-xs text-label tabular">
@@ -395,7 +395,7 @@ function DetalheOperacao({ pos, benchmark, dataBase, onClose }: { pos: Posicao; 
     ID12: fmtBRL(op.principal, true),
   };
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-surface rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -470,14 +470,14 @@ function DetalheOperacao({ pos, benchmark, dataBase, onClose }: { pos: Posicao; 
 
         <section>
           <h4 className="text-sm font-bold text-text mb-2 flex items-center gap-1.5">
-            <Database className="w-4 h-4 text-[#5d36ff]" /> Origem no SAP (CDS Views)
+            <Database className="w-4 h-4 text-link" /> Origem no SAP (CDS Views)
           </h4>
           <ul className="divide-y divide-line-soft rounded-lg border border-line-soft">
             {mapa.map((m) => (
               <li key={m.id} className="px-3 py-1.5 flex items-center justify-between gap-3 text-[13px]">
                 <div className="min-w-0">
                   <div className="text-label text-xs">{m.coluna}</div>
-                  <div className="font-mono text-[11px] text-[#5d36ff] truncate">
+                  <div className="font-mono text-[11px] text-link truncate">
                     {m.visao}.{m.campo}
                   </div>
                 </div>

@@ -29,7 +29,7 @@ import {
 
 const rel = relatorioPorId("r07");
 
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 const COR_TIPO = Object.fromEntries(TIPOS_CONTRATO.map((t) => [t.tipo, t.cor])) as Record<TipoContrato, string>;
 const SIMBOLO_MOEDA: Record<Moeda, string> = { BRL: "R$", USD: "US$", EUR: "€" };
@@ -386,7 +386,7 @@ export function R07Concentracao() {
         </>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -408,7 +408,7 @@ export function R07Concentracao() {
           <DataTable columns={colunas} rows={d.grupos} rowKey={(g) => g.grupo} showTotals defaultSort={{ key: "valor", dir: "desc" }} />
         </div>
         {/* Celular e tablet: lista em cartões */}
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {d.grupos.map((g) => (
             <li key={g.grupo} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -438,7 +438,7 @@ export function R07Concentracao() {
               )}
             </li>
           ))}
-          <li className="px-4 py-3 bg-[#f5f6f7]">
+          <li className="px-4 py-3 bg-surface-3">
             <div className="text-sm font-bold text-text">
               Total · {plural(d.grupos.length, "grupo", "grupos")} · {plural(d.opsGrupos, "contrato", "contratos")}
             </div>
@@ -488,8 +488,8 @@ export function R07Concentracao() {
           <div className="h-56 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={d.prazoPorTipo} margin={{ top: 18, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="faixa" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="faixa" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit=" mi" tickFormatter={(v: number) => fmtDec(v, 0)} />
                 <Tooltip
                   contentStyle={tooltipStyle}
@@ -513,7 +513,7 @@ export function R07Concentracao() {
                             const x = d.prazoPorTipo[props.index ?? 0];
                             if (!x || !(x.share as number)) return <g key={props.index} />;
                             return (
-                              <text key={props.index} x={(props.x ?? 0) + (props.width ?? 0) / 2} y={(props.y ?? 0) - 5} textAnchor="middle" fontSize={11} fill="#1d2d3e" fontFamily="72, Arial">
+                              <text key={props.index} x={(props.x ?? 0) + (props.width ?? 0) / 2} y={(props.y ?? 0) - 5} textAnchor="middle" fontSize={11} fill="#f7f3e7" fontFamily="Figtree, system-ui, sans-serif">
                                 {fmtPct(x.share as number, 0)}
                               </text>
                             );
@@ -538,7 +538,7 @@ export function R07Concentracao() {
           <div className="hidden lg:block">
             <DataTable<ResultadoRegra> columns={colunasPolitica} rows={d.politica} rowKey={(r) => r.id} />
           </div>
-          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
             {d.politica.map((r) => (
               <li key={r.id} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
@@ -556,16 +556,16 @@ export function R07Concentracao() {
           </ul>
         </Card>
         <Card title="Índice Herfindahl-Hirschman" subtitle="Soma dos quadrados das participações por grupo econômico">
-          <div className="text-4xl font-light tabular" style={{ color: d.classe.status === "ok" ? "#256f3a" : d.classe.status === "atencao" ? "#b44f00" : "#aa0808" }}>
+          <div className="text-4xl font-light tabular" style={{ color: d.classe.status === "ok" ? "#00b3ac" : d.classe.status === "atencao" ? "#ffa436" : "#e4806c" }}>
             {fmtInt(d.indice)}
           </div>
           <ObjectStatus state={semaforoState(d.classe.status)} className="mt-1">
             {d.classe.rotulo}
           </ObjectStatus>
           <div className="relative mt-5 h-2.5 rounded-full overflow-hidden flex">
-            <div className="h-full bg-[#30914c]" style={{ width: "30%" }} />
-            <div className="h-full bg-[#e26300]" style={{ width: "20%" }} />
-            <div className="h-full bg-[#f53232]" style={{ width: "50%" }} />
+            <div className="h-full bg-brand" style={{ width: "30%" }} />
+            <div className="h-full bg-amarelo" style={{ width: "20%" }} />
+            <div className="h-full bg-negative-border" style={{ width: "50%" }} />
           </div>
           <div className="relative h-4">
             <div className="absolute -top-3.5 w-0.5 h-4 bg-text" style={{ left: `${Math.min(100, (d.indice / 5000) * 100)}%` }} />

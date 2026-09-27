@@ -50,7 +50,7 @@ import { COR_MOEDA, somaMestre, taxaTDTexto } from "../lib/carteiraMestre";
 import { posicaoTimeDeposit, resgateTimeDeposit, type PosicaoTimeDeposit } from "../lib/timeDeposit";
 
 const rel = relatorioPorId("r10");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 // ---------------------------------------------------------------------------
 // Moedas e formatação
@@ -825,7 +825,7 @@ export function R10TimeDeposit() {
         </>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select
@@ -879,14 +879,14 @@ export function R10TimeDeposit() {
                   defaultSort={{ key: "saldoBRL", dir: "desc" }}
                 />
               </div>
-              <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+              <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
                 {linhasCartao.map((l) => (
                   <li key={l.td.id}>
                     <CartaoTD l={l} selecionado={l.td.id === selecionado} onClick={() => alternar(l.td.id)} />
                   </li>
                 ))}
                 {!semTD && (
-                  <li className="px-4 py-3 bg-[#f5f6f7]">
+                  <li className="px-4 py-3 bg-surface-3">
                     <div className="text-sm font-bold text-text">Total · {plural(ativos.length, "posição ativa", "posições ativas")}</div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
                       <ValorCartao rotulo="Saldo (R$)" forte>
@@ -938,7 +938,7 @@ export function R10TimeDeposit() {
           <div className="h-64 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={ptax.serie} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
                 <XAxis
                   dataKey="t"
                   type="number"
@@ -949,7 +949,7 @@ export function R10TimeDeposit() {
                   minTickGap={8}
                   tick={AXIS_STYLE}
                   tickLine={false}
-                  axisLine={{ stroke: "#a8b2bd" }}
+                  axisLine={{ stroke: "#575653" }}
                 />
                 <YAxis
                   domain={[ptax.yMin, ptax.yMax]}
@@ -966,7 +966,7 @@ export function R10TimeDeposit() {
                   labelFormatter={(v: number) => `PTAX de ${fmtDate(fromDay(v))}`}
                   formatter={(v: number, n: string) => [fmtPtax(v), n]}
                 />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
+                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
                 <Line
                   dataKey="USD"
                   name="USD"
@@ -989,14 +989,14 @@ export function R10TimeDeposit() {
                     x={toDay(l.td.dataAplicacao)}
                     y={l.td.ptaxAplicacao}
                     r={5}
-                    fill="#ffffff"
+                    fill="#242424"
                     stroke={COR_MOEDA[l.td.moeda]}
                     strokeWidth={2.5}
                     label={{
                       value: l.td.id,
                       position: l.td.ptaxAplicacao < ptaxNaData(l.td.moeda, l.td.dataAplicacao, p) ? "bottom" : "top",
                       fontSize: 11,
-                      fill: "#1d2d3e",
+                      fill: "#f7f3e7",
                       fontWeight: 600,
                     }}
                   />
@@ -1008,20 +1008,20 @@ export function R10TimeDeposit() {
             <table className="w-full text-xs sm:text-[13px] border-separate border-spacing-0">
               <thead>
                 <tr className="text-label">
-                  <th className="text-left font-semibold py-1.5 pr-2 border-b border-[#a8b2bd] align-bottom">Moeda</th>
-                  <th className="text-right font-semibold py-1.5 px-1.5 border-b border-[#a8b2bd] whitespace-nowrap align-bottom">
+                  <th className="text-left py-1.5 pr-2 border-b-2 border-brand align-bottom">Moeda</th>
+                  <th className="text-right py-1.5 px-1.5 border-b-2 border-brand whitespace-nowrap align-bottom">
                     Mês anterior
                     <div className="text-xs font-normal">{fmtDate(ptax.antMes)}</div>
                   </th>
-                  <th className="text-right font-semibold py-1.5 px-1.5 border-b border-[#a8b2bd] whitespace-nowrap align-bottom">
+                  <th className="text-right py-1.5 px-1.5 border-b-2 border-brand whitespace-nowrap align-bottom">
                     Data-base
                     <div className="text-xs font-normal">{fmtDate(db)}</div>
                   </th>
-                  <th className="text-right font-semibold py-1.5 px-1.5 border-b border-[#a8b2bd] whitespace-nowrap align-bottom">
+                  <th className="text-right py-1.5 px-1.5 border-b-2 border-brand whitespace-nowrap align-bottom">
                     Variação
                     <div className="text-xs font-normal">no mês</div>
                   </th>
-                  <th className="text-right font-semibold py-1.5 pl-1.5 border-b border-[#a8b2bd] whitespace-nowrap align-bottom">
+                  <th className="text-right py-1.5 pl-1.5 border-b-2 border-brand whitespace-nowrap align-bottom">
                     Variação
                     <div className="text-xs font-normal">12 meses</div>
                   </th>
@@ -1094,7 +1094,7 @@ function CartaoTD({ l, selecionado, onClick }: { l: LinhaTD; selecionado: boolea
       type="button"
       onClick={onClick}
       aria-pressed={selecionado}
-      className={clsx("w-full text-left px-4 py-3", selecionado ? "bg-selected" : "bg-white hover:bg-[#f2f4f6]")}
+      className={clsx("w-full text-left px-4 py-3", selecionado ? "bg-selected" : "bg-surface hover:bg-hover")}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -1199,12 +1199,12 @@ function ResultadoPorMoeda({
       <div className="-ml-2" style={{ height: dados.length * 40 + 48 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dados} layout="vertical" barCategoryGap="24%" barGap={2} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid horizontal={false} stroke="#e5e5e5" />
+            <CartesianGrid horizontal={false} stroke="#3f3f3d" />
             <XAxis
               type="number"
               tick={AXIS_STYLE}
               tickLine={false}
-              axisLine={{ stroke: "#a8b2bd" }}
+              axisLine={{ stroke: "#575653" }}
               tickFormatter={(v: number) => fmtNum(v)}
             />
             <YAxis
@@ -1219,10 +1219,10 @@ function ResultadoPorMoeda({
             <Tooltip
               contentStyle={tooltipStyle}
               formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 1)} mil`, n]}
-              cursor={{ fill: "#0070f2", fillOpacity: 0.05 }}
+              cursor={{ fill: "#009994", fillOpacity: 0.05 }}
             />
-            <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-            <ReferenceLine x={0} stroke="#a8b2bd" />
+            <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+            <ReferenceLine x={0} stroke="#575653" />
             {grupos.map((g) => (
               <Bar
                 key={g.moeda}
@@ -1240,9 +1240,9 @@ function ResultadoPorMoeda({
         <table className="w-full text-xs sm:text-[13px] border-separate border-spacing-0">
           <thead>
             <tr>
-              <th className="text-left font-semibold py-1.5 pr-2 border-b border-[#a8b2bd]">R$</th>
+              <th className="text-left py-1.5 pr-2 border-b-2 border-brand">R$</th>
               {grupos.map((g) => (
-                <th key={g.moeda} className="text-right font-semibold py-1.5 px-1.5 border-b border-[#a8b2bd] whitespace-nowrap">
+                <th key={g.moeda} className="text-right py-1.5 px-1.5 border-b-2 border-brand whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COR_MOEDA[g.moeda] }} />
                     {g.moeda} ({g.qtd})
@@ -1250,7 +1250,7 @@ function ResultadoPorMoeda({
                   <div className="text-xs text-label font-normal">{fmtMECompacto(g.saldoME, g.moeda)}</div>
                 </th>
               ))}
-              {grupos.length > 1 && <th className="text-right font-bold py-1.5 pl-1.5 border-b border-[#a8b2bd] bg-[#f5f6f7]">Total</th>}
+              {grupos.length > 1 && <th className="text-right py-1.5 pl-1.5 border-b-2 border-brand bg-surface-2">Total</th>}
             </tr>
           </thead>
           <tbody>
@@ -1265,7 +1265,7 @@ function ResultadoPorMoeda({
                   </td>
                 ))}
                 {grupos.length > 1 && (
-                  <td className="py-1.5 pl-1.5 text-right tabular border-b border-line-soft bg-[#f5f6f7] font-bold whitespace-nowrap">
+                  <td className="py-1.5 pl-1.5 text-right tabular border-b border-line-soft bg-surface-3 font-bold whitespace-nowrap">
                     {cel(l.total, l)}
                   </td>
                 )}
@@ -1279,7 +1279,7 @@ function ResultadoPorMoeda({
                 </td>
               ))}
               {grupos.length > 1 && (
-                <td className={clsx("py-1.5 pl-1.5 text-right tabular bg-[#f5f6f7] font-bold whitespace-nowrap", corValor(total.liquido))}>
+                <td className={clsx("py-1.5 pl-1.5 text-right tabular bg-surface-3 font-bold whitespace-nowrap", corValor(total.liquido))}>
                   {comSinal(total.liquido / total.principalBRL, (x) => fmtPct(x))}
                 </td>
               )}
@@ -1368,7 +1368,7 @@ function TratamentoContabil() {
           <div>
             <h4 className="text-sm font-bold text-text mb-2">Lançamentos típicos</h4>
             <div className="rounded-lg border border-line-soft text-[13px]">
-              <div className="hidden sm:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 px-3 py-2 bg-[#f5f6f7] rounded-t-lg border-b border-line-soft font-semibold text-text">
+              <div className="hidden sm:grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 px-3 py-2 bg-surface-3 rounded-t-lg border-b border-line-soft font-semibold text-text">
                 <span>Evento</span>
                 <span>Débito</span>
                 <span>Crédito</span>
@@ -1534,9 +1534,9 @@ function Cascata({ r }: { r: Resultado }) {
         y={y}
         dy={4}
         textAnchor="start"
-        fill="#1d2d3e"
+        fill="#f7f3e7"
         fontSize={11}
-        fontFamily="72, Arial, sans-serif"
+        fontFamily="Figtree, system-ui, sans-serif"
         fontWeight={d.tipo === "total" ? 700 : 600}
       >
         {texto}
@@ -1550,7 +1550,7 @@ function Cascata({ r }: { r: Resultado }) {
       <div className="-ml-1" style={{ height: ds.length * 34 + 34 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dados} layout="vertical" barCategoryGap="20%" margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-            <CartesianGrid horizontal={false} stroke="#e5e5e5" />
+            <CartesianGrid horizontal={false} stroke="#3f3f3d" />
             <XAxis
               type="number"
               domain={[0, hi - lo]}
@@ -1559,7 +1559,7 @@ function Cascata({ r }: { r: Resultado }) {
               tickFormatter={(v: number) => fmtDec(v + lo, casasEixo)}
               tick={AXIS_STYLE}
               tickLine={false}
-              axisLine={{ stroke: "#a8b2bd" }}
+              axisLine={{ stroke: "#575653" }}
             />
             <YAxis type="category" dataKey="k" tick={tick} tickLine={false} axisLine={false} width={88} interval={0} />
             {dados.slice(0, -1).map((d, i) => (
@@ -1569,18 +1569,18 @@ function Cascata({ r }: { r: Resultado }) {
                   { x: d.fim - lo, y: d.k },
                   { x: d.fim - lo, y: dados[i + 1].k },
                 ]}
-                stroke="#788fa6"
+                stroke="#908c85"
                 strokeDasharray="3 3"
                 ifOverflow="hidden"
               />
             ))}
             <Tooltip
-              cursor={{ fill: "#0070f2", fillOpacity: 0.05 }}
+              cursor={{ fill: "#009994", fillOpacity: 0.05 }}
               content={({ active, payload }) => {
                 const d = active && payload?.[0] ? (payload[0].payload as Degrau) : null;
                 if (!d) return null;
                 return (
-                  <div style={tooltipStyle} className="bg-white px-3 py-2 shadow-fiori">
+                  <div style={tooltipStyle} className="bg-surface px-3 py-2 shadow-fiori">
                     <div className="font-bold text-text">{d.linhas.filter(Boolean).join(" ")}</div>
                     <div className="tabular text-text mt-0.5">
                       {d.tipo === "total" ? fmtBRL(d.valor) : comSinal(d.valor, (v) => fmtBRL(v))}
@@ -1611,7 +1611,7 @@ function DetalheTD({ l, p, onClose }: { l: LinhaTD; p: PremissasMercado; onClose
   const somaVc = serie.reduce((s, x) => s + (x.vcMes ?? 0), 0);
   const ptaxRef = liquidado ? resgate.ptax : pos.ptax;
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-surface rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -1737,14 +1737,14 @@ function DetalheTD({ l, p, onClose }: { l: LinhaTD; p: PremissasMercado; onClose
           <div className="overflow-x-auto fiori-scroll rounded-lg border border-line-soft">
             <table className="w-full text-xs border-separate border-spacing-0">
               <thead>
-                <tr className="bg-[#f5f6f7] text-text">
-                  <th className="text-left font-semibold px-1.5 pl-2 py-1.5 border-b border-line-soft whitespace-nowrap">Data · PTAX</th>
-                  <th className="text-right font-semibold px-1.5 py-1.5 border-b border-line-soft whitespace-nowrap">
+                <tr className="bg-surface-3 text-text">
+                  <th className="text-left px-1.5 pl-2 py-1.5 border-b border-line-soft whitespace-nowrap">Data · PTAX</th>
+                  <th className="text-right px-1.5 py-1.5 border-b border-line-soft whitespace-nowrap">
                     Saldo ({SIMBOLO[td.moeda]})
                   </th>
-                  <th className="text-right font-semibold px-1.5 py-1.5 border-b border-line-soft whitespace-nowrap">Saldo (R$)</th>
-                  <th className="text-right font-semibold px-1.5 py-1.5 border-b border-line-soft whitespace-nowrap">Juros mês</th>
-                  <th className="text-right font-semibold px-1.5 pr-2 py-1.5 border-b border-line-soft whitespace-nowrap">VC mês</th>
+                  <th className="text-right px-1.5 py-1.5 border-b border-line-soft whitespace-nowrap">Saldo (R$)</th>
+                  <th className="text-right px-1.5 py-1.5 border-b border-line-soft whitespace-nowrap">Juros mês</th>
+                  <th className="text-right px-1.5 pr-2 py-1.5 border-b border-line-soft whitespace-nowrap">VC mês</th>
                 </tr>
               </thead>
               <tbody>
@@ -1771,7 +1771,7 @@ function DetalheTD({ l, p, onClose }: { l: LinhaTD; p: PremissasMercado; onClose
                     </td>
                   </tr>
                 ))}
-                <tr className="bg-[#f5f6f7] font-bold">
+                <tr className="bg-surface-3 font-bold">
                   <td className="px-1.5 pl-2 py-1.5" colSpan={3}>
                     Total desde a remessa
                   </td>

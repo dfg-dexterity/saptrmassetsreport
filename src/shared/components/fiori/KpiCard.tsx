@@ -16,19 +16,19 @@ import { ObjectStatus, type ValueState } from "./ObjectStatus";
  */
 
 const COR: Record<ValueState, string> = {
-  positive: "#256f3a",
-  critical: "#b44f00",
-  negative: "#aa0808",
-  information: "#0070f2",
-  neutral: "#1d2d3e",
+  positive: "#00b3ac",
+  critical: "#ffa436",
+  negative: "#e4806c",
+  information: "#d8d2c6",
+  neutral: "#f7f3e7",
 };
 
 const COR_GRAFICO: Record<ValueState, string> = {
-  positive: "#30914c",
-  critical: "#e26300",
-  negative: "#f53232",
-  information: "#0070f2",
-  neutral: "#758ca4",
+  positive: "#009994",
+  critical: "#ffa436",
+  negative: "#d9563e",
+  information: "#009994",
+  neutral: "#908c85",
 };
 
 export interface KpiIndicadorLateral {
@@ -52,8 +52,9 @@ export function reaisKpi(v: number): { valor: string; unidade: string } {
   return { valor: `${v < 0 && a >= 50 ? "−" : ""}R$ ${fmtDec(a / 1e3, 1)}`, unidade: "mil" };
 }
 
+/** Seta de tendência no código do ticker da marca: favorável em cerceta, desfavorável em âmbar (vermelho fica para limite) */
 function corSetaDe(t?: KpiTendencia): string {
-  return t?.favoravel === null || t?.direcao === "flat" ? "text-label" : t?.favoravel ? "text-positive" : "text-negative";
+  return t?.favoravel === null || t?.direcao === "flat" ? "text-label" : t?.favoravel ? "text-positive" : "text-critical";
 }
 
 function SetaDe({ t, className }: { t?: KpiTendencia; className?: string }) {
@@ -64,7 +65,7 @@ function SetaDe({ t, className }: { t?: KpiTendencia; className?: string }) {
 /** Link para o relatório de origem, no formato "R05 · Evolução ›" */
 function LinkOrigem({ rota, origem, className }: { rota: string; origem: string; className?: string }) {
   return (
-    <Link to={rota} className={clsx("text-[13px] text-link hover:underline inline-flex items-center gap-0.5 whitespace-nowrap", className)}>
+    <Link to={rota} className={clsx("font-mono text-[11px] uppercase tracking-[0.1em] text-link hover:text-text transition-colors inline-flex items-center gap-0.5 whitespace-nowrap", className)}>
       {origem}
       <ChevronRight className="w-3.5 h-3.5" />
     </Link>
@@ -124,29 +125,29 @@ export function KpiCard({
   const idGrad = `kpi-${titulo.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
-    <section className={clsx("bg-white rounded-[var(--radius-card)] shadow-fiori print-flat flex flex-col min-w-0", className)}>
+    <section className={clsx("bg-surface border border-line-soft print-flat flex flex-col min-w-0", className)}>
       <header className="px-4 pt-3.5">
-        <h3 className="text-[15px] font-bold text-text leading-snug">{titulo}</h3>
-        {subtitulo && <p className="text-[13px] text-label leading-snug mt-0.5">{subtitulo}</p>}
+        <h3 className="text-[18px] font-semibold tracking-[0.03em] leading-[1.05] text-text">{titulo}</h3>
+        {subtitulo && <p className="text-[13px] text-label leading-snug mt-1">{subtitulo}</p>}
       </header>
 
       <div className="px-4 pt-2 flex items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-[2rem] leading-none font-light tabular whitespace-nowrap" style={{ color: COR[state] }}>
+            <span className="font-display text-[2.4rem] leading-[0.9] font-semibold tabular whitespace-nowrap" style={{ color: COR[state] }}>
               {valor}
             </span>
-            {unidade && <span className="text-sm text-label whitespace-nowrap">{unidade}</span>}
+            {unidade && <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-label whitespace-nowrap">{unidade}</span>}
             {tendencia && <SetaDe t={tendencia} className={clsx("w-5 h-5 self-center shrink-0", corSeta)} />}
           </div>
-          {tendencia && <div className={clsx("text-xs mt-1 whitespace-nowrap", corSeta)}>{tendencia.texto}</div>}
+          {tendencia && <div className={clsx("text-xs mt-1.5 whitespace-nowrap", corSeta)}>{tendencia.texto}</div>}
         </div>
         {laterais && laterais.length > 0 && (
           <dl className="text-right shrink-0 space-y-1">
             {laterais.map((l) => (
               <div key={l.label}>
-                <dt className="text-[11px] text-label leading-tight whitespace-nowrap">{l.label}</dt>
-                <dd className="text-[13px] font-semibold tabular leading-tight whitespace-nowrap" style={{ color: COR[l.state ?? "neutral"] }}>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.1em] text-label leading-tight whitespace-nowrap">{l.label}</dt>
+                <dd className="font-mono text-[12.5px] font-medium tabular leading-tight whitespace-nowrap mt-0.5" style={{ color: COR[l.state ?? "neutral"] }}>
                   {l.value}
                 </dd>
               </div>
@@ -167,7 +168,7 @@ export function KpiCard({
               </defs>
               <YAxis hide domain={dominio ?? ["auto", "auto"]} />
               {referencia !== undefined && (
-                <ReferenceLine y={referencia} stroke="#1d2d3e" strokeDasharray="3 3" strokeWidth={1} ifOverflow="extendDomain" />
+                <ReferenceLine y={referencia} stroke="#a5a099" strokeDasharray="3 3" strokeWidth={1} ifOverflow="extendDomain" />
               )}
               <Area
                 type="monotone"
@@ -216,10 +217,10 @@ export function KpiPainel({
   children: ReactNode;
 }) {
   return (
-    <section className={clsx("bg-white rounded-[var(--radius-card)] shadow-fiori print-flat flex flex-col min-w-0", className)}>
+    <section className={clsx("bg-surface border border-line-soft print-flat flex flex-col min-w-0", className)}>
       <header className="px-4 pt-3.5">
-        <h3 className="text-[15px] font-bold text-text leading-snug">{titulo}</h3>
-        <p className="text-[13px] text-label leading-snug mt-0.5">{subtitulo}</p>
+        <h3 className="text-[18px] font-semibold tracking-[0.03em] leading-[1.05] text-text">{titulo}</h3>
+        <p className="text-[13px] text-label leading-snug mt-1">{subtitulo}</p>
       </header>
       <div className="px-4 pt-3 pb-1 flex-1">{children}</div>
       <footer className="mt-3 px-4 py-2.5 border-t border-line-soft flex items-center justify-between gap-2 min-h-[2.5rem]">
@@ -248,9 +249,9 @@ export function KpiPonte({ base, linhas }: { base: number; linhas: KpiPonteLinha
             <span className="truncate">{l.rotulo}</span>
             <span className="tabular whitespace-nowrap text-text">{fmtCompact(l.valor)}</span>
           </div>
-          <div className="mt-1 h-1.5 rounded-full bg-[#eef0f2]">
+          <div className="mt-1 h-1.5 bg-surface-2">
             <div
-              className="h-full rounded-full"
+              className="h-full"
               style={{ width: `${base > 0 ? Math.max(1.5, Math.min(100, (Math.abs(l.valor) / base) * 100)) : 0}%`, backgroundColor: l.cor }}
             />
           </div>
@@ -292,7 +293,7 @@ export function KpiSecao({
               {contagem.ok}/{contagem.total} na meta
             </ObjectStatus>
           ) : (
-            <span className="text-xs text-label whitespace-nowrap">Informativos</span>
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.13em] text-label whitespace-nowrap">Informativos</span>
           )
         }
       >
@@ -354,10 +355,10 @@ function DonutPlacar({ ok, atencao, fora }: { ok: number; atencao: number; fora:
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-[1.75rem] font-light leading-none tabular" style={{ color: COR[fora ? "negative" : atencao ? "critical" : "positive"] }}>
+        <span className="font-display text-[2.1rem] font-semibold leading-[0.9] tabular" style={{ color: COR[fora ? "negative" : atencao ? "critical" : "positive"] }}>
           {ok}
         </span>
-        <span className="text-[11px] text-label leading-tight mt-1 text-center">
+        <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-label leading-tight mt-1.5 text-center">
           de {total}
           <br />
           na meta
@@ -439,7 +440,7 @@ export function KpiPlacar({
             if (!doGrupo.length) return null;
             return (
               <div key={s.id} className="grid grid-cols-1 sm:grid-cols-[12rem_minmax(0,1fr)] gap-x-3 gap-y-1 items-start">
-                <div className="text-[13px] font-semibold text-text leading-6">{s.titulo}</div>
+                <div className="text-[13px] font-medium text-suave leading-6">{s.titulo}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {doGrupo.map((k) => (
                     <button
@@ -447,7 +448,7 @@ export function KpiPlacar({
                       type="button"
                       onClick={() => onIr(k.id)}
                       title={`${k.nome}: ${k.resumo} · ${k.statusTexto}`}
-                      className="rounded-md cursor-pointer hover:brightness-95"
+                      className="cursor-pointer hover:brightness-125"
                     >
                       <ObjectStatus state={k.state} inverted>
                         {k.curto}
@@ -462,9 +463,9 @@ export function KpiPlacar({
       </div>
 
       <div className="mt-4 pt-3 border-t border-line-soft">
-        <div className="text-[13px] font-semibold text-text mb-1">Pontos de atenção</div>
+        <div className="font-mono text-[10.5px] uppercase tracking-[0.13em] text-label mb-2">Pontos de atenção</div>
         {alertas.length === 0 ? (
-          <div className="flex items-center gap-2 px-3 py-3 rounded-lg bg-positive-bg text-positive text-[13px] font-semibold">
+          <div className="flex items-center gap-2 px-3 py-3 border border-line-soft border-l-[3px] border-l-brand text-positive text-[13px] font-semibold">
             <CheckCircle2 className="w-4 h-4 shrink-0" /> Todos os KPIs com meta ou limite estão dentro do esperado
           </div>
         ) : (
@@ -561,7 +562,7 @@ export function KpiTabela({ linhas, subtitulo }: { linhas: KpiLinha[]; subtitulo
       value: (k) => k.valorOrdem,
       render: (k) => (
         <div className="leading-snug whitespace-nowrap">
-          <div className="font-bold tabular" style={{ color: corValor(k.state) }}>
+          <div className="font-semibold tabular" style={{ color: corValor(k.state) }}>
             {k.valor}
           </div>
           {k.valorDetalhe && <div className="text-xs text-label">{k.valorDetalhe}</div>}
@@ -597,7 +598,7 @@ export function KpiTabela({ linhas, subtitulo }: { linhas: KpiLinha[]; subtitulo
       <div className="hidden lg:block">
         <DataTable columns={colunas} rows={linhas} rowKey={(k) => k.id} />
       </div>
-      <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+      <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
         {linhas.map((k) => (
           <li key={k.id} className="px-4 py-3">
             <div className="flex items-start justify-between gap-3">
@@ -622,7 +623,7 @@ export function KpiTabela({ linhas, subtitulo }: { linhas: KpiLinha[]; subtitulo
                 <LinkOrigem rota={k.rota} origem={k.origem} />
               </PopIn>
               <div className="col-span-2 sm:col-span-4 min-w-0">
-                <dt className="text-xs text-label">Tendência</dt>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.1em] text-label">Tendência</dt>
                 <dd>
                   <KpiTendenciaTexto t={k.tendencia} />
                 </dd>
@@ -638,8 +639,8 @@ export function KpiTabela({ linhas, subtitulo }: { linhas: KpiLinha[]; subtitulo
 function PopIn({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-label">{rotulo}</dt>
-      <dd className="text-text tabular truncate">{children}</dd>
+      <dt className="font-mono text-[10px] uppercase tracking-[0.1em] text-label">{rotulo}</dt>
+      <dd className="text-text tabular truncate mt-0.5">{children}</dd>
     </div>
   );
 }

@@ -54,7 +54,7 @@ function abaInicial(state: unknown): Aba {
   return ABAS.includes(aba as Aba) ? (aba as Aba) : "apuracao";
 }
 
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,16 +63,16 @@ const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily:
 const STATUS_TEXTO: Record<Semaforo, string> = { ok: "Cumprido", atencao: "Em atenção", excedido: "Descumprido" };
 const COR_STATUS: Record<Semaforo, string> = { ok: CHART_SEMANTIC.good, atencao: CHART_SEMANTIC.critical, excedido: CHART_SEMANTIC.bad };
 /** Faixa de atenção e zona de descumprimento nos gráficos */
-const COR_FAIXA = { atencao: "#f0ab00", atencaoOpacidade: 0.24, zona: CHART_SEMANTIC.bad, zonaOpacidade: 0.08 };
+const COR_FAIXA = { atencao: "#ffa436", atencaoOpacidade: 0.24, zona: CHART_SEMANTIC.bad, zonaOpacidade: 0.08 };
 const COR_ESTADO: Record<ValueState, string> = {
-  positive: "#256f3a",
-  critical: "#b44f00",
-  negative: "#aa0808",
-  information: "#0070f2",
-  neutral: "#1d2d3e",
+  positive: "#00b3ac",
+  critical: "#ffa436",
+  negative: "#e4806c",
+  information: "#d8d2c6",
+  neutral: "#f7f3e7",
 };
 /** Azul das tags informativas: mais escuro que o de gráficos para contraste ≥ 4,5:1 no fundo claro da tag */
-const AZUL_TAG = "#0057d2";
+const AZUL_TAG = "#00b3ac";
 
 /** Nomes curtos (tags e listas compactas) */
 const SIGLA: Record<CovenantId, string> = {
@@ -741,7 +741,7 @@ function TabelaCovenants({
         <DataTable columns={colunas} rows={apuracoes} rowKey={(a) => a.cov.id} />
       </div>
       {/* Pop-in (sap.m.Table responsiva): em telas estreitas as colunas descem para baixo do indicador */}
-      <ul className="min-[1420px]:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+      <ul className="min-[1420px]:hidden border-t border-line divide-y divide-line-soft">
         {apuracoes.map((a) => (
           <li key={a.cov.id} className="px-4 py-3">
             <div className="flex items-start justify-between gap-3">
@@ -827,17 +827,17 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
       stroke={CHART_SEMANTIC.bad}
       strokeDasharray="4 3"
       strokeWidth={1.5}
-      label={{ value: fmtRef(cov, cov.limite), position: "right", fill: "#aa0808", fontSize: 11, fontWeight: 700 }}
+      label={{ value: fmtRef(cov, cov.limite), position: "right", fill: "#e4806c", fontSize: 11, fontWeight: 700 }}
     />,
   ];
   const eixos = [
-    <CartesianGrid key="grid" vertical={false} stroke="#e5e5e5" />,
-    <XAxis key="x" dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} padding={anual ? undefined : { left: 14, right: 14 }} />,
+    <CartesianGrid key="grid" vertical={false} stroke="#3f3f3d" />,
+    <XAxis key="x" dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} padding={anual ? undefined : { left: 14, right: 14 }} />,
     <YAxis key="y" domain={[0, max]} ticks={ticks} tickFormatter={fmtEixo} tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />,
     <Tooltip
       key="tt"
       contentStyle={tooltipStyle}
-      cursor={anual ? { fill: "#f2f4f6" } : { stroke: "#a8b2bd" }}
+      cursor={anual ? { fill: "#2f2e2e" } : { stroke: "#575653" }}
       labelFormatter={(l: string) => (anual ? `Exercício de ${l}` : `Trimestre ${l}`)}
       formatter={(v: number) => [fmtPonto(v), "Apurado"]}
     />,
@@ -877,7 +877,7 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
                 {dados.map((x) => (
                   <Cell key={x.data} fill={COR_STATUS[x.status]} />
                 ))}
-                <LabelList dataKey="valor" position="insideTop" offset={7} formatter={(v: number) => fmtPonto(v)} fontSize={11} fontWeight={700} fill="#ffffff" />
+                <LabelList dataKey="valor" position="insideTop" offset={7} formatter={(v: number) => fmtPonto(v)} fontSize={11} fontWeight={700} fill="#242424" />
               </Bar>
             </BarChart>
           ) : (
@@ -886,7 +886,7 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
               {referencias}
               <Line
                 dataKey="valor"
-                stroke="#5b738b"
+                stroke="#a5a099"
                 strokeWidth={2}
                 isAnimationActive={false}
                 activeDot={{ r: 5 }}
@@ -897,7 +897,7 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
                     cy={pt.cy}
                     r={4}
                     fill={COR_STATUS[pt.payload?.status ?? "ok"]}
-                    stroke="#ffffff"
+                    stroke="#242424"
                     strokeWidth={1.5}
                   />
                 )}
@@ -906,7 +906,7 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
                   dataKey="valor"
                   content={(pt) =>
                     pt.index === ultimo ? (
-                      <text x={Number(pt.x)} y={Number(pt.y) - 9} textAnchor="middle" fontSize={11} fontWeight={700} fill="#1d2d3e">
+                      <text x={Number(pt.x)} y={Number(pt.y) - 9} textAnchor="middle" fontSize={11} fontWeight={700} fill="#f7f3e7">
                         {fmtPonto(Number(pt.value))}
                       </text>
                     ) : null
@@ -1247,7 +1247,7 @@ function CardWaiver({
                   <li key={`${e.data}-${i}`} className="relative pl-7 pb-4 last:pb-0">
                     {i < eventos.length - 1 && <span className="absolute left-[7px] top-4 bottom-0 w-px bg-line" aria-hidden />}
                     <span
-                      className="absolute left-0 top-1 w-[15px] h-[15px] rounded-full border-2 bg-white"
+                      className="absolute left-0 top-1 w-[15px] h-[15px] rounded-full border-2 bg-surface"
                       style={{ borderColor: COR_ESTADO[e.estado], boxShadow: e.tag === "Data-base" ? `0 0 0 3px ${COR_ESTADO[e.estado]}26` : undefined }}
                       aria-hidden
                     >
@@ -1307,9 +1307,9 @@ function CardWaiver({
 
 function Regra({ item, titulo, children }: { item: string; titulo: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2.5">
+    <div className="rounded-lg bg-surface-3 px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <Tag color="#556b82">CPC 26 · {item}</Tag>
+        <Tag color="#a5a099">CPC 26 · {item}</Tag>
       </div>
       <div className="text-[13px] font-semibold text-text mt-1.5 leading-snug">{titulo}</div>
       <div className="text-xs text-label leading-snug mt-1">{children}</div>
@@ -1323,9 +1323,9 @@ function Regra({ item, titulo, children }: { item: string; titulo: string; child
 
 function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; icsd: ICSDAno[] }) {
   const covIcsd = COVENANTS_DIVIDA.find((c) => c.id === "icsd")!;
-  const th = "px-3 py-2.5 text-right font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap";
+  const th = "px-3 py-2.5 text-right font-semibold text-[13px] border-b border-line whitespace-nowrap";
   const tdNum = "px-3 py-2 text-right tabular border-b border-line-soft whitespace-nowrap";
-  const tdRot = "sticky left-0 z-[1] bg-white pl-4 pr-3 py-2 border-b border-line-soft";
+  const tdRot = "sticky left-0 z-[1] bg-surface pl-4 pr-3 py-2 border-b border-line-soft";
 
   const colIcsd: Column<ICSDAno>[] = [
     { key: "ano", header: "Exercício", value: (x) => x.ano, render: (x) => <span className="font-semibold">{x.ano}</span> },
@@ -1373,7 +1373,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
         <table className="w-full text-sm border-separate border-spacing-0">
           <thead>
             <tr>
-              <th className="sticky left-0 z-[2] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[168px] sm:min-w-[250px]">
+              <th className="sticky left-0 z-[2] bg-surface-2 text-left pl-4 pr-3 py-2.5 border-b-2 border-brand min-w-[168px] sm:min-w-[250px]">
                 Item
               </th>
               {serie.map((i) => (
@@ -1399,7 +1399,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
               </tr>
             ))}
             <tr>
-              <td colSpan={serie.length + 1} className="bg-[#f5f6f7] pl-4 pr-3 py-1.5 text-xs font-semibold text-label border-b border-line-soft uppercase tracking-wide">
+              <td colSpan={serie.length + 1} className="bg-surface-3 pl-4 pr-3 py-1.5 text-xs font-semibold text-label border-b border-line-soft uppercase tracking-wide">
                 Indicadores dos covenants
               </td>
             </tr>
@@ -1479,7 +1479,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
 
 function Mini({ rotulo, valor, cor, sub }: { rotulo: string; valor: ReactNode; cor?: string; sub?: string }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0">
       <div className="text-xs text-label leading-tight truncate" title={rotulo}>
         {rotulo}
       </div>

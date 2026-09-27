@@ -38,16 +38,16 @@ export type TipoContrato = "Renda fixa bancária" | "Tesouro Direto" | "Fundo de
 export type Moeda = "BRL" | "USD" | "EUR";
 
 export const TIPOS_CONTRATO: { tipo: TipoContrato; origem: string; rota: string; cor: string; curto: string }[] = [
-  { tipo: "Renda fixa bancária", origem: "R01", rota: "/r01-composicao", cor: "#0070f2", curto: "Renda fixa" },
-  { tipo: "Tesouro Direto", origem: "R08", rota: "/r08-tesouro", cor: "#049f9a", curto: "Tesouro" },
-  { tipo: "Fundo de investimento", origem: "R09", rota: "/r09-fundos", cor: "#8b47d7", curto: "Fundos" },
-  { tipo: "Time deposit", origem: "R10", rota: "/r10-time-deposit", cor: "#c87b00", curto: "Time deposits" },
+  { tipo: "Renda fixa bancária", origem: "R01", rota: "/r01-composicao", cor: "#009994", curto: "Renda fixa" },
+  { tipo: "Tesouro Direto", origem: "R08", rota: "/r08-tesouro", cor: "#c97d24", curto: "Tesouro" },
+  { tipo: "Fundo de investimento", origem: "R09", rota: "/r09-fundos", cor: "#a462a6", curto: "Fundos" },
+  { tipo: "Time deposit", origem: "R10", rota: "/r10-time-deposit", cor: "#5e9454", curto: "Time deposits" },
 ];
 
 export const MOEDAS: Moeda[] = ["BRL", "USD", "EUR"];
 
-/** Cores únicas por moeda (fora da paleta dos tipos de contrato) – use em todas as telas */
-export const COR_MOEDA: Record<Moeda, string> = { BRL: "#758ca4", USD: "#75980b", EUR: "#df1278" };
+/** Cores únicas por moeda (fora da paleta dos tipos de contrato; validadas para o tema escuro) – use em todas as telas */
+export const COR_MOEDA: Record<Moeda, string> = { BRL: "#4f8fd1", USD: "#c9668f", EUR: "#a38a3c" };
 
 export interface ContratoMestre {
   /** transação SAP */

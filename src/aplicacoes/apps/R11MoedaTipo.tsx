@@ -23,7 +23,7 @@ import { posicaoTimeDeposit, ptaxTD, saldoME } from "../lib/timeDeposit";
 
 const rel = relatorioPorId("r11");
 
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 type Visao = "contrato" | "exposicao";
 type Medida = "curva" | "mercado" | "contabil" | "liquido";
@@ -509,7 +509,7 @@ export function R11MoedaTipo() {
         </div>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:gap-6">
           <FilterField label="Empresa" className="lg:w-80">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -574,13 +574,13 @@ export function R11MoedaTipo() {
                       </span>
                     </Th>
                   ))}
-                  <Th className="bg-[#f5f6f7] pr-4">Total</Th>
+                  <Th className="bg-surface-3 pr-4">Total</Th>
                 </tr>
               </thead>
               <tbody>
                 {d.matriz.map((l) => (
                   <tr key={l.tipo}>
-                    <td className="sticky left-0 z-[1] bg-white pl-4 pr-3 py-2 border-b border-line-soft">
+                    <td className="sticky left-0 z-[1] bg-surface pl-4 pr-3 py-2 border-b border-line-soft">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: l.cor }} />
                         <div className="min-w-0">
@@ -596,7 +596,7 @@ export function R11MoedaTipo() {
                   </tr>
                 ))}
                 <tr>
-                  <td className="sticky left-0 z-[1] bg-[#f5f6f7] pl-4 pr-3 py-2 font-bold text-text border-t border-[#a8b2bd]">Total</td>
+                  <td className="sticky left-0 z-[1] bg-surface-3 pl-4 pr-3 py-2 font-bold text-text border-t border-line">Total</td>
                   {MOEDAS.map((m) => (
                     <CelulaMatriz key={m} valor={d.totalCel[m]} total={d.totalCel.Total} forte rodape />
                   ))}
@@ -645,9 +645,9 @@ export function R11MoedaTipo() {
                   </tr>
                 )}
                 <tr className="font-bold">
-                  <td className="pl-4 pr-3 py-2 bg-[#f5f6f7] border-b border-line-soft">Total em moeda original</td>
-                  <TdNum className="bg-[#f5f6f7]">{d.totalME.USD ? fmtME(d.totalME.USD, "USD") : "–"}</TdNum>
-                  <TdNum className="bg-[#f5f6f7] pr-4">{d.totalME.EUR ? fmtME(d.totalME.EUR, "EUR") : "–"}</TdNum>
+                  <td className="pl-4 pr-3 py-2 bg-surface-3 border-b border-line-soft">Total em moeda original</td>
+                  <TdNum className="bg-surface-3">{d.totalME.USD ? fmtME(d.totalME.USD, "USD") : "–"}</TdNum>
+                  <TdNum className="bg-surface-3 pr-4">{d.totalME.EUR ? fmtME(d.totalME.EUR, "EUR") : "–"}</TdNum>
                 </tr>
                 <tr>
                   <td className="pl-4 pr-3 py-2 border-b border-line-soft text-label">
@@ -706,16 +706,16 @@ export function R11MoedaTipo() {
                 stackOffset="sign"
                 margin={{ top: 22, right: 8, left: 0, bottom: 0 }}
               >
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="moeda" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="moeda" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={44} unit=" mi" />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtBRL(v * 1e6), n]} />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                <ReferenceLine y={0} stroke="#a8b2bd" />
+                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+                <ReferenceLine y={0} stroke="#575653" />
                 {d.matriz.map((l, i) => (
                   <Bar key={l.tipo} dataKey={`t${i}`} name={l.tipo} stackId="m" fill={l.cor} maxBarSize={96} isAnimationActive={false}>
                     {i === d.matriz.length - 1 && (
-                      <LabelList dataKey="total" position="top" style={{ fontSize: 12, fill: "#1d2d3e", fontFamily: "72, Arial", fontWeight: 600 }} formatter={(v: number) => (Math.round(v) === 0 ? "" : fmtCompact(v))} />
+                      <LabelList dataKey="total" position="top" style={{ fontSize: 12, fill: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontWeight: 600 }} formatter={(v: number) => (Math.round(v) === 0 ? "" : fmtCompact(v))} />
                     )}
                   </Bar>
                 ))}
@@ -737,11 +737,11 @@ export function R11MoedaTipo() {
             <div className="h-44 mt-2 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={seriePtax} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                  <XAxis dataKey="mes" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={2} />
+                  <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                  <XAxis dataKey="mes" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} interval={2} />
                   <YAxis tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={false} width={40} domain={[eixoPtax[0], eixoPtax[eixoPtax.length - 1]]} ticks={eixoPtax} tickFormatter={(v: number) => fmtDec(v, 1)} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtDec(v, 4), n]} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
+                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
                   <Line dataKey="USD" name="USD" stroke={COR_MOEDA.USD} strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line dataKey="EUR" name="EUR" stroke={COR_MOEDA.EUR} strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
@@ -781,11 +781,11 @@ export function R11MoedaTipo() {
                   </tr>
                 ))}
                 <tr className="font-bold">
-                  <td className="pl-4 pr-3 py-2 bg-[#f5f6f7]">Total</td>
-                  <TdNum className="bg-[#f5f6f7] border-b-0">{fmtNum(d.totalMoeda.curva)}</TdNum>
-                  <TdNum className="bg-[#f5f6f7] border-b-0">{fmtNum(d.totalMoeda.mercado)}</TdNum>
-                  <TdNum className={clsx("bg-[#f5f6f7] border-b-0", corSinal(d.totalMoeda.mtm))}>{fmtNum(d.totalMoeda.mtm)}</TdNum>
-                  <TdNum className={clsx("bg-[#f5f6f7] border-b-0 pr-4", corSinal(d.totalMoeda.mtm))}>
+                  <td className="pl-4 pr-3 py-2 bg-surface-3">Total</td>
+                  <TdNum className="bg-surface-3 border-b-0">{fmtNum(d.totalMoeda.curva)}</TdNum>
+                  <TdNum className="bg-surface-3 border-b-0">{fmtNum(d.totalMoeda.mercado)}</TdNum>
+                  <TdNum className={clsx("bg-surface-3 border-b-0", corSinal(d.totalMoeda.mtm))}>{fmtNum(d.totalMoeda.mtm)}</TdNum>
+                  <TdNum className={clsx("bg-surface-3 border-b-0 pr-4", corSinal(d.totalMoeda.mtm))}>
                     {d.totalMoeda.curva > 0 ? fmtPct(d.totalMoeda.mtm / d.totalMoeda.curva) : "–"}
                   </TdNum>
                 </tr>
@@ -837,13 +837,13 @@ export function R11MoedaTipo() {
                   {MOEDAS.map((m) => (
                     <Th key={m}>{m}</Th>
                   ))}
-                  <Th className="bg-[#f5f6f7] pr-4">Total</Th>
+                  <Th className="bg-surface-3 pr-4">Total</Th>
                 </tr>
               </thead>
               <tbody>
                 {linhasResultado.map((l) => (
                   <tr key={l.rotulo} className={l.forte ? "font-bold" : undefined}>
-                    <td className={clsx("pr-3 py-2 border-b border-line-soft whitespace-nowrap", l.recuo ? "pl-8 text-label" : "pl-4 text-text", l.forte && "bg-[#f5f6f7]")}>
+                    <td className={clsx("pr-3 py-2 border-b border-line-soft whitespace-nowrap", l.recuo ? "pl-8 text-label" : "pl-4 text-text", l.forte && "bg-surface-3")}>
                       {l.rotulo}
                     </td>
                     {([...MOEDAS, "Total"] as const).map((k) => {
@@ -853,7 +853,7 @@ export function R11MoedaTipo() {
                         <TdNum
                           key={k}
                           className={clsx(
-                            (l.forte || k === "Total") && "bg-[#f5f6f7]",
+                            (l.forte || k === "Total") && "bg-surface-3",
                             k === "Total" && "pr-4 font-semibold",
                             cor ?? (l.recuo && "text-label"),
                           )}
@@ -923,10 +923,10 @@ export function R11MoedaTipo() {
                     </tr>
                   ))}
                   <tr className="font-bold">
-                    <td className="pl-4 pr-3 py-2 bg-[#f5f6f7] border-b border-line-soft">Total USD + EUR</td>
-                    <TdNum className="bg-[#f5f6f7]">{fmtNum(sens.total.brl, { dash: true })}</TdNum>
+                    <td className="pl-4 pr-3 py-2 bg-surface-3 border-b border-line-soft">Total USD + EUR</td>
+                    <TdNum className="bg-surface-3">{fmtNum(sens.total.brl, { dash: true })}</TdNum>
                     {sens.total.efeitos.map((v, i) => (
-                      <TdNum key={i} className={clsx("bg-[#f5f6f7]", i === CHOQUES.length - 1 && "pr-4", corSinal(v))}>
+                      <TdNum key={i} className={clsx("bg-surface-3", i === CHOQUES.length - 1 && "pr-4", corSinal(v))}>
                         {fmtNum(v, { dash: true })}
                       </TdNum>
                     ))}
@@ -972,12 +972,12 @@ export function R11MoedaTipo() {
             <div className="h-64 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sens.grafico} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                  <XAxis dataKey="cenario" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                  <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                  <XAxis dataKey="cenario" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                   <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={48} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtBRL(v * 1e3), n]} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                  <ReferenceLine y={0} stroke="#a8b2bd" />
+                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+                  <ReferenceLine y={0} stroke="#575653" />
                   <Bar dataKey="USD" name="USD" stackId="s" fill={COR_MOEDA.USD} maxBarSize={56} isAnimationActive={false} />
                   <Bar dataKey="EUR" name="EUR" stackId="s" fill={COR_MOEDA.EUR} maxBarSize={56} isAnimationActive={false} />
                 </BarChart>
@@ -1011,7 +1011,7 @@ function corSinal(v: number): string | undefined {
 
 function Th({ children, className, left }: { children: ReactNode; className?: string; left?: boolean }) {
   return (
-    <th className={clsx("bg-white px-3 py-2.5 font-semibold text-text text-[13px] border-b border-[#a8b2bd] whitespace-nowrap", left ? "text-left" : "text-right", className)}>
+    <th className={clsx("bg-surface-2 px-3 py-2.5 text-text border-b-2 border-brand whitespace-nowrap", left ? "text-left" : "text-right", className)}>
       {children}
     </th>
   );
@@ -1027,8 +1027,8 @@ function CelulaMatriz({ valor, total, forte, rodape }: { valor: number; total: n
     <td
       className={clsx(
         "px-3 py-2 text-right tabular text-[13px] whitespace-nowrap",
-        rodape ? "bg-[#f5f6f7] border-t border-[#a8b2bd]" : "border-b border-line-soft",
-        forte && !rodape && "bg-[#f5f6f7]",
+        rodape ? "bg-surface-3 border-t border-line" : "border-b border-line-soft",
+        forte && !rodape && "bg-surface-3",
         forte && "font-bold",
       )}
     >

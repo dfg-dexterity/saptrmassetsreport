@@ -1,0 +1,832 @@
+/* ============================================================================
+   DEXTERITY IT SOLUTIONS — Design System web (tema escuro)
+   ----------------------------------------------------------------------------
+   Camada portátil da identidade visual. Este arquivo NÃO conhece o aplicativo:
+   é o mesmo conteúdo distribuído pelo skill `estilo-web-dexterity` e pode ser
+   copiado para qualquer projeto (Next, Vite, HTML puro, Odoo, Django…).
+
+   Regras da marca embutidas aqui:
+   - fundo grafite quase preto, texto creme, cerceta como única cor de ação;
+   - cantos vivos (nada de border-radius) e filetes de 1px como grade;
+   - títulos em Barlow Condensed caixa alta, rótulos técnicos em IBM Plex Mono;
+   - foco visível em âmbar, sempre.
+
+   Personalização do app fica em `globals.css`, nunca aqui.
+   ========================================================================== */
+
+/* ── 1. Tokens ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* Cores da marca */
+  --dx-cerceta: #009994;
+  --dx-cerceta-texto: #00b3ac; /* cerceta legível sobre superfície escura */
+  --dx-roxo: #98569a;
+  --dx-amarelo: #ffa436;
+  --dx-musgo: #597c59;
+  --dx-vermelho: #d9563e; /* só erro; em filete e ícone, nunca em texto */
+  --dx-vermelho-texto: #dd6953; /* o mesmo vermelho legível sobre superfície escura */
+  --dx-off: #f7f3e7;
+  --dx-grafite: #4d4d4d;
+
+  /* Superfícies do tema escuro */
+  --dx-base: #1b1b1b;
+  --dx-surface: #242424;
+  --dx-surface-2: #2e2e2e;
+  --dx-surface-3: #1f1f1f;
+  --dx-line: rgba(247, 243, 231, 0.13);
+
+  /* Texto */
+  --dx-texto: var(--dx-off);
+  --dx-texto-suave: #d8d2c6;
+  --dx-muted: #a5a099;
+  --dx-rotulo: #908c85; /* rótulos mono; passa em contraste sobre --dx-surface */
+
+  /* Tipografia */
+  --dx-display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
+  --dx-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --dx-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  /* Ritmo */
+  --dx-wrap: 1180px;
+  --dx-gap: 1px; /* a grade da marca é um filete, não um espaço */
+}
+
+/* Compatibilidade com a marcação publicada no site (Odoo): os blocos copiados
+   de lá usam estes nomes curtos. Mantido para que HTML do site funcione aqui
+   sem edição. */
+:root {
+  --off: var(--dx-off);
+  --cerceta: var(--dx-cerceta);
+  --acc: var(--dx-cerceta);
+  --acc-txt: var(--dx-cerceta-texto);
+  --mk: var(--dx-off);
+  --roxo: var(--dx-roxo);
+  --amarelo: var(--dx-amarelo);
+  --musgo: var(--dx-musgo);
+  --base: var(--dx-base);
+  --surface: var(--dx-surface);
+  --surface2: var(--dx-surface-2);
+  --line: var(--dx-line);
+  --muted: var(--dx-muted);
+  --rotulo: var(--dx-rotulo);
+}
+
+/* Compatibilidade com as ferramentas de Dados de Mercado, que nomeiam os mesmos
+   tokens com o prefixo `--dxt-`. Permite adotar esta folha sem renomear nada no
+   projeto de destino. */
+:root {
+  --dxt-base: var(--dx-base);
+  --dxt-surface: var(--dx-surface);
+  --dxt-surface-2: var(--dx-surface-2);
+  --dxt-off: var(--dx-off);
+  --dxt-rotulo: var(--dx-rotulo);
+  --dxt-muted: var(--dx-muted);
+  --dxt-line: var(--dx-line);
+  --dxt-line-soft: rgba(247, 243, 231, 0.08);
+  --dxt-cerceta: var(--dx-cerceta);
+  --dxt-acc-txt: var(--dx-cerceta-texto);
+  --dxt-amarelo: var(--dx-amarelo);
+  --dxt-roxo: var(--dx-roxo);
+  --dxt-musgo: var(--dx-musgo);
+  --dxt-vermelho: var(--dx-vermelho);
+  --dxt-vermelho-txt: var(--dx-vermelho-texto);
+  --dxt-elevate-1: rgba(247, 243, 231, 0.05);
+  --dxt-elevate-2: rgba(247, 243, 231, 0.1);
+  --fonte-titulo: var(--dx-display);
+  --fonte-corpo: var(--dx-body);
+  --fonte-mono: var(--dx-mono);
+}
+
+/* ── 2. Base ─────────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--dx-base);
+  color: var(--dx-texto);
+  font-family: var(--dx-body);
+  font-weight: 300;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--dx-cerceta);
+  color: var(--dx-off);
+}
+
+:focus-visible {
+  outline: 2px solid var(--dx-amarelo);
+  outline-offset: 3px;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+/* ── 3. Tipografia ───────────────────────────────────────────────────────── */
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: var(--dx-display);
+  font-weight: 600;
+  text-transform: uppercase;
+  line-height: 0.92;
+  letter-spacing: 0.005em;
+}
+
+h1 {
+  font-size: clamp(40px, 5.2vw, 72px);
+  letter-spacing: -0.012em;
+}
+h2 {
+  font-size: clamp(34px, 4.4vw, 56px);
+}
+h3 {
+  font-size: 27px;
+}
+h4 {
+  font-size: 22px;
+}
+
+a {
+  color: inherit;
+}
+
+/* Rótulo técnico em mono — a assinatura tipográfica da marca. */
+.dx-eyebrow {
+  display: inline-block;
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dx-cerceta-texto);
+}
+
+.dx-mono {
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dx-rotulo);
+}
+
+/* ── 4. Layout ───────────────────────────────────────────────────────────── */
+
+.dx-wrap {
+  width: min(var(--dx-wrap), 92vw);
+  margin-inline: auto;
+}
+
+.dx-section {
+  /* padding-block, nunca o atalho `padding`: a seção costuma dividir o elemento
+     com um wrapper que já define a margem lateral, e o atalho a zeraria. */
+  padding-block: clamp(72px, 9vw, 128px);
+  border-top: 1px solid var(--dx-line);
+}
+
+/* Cabeçalho de página interna. */
+.dx-phead {
+  padding-block: clamp(48px, 6vw, 84px) clamp(34px, 4vw, 54px);
+}
+
+.dx-phead h1 {
+  max-width: 14ch;
+}
+
+.dx-phead p {
+  max-width: 52ch;
+  margin: 22px 0 0;
+  color: var(--dx-texto-suave);
+  font-size: 18px;
+}
+
+.dx-phead .dx-eyebrow {
+  display: block;
+  margin-bottom: 20px;
+}
+
+/* Título de seção com descrição à direita. */
+.dx-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 42px;
+}
+
+.dx-sec-head p {
+  margin: 0;
+  max-width: 38ch;
+  color: var(--dx-rotulo);
+  font-size: 16px;
+}
+
+/* ── 5. Marca ────────────────────────────────────────────────────────────── */
+
+.dx-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-decoration: none;
+  flex: 0 0 auto;
+}
+
+.dx-brand svg {
+  height: 27px;
+  width: auto;
+  display: block;
+  overflow: visible;
+}
+
+/* As 4 pétalas acendem em sequência quando o cursor passa pela marca. */
+.dx-brand .dx-pt {
+  transition: fill 0.25s;
+}
+.dx-brand:hover .dx-pt {
+  animation: dx-hover 1.1s ease;
+}
+.dx-brand:hover .dx-pt--tr {
+  animation-name: dx-hover-acento;
+  animation-delay: 0s;
+}
+.dx-brand:hover .dx-pt--br {
+  animation-delay: 0.1s;
+}
+.dx-brand:hover .dx-pt--bl {
+  animation-delay: 0.2s;
+}
+.dx-brand:hover .dx-pt--tl {
+  animation-delay: 0.3s;
+}
+
+@keyframes dx-hover {
+  0%,
+  100% {
+    fill: var(--dx-off);
+  }
+  45% {
+    fill: var(--dx-cerceta);
+  }
+}
+
+@keyframes dx-hover-acento {
+  0%,
+  100% {
+    fill: var(--dx-cerceta);
+  }
+  45% {
+    fill: var(--dx-off);
+  }
+}
+
+/* ── 6. Navegação ────────────────────────────────────────────────────────── */
+
+.dx-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(27, 27, 27, 0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--dx-line);
+}
+
+.dx-nav__in {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-block: 16px;
+}
+
+.dx-nav__links {
+  display: flex;
+  gap: 18px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.dx-nav__links a {
+  padding: 4px 0;
+  color: var(--dx-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.18s;
+}
+
+.dx-nav__links a:hover {
+  color: var(--dx-off);
+}
+
+.dx-nav__links a.dx-on {
+  color: var(--dx-off);
+  border-bottom-color: var(--dx-cerceta);
+}
+
+/* ── 7. Botões ───────────────────────────────────────────────────────────── */
+
+.dx-btn {
+  display: inline-block;
+  padding: 11px 22px;
+  font-family: var(--dx-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  text-align: center;
+  color: var(--dx-base);
+  background: var(--dx-cerceta);
+  border: 1px solid var(--dx-cerceta);
+  border-radius: 0;
+  cursor: pointer;
+  /* Sempre nomeie as propriedades: o atalho `transition: .2s` animaria também
+     `outline-width`, fazendo o anel de foco surgir esmaecido em vez de imediato. */
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.dx-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--dx-cerceta-texto);
+}
+
+.dx-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dx-btn--ghost {
+  background: transparent;
+  color: var(--dx-off);
+  border-color: var(--dx-line);
+}
+
+.dx-btn--ghost:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--dx-off);
+  color: var(--dx-off);
+}
+
+.dx-btn--sm {
+  padding: 8px 14px;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+/* ── 8. Formulários ──────────────────────────────────────────────────────── */
+
+.dx-field {
+  display: block;
+}
+
+.dx-field > span,
+.dx-field > label {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dx-rotulo);
+}
+
+.dx-field input,
+.dx-field select,
+.dx-field textarea {
+  width: 100%;
+  padding: 11px 13px;
+  font-family: var(--dx-body);
+  font-size: 16px;
+  color: var(--dx-off);
+  background: var(--dx-surface-3);
+  border: 1px solid var(--dx-line);
+  border-radius: 0;
+}
+
+.dx-field input:focus,
+.dx-field select:focus,
+.dx-field textarea:focus {
+  outline: 2px solid var(--dx-amarelo);
+  outline-offset: 2px;
+  border-color: var(--dx-cerceta);
+}
+
+.dx-field textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* O seletor nativo desenha o calendário/seta em escuro sem isto. */
+.dx-field input[type='date'],
+.dx-field select {
+  color-scheme: dark;
+}
+
+/* ── 9. Superfícies ──────────────────────────────────────────────────────── */
+
+/* Cartão simples. */
+.dx-card {
+  background: var(--dx-surface);
+  border: 1px solid var(--dx-line);
+}
+
+/* Grade de filetes: o espaçamento de 1px é o próprio traço da marca.
+   Use com --dx-cols para definir o número de colunas. */
+.dx-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--dx-cols, 3), minmax(0, 1fr));
+  gap: 1px;
+  background: var(--dx-line);
+  border: 1px solid var(--dx-line);
+}
+
+.dx-grid > * {
+  background: var(--dx-surface);
+  padding: 26px 22px;
+}
+
+/* Painel com cabeçalho e rodapé — usado para status e blocos de dados. */
+.dx-painel {
+  background: var(--dx-surface);
+  border: 1px solid var(--dx-line);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+}
+
+.dx-painel__hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background: var(--dx-surface-2);
+  border-bottom: 1px solid var(--dx-line);
+}
+
+.dx-painel__hd h3 {
+  font-size: 19px;
+  letter-spacing: 0.04em;
+}
+
+.dx-painel__hd small {
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  color: var(--dx-rotulo);
+}
+
+.dx-painel__ft {
+  padding: 13px 18px;
+  background: var(--dx-surface-3);
+  border-top: 1px solid var(--dx-line);
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  color: var(--dx-rotulo);
+}
+
+/* Bloco de destaque com filete colorido à esquerda. */
+.dx-realce {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: 24px 28px;
+  background: var(--dx-surface);
+  border: 1px solid var(--dx-line);
+  border-left: 3px solid var(--dx-amarelo);
+}
+
+.dx-realce p {
+  margin: 0;
+  max-width: 52ch;
+  color: var(--dx-texto-suave);
+  font-size: 16px;
+}
+
+.dx-realce--acento {
+  border-left-color: var(--dx-cerceta);
+}
+
+/* Números grandes. */
+.dx-stat b {
+  display: block;
+  font-family: var(--dx-display);
+  font-size: clamp(32px, 3.8vw, 48px);
+  font-weight: 600;
+  line-height: 0.9;
+}
+
+.dx-stat span {
+  display: block;
+  margin-top: 9px;
+  font-family: var(--dx-mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dx-rotulo);
+}
+
+/* ── 10. Etiquetas ───────────────────────────────────────────────────────── */
+
+.dx-tags {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.dx-tags span,
+.dx-tag {
+  padding: 4px 8px;
+  font-family: var(--dx-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #9c968e;
+  border: 1px solid var(--dx-line);
+}
+
+/* Etiqueta clicável (filtro). */
+.dx-chip {
+  padding: 6px 13px;
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dx-muted);
+  background: transparent;
+  border: 1px solid var(--dx-line);
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dx-chip:hover {
+  color: var(--dx-off);
+  border-color: var(--dx-off);
+}
+
+.dx-chip[aria-pressed='true'],
+.dx-chip.dx-on {
+  color: var(--dx-base);
+  background: var(--dx-cerceta);
+  border-color: var(--dx-cerceta);
+}
+
+/* ── 11. Tabela de dados ─────────────────────────────────────────────────── */
+
+.dx-tabela-rolagem {
+  overflow: auto;
+}
+
+.dx-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.dx-tabela thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 11px 12px;
+  text-align: left;
+  background: var(--dx-surface-2);
+  color: var(--dx-off);
+  border-bottom: 2px solid var(--dx-cerceta);
+  font-family: var(--dx-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.dx-tabela thead th[aria-sort] {
+  cursor: pointer;
+}
+
+.dx-tabela thead th:hover {
+  color: var(--dx-cerceta-texto);
+}
+
+.dx-tabela th.dx-num,
+.dx-tabela td.dx-num {
+  text-align: right;
+}
+
+.dx-tabela tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dx-line);
+  color: var(--dx-texto-suave);
+}
+
+.dx-tabela tbody td.dx-num {
+  font-family: var(--dx-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dx-off);
+}
+
+.dx-tabela tbody tr:hover td {
+  background: rgba(247, 243, 231, 0.035);
+}
+
+/* Alta e baixa seguem a convenção do ticker da marca: cerceta sobe, âmbar cai. */
+.dx-up {
+  color: var(--dx-cerceta-texto);
+}
+
+.dx-down {
+  color: var(--dx-amarelo);
+}
+
+.dx-vazio {
+  color: var(--dx-rotulo);
+}
+
+/* ── 12. Ticker ──────────────────────────────────────────────────────────── */
+
+.dx-ticker {
+  overflow: hidden;
+  background: #141414;
+  border-bottom: 1px solid var(--dx-line);
+}
+
+.dx-ticker__track {
+  display: flex;
+  width: max-content;
+  animation: dx-slide 46s linear infinite;
+}
+
+.dx-ticker__set {
+  display: flex;
+}
+
+@keyframes dx-slide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.dx-tk {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 36px;
+  padding: 0 22px;
+  line-height: 36px;
+  white-space: nowrap;
+  border-right: 1px solid var(--dx-line);
+  font-family: var(--dx-mono);
+  font-size: 12px;
+}
+
+.dx-tk b {
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--dx-muted);
+}
+
+.dx-tk span {
+  color: var(--dx-off);
+}
+
+.dx-tk i {
+  font-style: normal;
+  font-size: 11px;
+}
+
+/* ── 13. Estados ─────────────────────────────────────────────────────────── */
+
+/* Ponto de status: apagado, ligado (cerceta) ou em atenção (âmbar). */
+.dx-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #575757;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+
+.dx-dot--on {
+  background: var(--dx-cerceta);
+  box-shadow: 0 0 0 4px rgba(0, 153, 148, 0.16);
+}
+
+.dx-dot--warn {
+  background: var(--dx-amarelo);
+  box-shadow: 0 0 0 4px rgba(255, 164, 54, 0.16);
+}
+
+.dx-girador {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--dx-line);
+  border-top-color: var(--dx-cerceta);
+  border-radius: 50%;
+  animation: dx-girar 0.8s linear infinite;
+}
+
+@keyframes dx-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Erro é o único lugar de vermelho: âmbar já significa "baixa/atenção" e, se os
+   dois dividissem a cor, uma queda de preço e uma falha ficariam iguais. O
+   filete leva o vermelho cheio (3,96:1, acima do mínimo de 3:1 para elemento
+   gráfico); o texto leva o tom claro, que passa em 4,59:1. */
+.dx-erro {
+  border-left: 3px solid var(--dx-vermelho);
+}
+
+.dx-erro strong {
+  color: var(--dx-vermelho-texto);
+  font-weight: 500;
+}
+
+/* ── 14. Rodapé ──────────────────────────────────────────────────────────── */
+
+.dx-foot {
+  display: flex;
+  gap: 40px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-block: 56px 40px;
+  font-size: 14px;
+  color: var(--dx-muted);
+}
+
+.dx-foot a {
+  color: var(--dx-muted);
+  text-decoration: none;
+}
+
+.dx-foot a:hover {
+  color: var(--dx-off);
+}
+
+.dx-foot h4 {
+  margin: 0 0 12px;
+  font-family: var(--dx-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6e6a64;
+}
+
+.dx-foot ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── 15. Responsivo ──────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .dx-grid {
+    grid-template-columns: repeat(var(--dx-cols-mob, 1), minmax(0, 1fr));
+  }
+
+  .dx-nav__links {
+    gap: 12px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dx-ticker__track,
+  .dx-girador {
+    animation: none;
+  }
+
+  .dx-brand:hover .dx-pt,
+  .dx-dot {
+    animation: none;
+    transition: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}

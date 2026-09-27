@@ -65,7 +65,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "parametrizacao",
     rota: "/premissas",
     icone: SlidersHorizontal,
-    cor: "#556b82",
+    cor: "#00b3ac",
   },
   {
     id: "benchmark",
@@ -81,7 +81,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "parametrizacao",
     rota: "/benchmark",
     icone: Target,
-    cor: "#049f9a",
+    cor: "#00b3ac",
   },
   {
     id: "mestre",
@@ -97,7 +97,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "parametrizacao",
     rota: "/carteira-mestre",
     icone: Layers,
-    cor: "#1d2d3e",
+    cor: "#00b3ac",
   },
   {
     id: "r01",
@@ -113,7 +113,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "posicao",
     rota: "/r01-composicao",
     icone: Table2,
-    cor: "#0070f2",
+    cor: "#00b3ac",
   },
   {
     id: "r08",
@@ -129,7 +129,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "posicao",
     rota: "/r08-tesouro",
     icone: Landmark,
-    cor: "#049f9a",
+    cor: "#00b3ac",
   },
   {
     id: "r10",
@@ -145,7 +145,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "posicao",
     rota: "/r10-time-deposit",
     icone: Globe2,
-    cor: "#c87b00",
+    cor: "#00b3ac",
   },
   {
     id: "r11",
@@ -161,7 +161,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "posicao",
     rota: "/r11-moeda-tipo",
     icone: Grid3x3,
-    cor: "#5d36ff",
+    cor: "#00b3ac",
   },
   {
     id: "r07",
@@ -177,7 +177,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "posicao",
     rota: "/r07-concentracao",
     icone: PieChart,
-    cor: "#8b47d7",
+    cor: "#00b3ac",
   },
   {
     id: "r05",
@@ -193,7 +193,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "movimentacao",
     rota: "/r05-evolucao",
     icone: LineChart,
-    cor: "#049f9a",
+    cor: "#00b3ac",
   },
   {
     id: "r03",
@@ -209,7 +209,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "rentabilidade",
     rota: "/r03-rentabilidade",
     icone: TrendingUp,
-    cor: "#256f3a",
+    cor: "#00b3ac",
   },
   {
     id: "r04",
@@ -225,7 +225,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "rentabilidade",
     rota: "/r04-prazo-fiscal",
     icone: Hourglass,
-    cor: "#c87b00",
+    cor: "#00b3ac",
   },
   {
     id: "r09",
@@ -241,7 +241,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "rentabilidade",
     rota: "/r09-fundos",
     icone: Coins,
-    cor: "#8b47d7",
+    cor: "#00b3ac",
   },
   {
     id: "kpis",
@@ -257,7 +257,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "indicadores",
     rota: "/kpis",
     icone: Gauge,
-    cor: "#0070f2",
+    cor: "#00b3ac",
   },
   {
     id: "r06",
@@ -273,7 +273,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "indicadores",
     rota: "/r06-indicadores",
     icone: Scale,
-    cor: "#df1278",
+    cor: "#00b3ac",
   },
   {
     id: "r12",
@@ -289,7 +289,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "fechamento",
     rota: "/r12-conciliacao",
     icone: ClipboardCheck,
-    cor: "#256f3a",
+    cor: "#00b3ac",
   },
   {
     id: "r02",
@@ -305,7 +305,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "notas",
     rota: "/r02-movimentacao",
     icone: FileText,
-    cor: "#1d2d3e",
+    cor: "#00b3ac",
   },
   {
     id: "cds",
@@ -321,7 +321,7 @@ export const RELATORIOS: Relatorio[] = [
     secao: "tecnica",
     rota: "/cds",
     icone: Database,
-    cor: "#5d36ff",
+    cor: "#00b3ac",
   },
 ];
 

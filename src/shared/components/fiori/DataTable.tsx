@@ -32,7 +32,7 @@ interface Props<T> {
   navigation?: boolean;
 }
 
-/** Tabela responsiva no padrão sap.m.Table (Horizon) com ordenação e linha de totais */
+/** Tabela no padrão .dx-tabela: cabeçalho mono sobre filete cerceta, números em IBM Plex Mono, ordenação e totais */
 export function DataTable<T>({
   columns,
   rows,
@@ -89,12 +89,13 @@ export function DataTable<T>({
                   key={c.key}
                   scope="col"
                   title={c.headerTitle}
+                  aria-sort={ativo ? (sort!.dir === "asc" ? "ascending" : "descending") : clicavel ? "none" : undefined}
                   onClick={() => toggle(c)}
                   style={{ minWidth: c.minWidth }}
                   className={clsx(
-                    "bg-white px-3 py-2.5 font-semibold text-text text-[13px] border-b border-[#a8b2bd] whitespace-nowrap select-none",
+                    "bg-surface-2 px-3 py-2.5 text-text border-b-2 border-brand whitespace-nowrap select-none transition-colors",
                     align(c.align),
-                    clicavel && "cursor-pointer hover:bg-hover",
+                    clicavel && "cursor-pointer hover:text-link",
                     c.sticky && "sticky left-0 z-[3]",
                     i === 0 && "pl-4",
                   )}
@@ -103,15 +104,15 @@ export function DataTable<T>({
                     {c.header}
                     {ativo &&
                       (sort!.dir === "asc" ? (
-                        <ArrowUp className="w-3.5 h-3.5 text-brand" />
+                        <ArrowUp className="w-3.5 h-3.5 text-link" />
                       ) : (
-                        <ArrowDown className="w-3.5 h-3.5 text-brand" />
+                        <ArrowDown className="w-3.5 h-3.5 text-link" />
                       ))}
                   </span>
                 </th>
               );
             })}
-            {navigation && <th className="bg-white border-b border-[#a8b2bd] w-8" />}
+            {navigation && <th className="bg-surface-2 border-b-2 border-brand w-8" />}
           </tr>
         </thead>
         <tbody>
@@ -132,7 +133,7 @@ export function DataTable<T>({
                 className={clsx(
                   "group",
                   onRowClick && "cursor-pointer",
-                  sel ? "bg-selected" : "bg-white hover:bg-[#f2f4f6]",
+                  sel ? "bg-selected" : "bg-surface hover:bg-hover",
                   rowClassName?.(row),
                 )}
               >
@@ -140,12 +141,12 @@ export function DataTable<T>({
                   <td
                     key={c.key}
                     className={clsx(
-                      "px-3 py-2.5 border-b border-line-soft text-text align-middle",
+                      "px-3 py-2 border-b border-line-soft align-middle",
                       align(c.align),
-                      c.align === "right" && "tabular whitespace-nowrap",
-                      c.sticky && clsx("sticky left-0 z-[1]", sel ? "bg-selected" : "bg-white group-hover:bg-[#f2f4f6]"),
+                      c.align === "right" ? "tabular whitespace-nowrap text-text" : "text-suave",
+                      c.sticky && clsx("sticky left-0 z-[1]", sel ? "bg-selected" : "bg-surface group-hover:bg-hover"),
                       i === 0 && "pl-4",
-                      i === 0 && sel && "shadow-[inset_3px_0_0_#0064d9]",
+                      i === 0 && sel && "shadow-[inset_3px_0_0_#009994]",
                       c.className,
                     )}
                   >
@@ -168,7 +169,7 @@ export function DataTable<T>({
                 <td
                   key={c.key}
                   className={clsx(
-                    "bg-[#f5f6f7] px-3 py-2.5 font-bold text-text border-t border-[#a8b2bd] whitespace-nowrap",
+                    "bg-surface-3 px-3 py-2.5 font-semibold text-text border-t border-line whitespace-nowrap",
                     align(c.align),
                     c.align === "right" && "tabular",
                     c.sticky && "sticky left-0 z-[3]",
@@ -178,7 +179,7 @@ export function DataTable<T>({
                   {i === 0 && !c.total ? totalLabel : c.total ? c.total(sorted) : ""}
                 </td>
               ))}
-              {navigation && <td className="bg-[#f5f6f7] border-t border-[#a8b2bd]" />}
+              {navigation && <td className="bg-surface-3 border-t border-line" />}
             </tr>
           </tfoot>
         )}

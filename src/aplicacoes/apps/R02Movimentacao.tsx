@@ -545,9 +545,9 @@ export function R02Movimentacao() {
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="text-[13px]">
-                    <th className="text-left font-semibold py-2 border-b border-[#a8b2bd]">Tipo de contrato</th>
+                    <th className="text-left py-2 border-b-2 border-brand">Tipo de contrato</th>
                     {colunasMovTipo.map((c) => (
-                      <th key={c} className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">
+                      <th key={c} className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">
                         {c}
                       </th>
                     ))}
@@ -572,10 +572,10 @@ export function R02Movimentacao() {
                       ))}
                     </tr>
                   ))}
-                  <tr className="font-bold bg-[#f5f6f7]">
-                    <td className="py-2.5 pl-2 border-y border-[#a8b2bd]">Total</td>
+                  <tr className="font-bold bg-surface-3">
+                    <td className="py-2.5 pl-2 border-y border-line">Total</td>
                     {[k.brutoIni, k.aplicacoes, k.rendimentos, k.vc, k.resgates, k.comeCotas, k.brutoFim].map((v, i) => (
-                      <td key={i} className="py-2.5 pl-4 pr-2 border-y border-[#a8b2bd] text-right tabular">
+                      <td key={i} className="py-2.5 pl-4 pr-2 border-y border-line text-right tabular">
                         {fmtK(v)}
                       </td>
                     ))}
@@ -639,11 +639,11 @@ export function R02Movimentacao() {
               <table className="w-full text-sm min-w-[820px]">
                 <thead>
                   <tr className="text-[13px]">
-                    <th className="text-left font-semibold py-2 border-b border-[#a8b2bd]">Tipo de aplicação</th>
-                    <th className="text-left font-semibold py-2 pl-4 border-b border-[#a8b2bd]">Remuneração média</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd]">Circulante</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Não circulante</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd]">Total</th>
+                    <th className="text-left py-2 border-b-2 border-brand">Tipo de aplicação</th>
+                    <th className="text-left py-2 pl-4 border-b-2 border-brand">Remuneração média</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand">Circulante</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">Não circulante</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -656,7 +656,7 @@ export function R02Movimentacao() {
                       <td className="py-2.5 pl-4 border-b border-line-soft text-right tabular font-semibold">{fmtK(l.total)}</td>
                     </tr>
                   ))}
-                  <tr className="font-bold bg-[#f5f6f7]">
+                  <tr className="font-bold bg-surface-3">
                     <td className="py-2.5 pl-2">Total</td>
                     <td />
                     <td className="py-2.5 pl-4 text-right tabular">{fmtK(circ)}</td>
@@ -702,13 +702,13 @@ export function R02Movimentacao() {
               <table className="w-full text-sm min-w-[760px]">
                 <thead>
                   <tr className="text-[13px]">
-                    <th className="text-left font-semibold py-2 border-b border-[#a8b2bd]">Tipo de aplicação</th>
+                    <th className="text-left py-2 border-b-2 border-brand">Tipo de aplicação</th>
                     {CLASSES_CPC48.map((c) => (
-                      <th key={c.id} className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">
+                      <th key={c.id} className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">
                         {c.rotulo}
                       </th>
                     ))}
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd]">Total</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -723,7 +723,7 @@ export function R02Movimentacao() {
                       <td className="py-2.5 pl-4 border-b border-line-soft text-right tabular font-semibold">{fmtK(l.total)}</td>
                     </tr>
                   ))}
-                  <tr className="font-bold bg-[#f5f6f7]">
+                  <tr className="font-bold bg-surface-3">
                     <td className="py-2.5 pl-2">Total</td>
                     {d.cpcTotais.map((v, i) => (
                       <td key={i} className="py-2.5 pl-4 text-right tabular">
@@ -821,9 +821,9 @@ function ListaCartoes({
   itens: { chave: string; titulo: ReactNode; sub?: string; rotuloValor?: string; valor: string; total?: boolean; campos: { rotulo: string; valor: string }[] }[];
 }) {
   return (
-    <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft -mx-4">
+    <ul className="lg:hidden border-t border-line divide-y divide-line-soft -mx-4">
       {itens.map((it) => (
-        <li key={it.chave} className={clsx("px-4 py-3", it.total && "bg-[#f5f6f7]")}>
+        <li key={it.chave} className={clsx("px-4 py-3", it.total && "bg-surface-3")}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className={clsx("text-sm text-text", it.total ? "font-bold" : "font-semibold")}>{it.titulo}</div>
@@ -868,16 +868,16 @@ function NotaTabela({ cabecalho, grupos, linhas }: { cabecalho: string[]; grupos
             <tr className="text-[13px]">
               <th />
               {grupos.map((g) => (
-                <th key={g} colSpan={cabecalho.length / grupos.length} className="text-center font-bold py-1.5 border-b border-line-soft">
+                <th key={g} colSpan={cabecalho.length / grupos.length} className="text-center py-1.5 border-b border-line-soft">
                   {g}
                 </th>
               ))}
             </tr>
           )}
           <tr className="text-[13px]">
-            <th className="text-left font-semibold py-2 border-b border-[#a8b2bd]">R$ mil</th>
+            <th className="text-left py-2 border-b-2 border-brand">R$ mil</th>
             {cabecalho.map((c, i) => (
-              <th key={i} className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">
+              <th key={i} className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">
                 {c}
               </th>
             ))}
@@ -896,10 +896,10 @@ function NotaTabela({ cabecalho, grupos, linhas }: { cabecalho: string[]; grupos
             const saldo = l.estilo === "saldo";
             const dos = l.estilo === "dosQuais";
             return (
-              <tr key={l.chave ?? n} className={saldo ? "font-bold bg-[#f5f6f7]" : ""}>
+              <tr key={l.chave ?? n} className={saldo ? "font-bold bg-surface-3" : ""}>
                 <td
                   className={clsx(
-                    saldo ? "py-2.5 pl-2 border-y border-[#a8b2bd]" : "border-b border-line-soft",
+                    saldo ? "py-2.5 pl-2 border-y border-line" : "border-b border-line-soft",
                     dos ? "py-1.5 pl-6 text-[13px] italic text-label" : !saldo && "py-2 pl-2",
                     l.estilo === "info" && "text-label",
                   )}
@@ -911,7 +911,7 @@ function NotaTabela({ cabecalho, grupos, linhas }: { cabecalho: string[]; grupos
                     key={i}
                     className={clsx(
                       "text-right tabular pl-4 pr-2",
-                      saldo ? "py-2.5 border-y border-[#a8b2bd]" : "border-b border-line-soft",
+                      saldo ? "py-2.5 border-y border-line" : "border-b border-line-soft",
                       dos ? "py-1.5 text-[13px] text-label" : !saldo && "py-2",
                       l.estilo === "info" && "text-label",
                     )}
@@ -929,7 +929,7 @@ function NotaTabela({ cabecalho, grupos, linhas }: { cabecalho: string[]; grupos
 }
 
 function ListaEventos({ titulo, eventos }: { titulo: string; eventos: EventoMestre[] }) {
-  const cor = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)?.cor ?? "#758ca4";
+  const cor = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)?.cor ?? "#908c85";
   return (
     <div>
       <div className="text-[13px] font-bold text-text mb-1">

@@ -36,8 +36,8 @@ import {
 import { arredondarTabela, ratear, saldosMil } from "../lib/arredondamento";
 
 const rel = relatorioCaptacao("c06");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-const legendStyle = { fontSize: 12, fontFamily: "72, Arial" };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
+const legendStyle = { fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" };
 
 type Aba = "comp" | "mov" | "venc" | "carac" | "custos" | "cov" | "nota";
 
@@ -117,7 +117,7 @@ const NOTA_ARREDONDAMENTO =
 
 /** Legenda dos gráficos: texto na cor do texto (a cor da série fica só no marcador) */
 function textoLegenda(valor: string) {
-  return <span style={{ color: "#1d2d3e" }}>{valor}</span>;
+  return <span style={{ color: "#f7f3e7" }}>{valor}</span>;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -1198,7 +1198,7 @@ export function C06NotaExplicativa() {
           <div className="font-semibold text-text leading-snug">{x.c.instrumento}</div>
           <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-label">
             <Tag>{x.c.id}</Tag>
-            {x.c.formaBNDES && <Tag color={x.c.formaBNDES === "Direto" ? "#0070f2" : "#8b47d7"}>{x.c.formaBNDES}</Tag>}
+            {x.c.formaBNDES && <Tag color={x.c.formaBNDES === "Direto" ? "#009994" : "#a462a6"}>{x.c.formaBNDES}</Tag>}
             <span>{EMPRESAS[x.c.empresa]?.nome ?? x.c.empresa}</span>
           </div>
           {bndes ? (
@@ -1521,26 +1521,26 @@ export function C06NotaExplicativa() {
               <table className="w-full text-sm border-separate border-spacing-0 min-w-[1080px]">
                 <thead>
                   <tr className="text-[13px]">
-                    <th className="sticky left-0 z-[2] bg-white" />
+                    <th className="sticky left-0 z-[2] bg-surface-2" />
                     <th className="hidden sm:table-cell" />
                     <th />
-                    <th colSpan={3} className="text-center font-bold py-1.5 pl-4 border-b border-line-soft whitespace-nowrap">
+                    <th colSpan={3} className="text-center py-1.5 pl-4 border-b border-line-soft whitespace-nowrap">
                       {fmtDate(db)}
                     </th>
-                    <th colSpan={3} className="text-center font-bold py-1.5 pl-6 border-b border-line-soft whitespace-nowrap">
+                    <th colSpan={3} className="text-center py-1.5 pl-6 border-b border-line-soft whitespace-nowrap">
                       {fmtDate(ab)}
                     </th>
                   </tr>
                   <tr className="text-[13px]">
-                    <th className="sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[170px] sm:min-w-[250px]">Modalidade</th>
-                    <th className="hidden sm:table-cell text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[210px]">Encargos contratuais (média ponderada)</th>
-                    <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">Taxa efetiva a.a.</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Circulante</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Não circulante</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Total</th>
-                    <th className="text-right font-semibold py-2 pl-6 border-b border-[#a8b2bd] whitespace-nowrap">Circulante</th>
-                    <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Não circulante</th>
-                    <th className="text-right font-semibold py-2 pl-4 pr-2 border-b border-[#a8b2bd] whitespace-nowrap">Total</th>
+                    <th className="sticky left-0 z-[2] bg-surface-2 text-left py-2 pr-3 border-b-2 border-brand min-w-[170px] sm:min-w-[250px]">Modalidade</th>
+                    <th className="hidden sm:table-cell text-left py-2 pr-3 border-b-2 border-brand min-w-[210px]">Encargos contratuais (média ponderada)</th>
+                    <th className="text-right py-2 pl-3 border-b-2 border-brand whitespace-nowrap">Taxa efetiva a.a.</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">Circulante</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">Não circulante</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">Total</th>
+                    <th className="text-right py-2 pl-6 border-b-2 border-brand whitespace-nowrap">Circulante</th>
+                    <th className="text-right py-2 pl-4 border-b-2 border-brand whitespace-nowrap">Não circulante</th>
+                    <th className="text-right py-2 pl-4 pr-2 border-b-2 border-brand whitespace-nowrap">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1551,8 +1551,8 @@ export function C06NotaExplicativa() {
                     const ids = idsDoGrupo(l);
                     return (
                       <Fragment key={l.grupo}>
-                        <tr className="group cursor-pointer hover:bg-[#f2f4f6]" onClick={() => toggleGrupo(l.grupo)}>
-                          <td className="sticky left-0 z-[1] bg-white group-hover:bg-[#f2f4f6] py-2.5 pr-3 border-b border-line-soft">
+                        <tr className="group cursor-pointer hover:bg-hover" onClick={() => toggleGrupo(l.grupo)}>
+                          <td className="sticky left-0 z-[1] bg-surface group-hover:bg-hover py-2.5 pr-3 border-b border-line-soft">
                             <button
                               type="button"
                               className="inline-flex items-start gap-1.5 text-left font-semibold text-text"
@@ -1588,8 +1588,8 @@ export function C06NotaExplicativa() {
                             const cDb = x ? m.compDb.contratos.get(id) : undefined;
                             const cAb = xa ? m.compAb.contratos.get(id) : undefined;
                             return (
-                              <tr key={id} className="text-[13px] bg-[#fafbfc]">
-                                <td className="sticky left-0 z-[1] bg-[#fafbfc] py-2 pl-7 pr-3 border-b border-line-soft">
+                              <tr key={id} className="text-[13px] bg-surface-3">
+                                <td className="sticky left-0 z-[1] bg-surface-3 py-2 pl-7 pr-3 border-b border-line-soft">
                                   <div className="font-semibold text-text">
                                     {c.id}
                                     {x?.reclassificado && <span className="ml-1.5 text-negative font-normal">(reclassificado)</span>}
@@ -1617,9 +1617,9 @@ export function C06NotaExplicativa() {
                     );
                   })}
                   <tr className="font-bold">
-                    <td className="sticky left-0 z-[1] bg-[#f5f6f7] py-2.5 pl-2 pr-3 border-y border-[#a8b2bd]">Total</td>
-                    <td className="hidden sm:table-cell bg-[#f5f6f7] py-2.5 border-y border-[#a8b2bd]" />
-                    <td className="bg-[#f5f6f7] py-2.5 pl-3 border-y border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtPct(d.custoMedio)}</td>
+                    <td className="sticky left-0 z-[1] bg-surface-3 py-2.5 pl-2 pr-3 border-y border-line">Total</td>
+                    <td className="hidden sm:table-cell bg-surface-3 py-2.5 border-y border-line" />
+                    <td className="bg-surface-3 py-2.5 pl-3 border-y border-line text-right tabular whitespace-nowrap">{fmtPct(d.custoMedio)}</td>
                     <Num v={m.compDb.total.circ} total />
                     <Num v={m.compDb.total.nc} total />
                     <Num v={m.compDb.total.total} total />
@@ -1673,10 +1673,10 @@ export function C06NotaExplicativa() {
               <div className="h-64 xl:h-auto xl:flex-1 xl:min-h-[256px] -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={graficoComp} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
-                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="grupo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                    <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                    <XAxis dataKey="grupo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 1)}\u00a0mi`, n]} cursor={{ fill: "#f2f4f6" }} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 1)}\u00a0mi`, n]} cursor={{ fill: "#2f2e2e" }} />
                     <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                     <Bar dataKey="abertura" name={fmtDate(ab)} fill={CHART_SEMANTIC.neutral} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
                     <Bar dataKey="dataBase" name={fmtDate(db)} fill={CHART_COLORS[6]} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
@@ -1859,13 +1859,13 @@ export function C06NotaExplicativa() {
               <div className="h-72 -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={d.graficoVenc} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="ano" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                    <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                    <XAxis dataKey="ano" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={32} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <Tooltip
                       contentStyle={tooltipStyle}
                       formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 1)}\u00a0mi`, n]}
-                      cursor={{ fill: "#f2f4f6" }}
+                      cursor={{ fill: "#2f2e2e" }}
                     />
                     <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                     {d.gruposVenc.map((g) => (
@@ -1941,12 +1941,12 @@ export function C06NotaExplicativa() {
               <div className="-ml-2" style={{ height: Math.max(240, graficoCustos.length * 26 + 60) }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={graficoCustos} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} barCategoryGap={5}>
-                    <CartesianGrid horizontal={false} stroke="#e5e5e5" />
-                    <XAxis type="number" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} tickFormatter={(v: number) => fmtDec(v, 0)} />
+                    <CartesianGrid horizontal={false} stroke="#3f3f3d" />
+                    <XAxis type="number" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <YAxis type="category" dataKey="id" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={60} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 0)}\u00a0mil`, n]} cursor={{ fill: "#f2f4f6" }} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 0)}\u00a0mil`, n]} cursor={{ fill: "#2f2e2e" }} />
                     <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
-                    <Bar dataKey="apropriado" stackId="c" name="Apropriado acumulado" fill="#a8b2bd" isAnimationActive={false} />
+                    <Bar dataKey="apropriado" stackId="c" name="Apropriado acumulado" fill="#575653" isAnimationActive={false} />
                     <Bar dataKey="circ" stackId="c" name="A apropriar – circulante" fill={CHART_COLORS[1]} isAnimationActive={false} />
                     <Bar dataKey="nc" stackId="c" name="A apropriar – não circulante" fill={CHART_COLORS[6]} radius={[0, 4, 4, 0]} isAnimationActive={false} />
                   </BarChart>
@@ -2010,7 +2010,7 @@ export function C06NotaExplicativa() {
               <DataTable columns={colCovenants} rows={apuracoes} rowKey={(a) => a.cov.id} />
             </div>
             {/* Pop-in (sap.m.Table responsiva) em telas estreitas */}
-            <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
               {apuracoes.map((a) => {
                 const sit = situacaoCovenant(a);
                 return (
@@ -2094,11 +2094,11 @@ export function C06NotaExplicativa() {
 // ---------------------------------------------------------------------------
 
 const COR_ESTADO: Record<ValueState, string> = {
-  positive: "#30914c",
-  critical: "#e76500",
-  negative: "#f53232",
-  information: "#0070f2",
-  neutral: "#788fa6",
+  positive: "#009994",
+  critical: "#ffa436",
+  negative: "#d9563e",
+  information: "#009994",
+  neutral: "#908c85",
 };
 
 /** Contratos da modalidade na data-base ou na abertura (ordem da carteira) */
@@ -2116,7 +2116,7 @@ function Num({ v, forte, total, leve, largo, ultimo }: { v: number; forte?: bool
         "text-right tabular whitespace-nowrap",
         largo ? "pl-6" : "pl-4",
         ultimo && "pr-2",
-        total ? "bg-[#f5f6f7] py-2.5 border-y border-[#a8b2bd]" : clsx("border-b border-line-soft", leve ? "py-2 text-label" : "py-2.5"),
+        total ? "bg-surface-3 py-2.5 border-y border-line" : clsx("border-b border-line-soft", leve ? "py-2 text-label" : "py-2.5"),
         forte && "font-semibold",
       )}
     >
@@ -2162,8 +2162,8 @@ function NotaTabela({
           <tr className="text-[13px]">
             <th
               className={clsx(
-                "sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd]",
-                totalPrimeiro && "max-sm:w-[150px] max-sm:min-w-[150px] max-sm:shadow-[inset_-1px_0_0_#e5e5e5]",
+                "sticky left-0 z-[2] bg-surface-2 text-left py-2 pr-3 border-b-2 border-brand",
+                totalPrimeiro && "max-sm:w-[150px] max-sm:min-w-[150px] max-sm:shadow-[inset_-1px_0_0_#3f3f3d]",
               )}
             >
               {primeira}
@@ -2171,7 +2171,7 @@ function NotaTabela({
             {ordem.map((i) => (
               <th
                 key={i}
-                className={clsx("text-right font-semibold py-2 pl-4 pr-2 border-b border-[#a8b2bd] whitespace-nowrap", ehTotal(i) && "bg-[#f5f6f7] font-bold")}
+                className={clsx("text-right py-2 pl-4 pr-2 border-b-2 border-brand whitespace-nowrap", ehTotal(i) && "bg-surface-2")}
               >
                 {cabecalho[i]}
               </th>
@@ -2180,15 +2180,15 @@ function NotaTabela({
         </thead>
         <tbody>
           {linhas.map((l) => {
-            const cell = l.forte ? "py-2.5 bg-[#f5f6f7] border-y border-[#a8b2bd] font-bold" : "py-2 border-b border-line-soft";
+            const cell = l.forte ? "py-2.5 bg-surface-3 border-y border-line font-bold" : "py-2 border-b border-line-soft";
             return (
               <tr key={l.rotulo}>
                 <td
                   className={clsx(
                     "sticky left-0 z-[1] pr-3",
-                    l.forte ? cell : clsx(cell, "bg-white"),
+                    l.forte ? cell : clsx(cell, "bg-surface"),
                     l.recuo ? "pl-6 text-label" : "pl-2",
-                    totalPrimeiro && "max-sm:shadow-[inset_-1px_0_0_#e5e5e5]",
+                    totalPrimeiro && "max-sm:shadow-[inset_-1px_0_0_#3f3f3d]",
                   )}
                 >
                   {l.rotulo}
@@ -2200,7 +2200,7 @@ function NotaTabela({
                       "text-right tabular whitespace-nowrap pl-4 pr-2",
                       cell,
                       l.recuo && "text-label",
-                      ehTotal(i) && !l.forte && "bg-[#f5f6f7] font-semibold",
+                      ehTotal(i) && !l.forte && "bg-surface-3 font-semibold",
                     )}
                   >
                     {fmtK(l.valores[i])}
@@ -2289,7 +2289,7 @@ function ComposicaoCelular({
 }) {
   return (
     <div className="sm:hidden -mx-4">
-      <div className="flex items-end justify-between gap-3 px-4 py-2 text-xs text-label border-y border-[#a8b2bd]">
+      <div className="flex items-end justify-between gap-3 px-4 py-2 text-xs text-label border-y border-line">
         <span className="font-semibold text-text text-[13px]">Modalidade</span>
         <span className="text-right">
           R$ mil · <span className="font-semibold text-text">{fmtDate(db)}</span> ({fmtDate(ab)})
@@ -2324,7 +2324,7 @@ function ComposicaoCelular({
                 </dl>
               </button>
               {aberto && (
-                <ul className="bg-[#fafbfc] border-t border-line-soft divide-y divide-line-soft">
+                <ul className="bg-surface-3 border-t border-line-soft divide-y divide-line-soft">
                   {ids.map((id) => {
                     const x = l.pos.find((y) => y.c.id === id);
                     const xa = l.posA.find((y) => y.c.id === id);
@@ -2362,7 +2362,7 @@ function ComposicaoCelular({
             </li>
           );
         })}
-        <li className="px-4 py-3 bg-[#f5f6f7] border-t border-[#a8b2bd]">
+        <li className="px-4 py-3 bg-surface-3 border-t border-line">
           <div className="flex items-start justify-between gap-3">
             <span className="text-sm font-bold text-text">Total</span>
             <span className="text-right tabular">
@@ -2395,7 +2395,7 @@ function CaracteristicasCelular({
 }) {
   const captado = (x: PosicaoDivida) => Math.round(mil(x.c.valorCaptado));
   return (
-    <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+    <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
       {pos.map((x) => (
         <li key={x.c.id} className="px-4 py-3">
           <div className="flex items-start justify-between gap-3">
@@ -2403,7 +2403,7 @@ function CaracteristicasCelular({
               <div className="text-sm font-semibold text-text leading-snug">{x.c.instrumento}</div>
               <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-label">
                 <Tag>{x.c.id}</Tag>
-                {x.c.formaBNDES && <Tag color={x.c.formaBNDES === "Direto" ? "#0070f2" : "#8b47d7"}>{x.c.formaBNDES}</Tag>}
+                {x.c.formaBNDES && <Tag color={x.c.formaBNDES === "Direto" ? "#009994" : "#a462a6"}>{x.c.formaBNDES}</Tag>}
                 <span>{EMPRESAS[x.c.empresa]?.nome ?? x.c.empresa}</span>
               </div>
             </div>
@@ -2445,7 +2445,7 @@ function CaracteristicasCelular({
         </li>
       ))}
       {pos.length > 1 && (
-        <li className="px-4 py-3 bg-[#f5f6f7] flex items-start justify-between gap-3">
+        <li className="px-4 py-3 bg-surface-3 flex items-start justify-between gap-3">
           <span className="text-sm font-bold text-text">Total</span>
           <span className="text-right tabular">
             <span className="block text-sm font-bold text-text">{fmtK(soma(pos, saldoMil))}</span>
@@ -2468,7 +2468,7 @@ interface CustoMil {
 /** Custos de transação por contrato no celular (lista com pop-in, no lugar da tabela larga) */
 function CustosCelular({ custos, valores, total }: { custos: LinhaCusto[]; valores: (l: LinhaCusto) => CustoMil; total: CustoMil }) {
   return (
-    <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+    <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
       {custos.map((l) => {
         const v = valores(l);
         const pct = l.original > 0 ? l.apropriado / l.original : 0;
@@ -2498,7 +2498,7 @@ function CustosCelular({ custos, valores, total }: { custos: LinhaCusto[]; valor
           </li>
         );
       })}
-      <li className="px-4 py-3 bg-[#f5f6f7]">
+      <li className="px-4 py-3 bg-surface-3">
         <div className="flex items-start justify-between gap-3">
           <span className="text-sm font-bold text-text">Total</span>
           <span className="text-sm font-bold tabular text-text">{fmtK(total.aApropriar)}</span>

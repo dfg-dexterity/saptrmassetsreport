@@ -26,20 +26,10 @@ import { cotaFundo, historicoFundo, posicaoFundo, type EventoComeCotas, type His
 
 const rel = relatorioPorId("r09");
 const TIPO = "Fundo de investimento";
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
-/** Cor fixa de cada fundo em todos os gráficos (paleta Horizon; tons distintos entre si, cinza-esverdeado no fundo resgatado) */
-const CORES_FUNDO = [
-  CHART_COLORS[0],
-  CHART_COLORS[1],
-  CHART_COLORS[2],
-  CHART_COLORS[3],
-  CHART_COLORS[4],
-  CHART_COLORS[5],
-  CHART_COLORS[8],
-  CHART_COLORS[10],
-  CHART_COLORS[9],
-];
+/** Cor fixa de cada fundo em todos os gráficos: as 9 primeiras posições da paleta, na ordem validada para vizinhos */
+const CORES_FUNDO = CHART_COLORS.slice(0, 9);
 const corFundo = (f: Fundo) => CORES_FUNDO[FUNDOS.indexOf(f) % CORES_FUNDO.length];
 
 const REGIME_CURTO: Record<string, string> = {
@@ -383,7 +373,7 @@ export function R09Fundos() {
         <div className="leading-snug">
           <div className="text-text">{l.f.classe}</div>
           <div className="mt-0.5">
-            <Tag color={semComeCotas(l.f) ? "#788fa6" : "#8b47d7"}>{regimeCurto(l.f.regimeIR)}</Tag>
+            <Tag color={semComeCotas(l.f) ? "#908c85" : "#a462a6"}>{regimeCurto(l.f.regimeIR)}</Tag>
           </div>
         </div>
       ),
@@ -738,7 +728,7 @@ export function R09Fundos() {
         </div>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select
@@ -790,14 +780,14 @@ export function R09Fundos() {
               emptyText="Nenhum fundo nesta empresa na data-base"
             />
           </div>
-          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
             {listaCelular.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum fundo nesta empresa na data-base</li>}
             {listaCelular.map((l) => (
               <li key={l.f.id}>
                 <button
                   type="button"
                   onClick={() => alternar(l.f.id)}
-                  className={clsx("w-full text-left px-4 py-3", l.f.id === selecionado ? "bg-selected" : "hover:bg-[#f2f4f6]")}
+                  className={clsx("w-full text-left px-4 py-3", l.f.id === selecionado ? "bg-selected" : "hover:bg-hover")}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -825,7 +815,7 @@ export function R09Fundos() {
               </li>
             ))}
             {ativos.length > 0 && (
-              <li className="px-4 py-3 bg-[#f5f6f7]">
+              <li className="px-4 py-3 bg-surface-3">
                 <div className="text-sm font-bold text-text">
                   Em carteira · {plural(ativos.length, "fundo", "fundos")}
                   {resgatados.length > 0 && <span className="font-normal text-label text-xs"> · resgatados fora do total</span>}
@@ -911,19 +901,19 @@ export function R09Fundos() {
               <div className="h-64 -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={d.grafico} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                    <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                    <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      cursor={{ fill: "#f2f4f6" }}
+                      cursor={{ fill: "#2f2e2e" }}
                       formatter={(v: number, n: string) => [fmtBRL(v * 1e3), n]}
                       labelFormatter={(_, pl) => {
                         const row = pl?.[0]?.payload as { data?: string; proj?: boolean } | undefined;
                         return row?.data ? `${fmtDate(row.data)}${row.proj ? " (projeção)" : ""}` : "";
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
+                    <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
                     {d.fundosGrafico.map((f) => (
                       <Bar key={f.id} dataKey={f.id} name={f.id} stackId="cc" fill={corFundo(f)} isAnimationActive={false}>
                         {d.grafico.map((g) => (
@@ -1296,7 +1286,7 @@ function ValoresCelular({ itens }: { itens: { rotulo: string; valor: string; for
 
 function Mini({ titulo, valor, sub }: { titulo: string; valor: string; sub: string }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0">
       <div className="text-xs text-label truncate">{titulo}</div>
       <div className="text-lg font-bold text-text tabular whitespace-nowrap">{valor}</div>
       <div className="text-xs text-label tabular truncate">{sub}</div>
@@ -1316,7 +1306,7 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
   const yTicks = Array.from({ length: Math.round((yMax - yMin) / passo) + 1 }, (_, i) => yMin + i * passo);
   const eventos = [...l.eventos.map((e) => ({ ...e, projetado: false })), ...(l.proximo ? [{ ...l.proximo, projetado: true }] : [])];
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-surface rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -1336,7 +1326,7 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
           <ObjectStatus inverted icon={false} state="critical">
             {f.cpc48 === "VJ por Resultado" ? "VJ por resultado" : f.cpc48 === "Custo Amortizado" ? "Custo amortizado" : f.cpc48}
           </ObjectStatus>
-          <Tag color={semComeCotas(f) ? "#788fa6" : "#8b47d7"}>{regimeCurto(f.regimeIR)}</Tag>
+          <Tag color={semComeCotas(f) ? "#908c85" : "#a462a6"}>{regimeCurto(f.regimeIR)}</Tag>
           <Tag>Rating {f.rating}</Tag>
         </div>
       </header>
@@ -1416,8 +1406,8 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
           <div className="h-48 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={serie} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="rotulo" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} minTickGap={8} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="rotulo" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} minTickGap={8} />
                 <YAxis
                   tick={AXIS_STYLE}
                   tickLine={false}
@@ -1428,13 +1418,13 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
                   tickFormatter={(v: number) => fmtDec(v, 0)}
                 />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtDec(v, 2), n]} />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                <ReferenceLine y={100} stroke="#a8b2bd" />
+                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+                <ReferenceLine y={100} stroke="#575653" />
                 <Line dataKey="cota" name="Cota do fundo" stroke={l.cor} strokeWidth={2.25} dot={false} isAnimationActive={false} />
                 <Line
                   dataKey="cdi"
                   name="CDI acumulado"
-                  stroke="#1d2d3e"
+                  stroke="#f7f3e7"
                   strokeWidth={1.75}
                   strokeDasharray="5 4"
                   dot={false}

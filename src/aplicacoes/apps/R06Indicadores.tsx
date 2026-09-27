@@ -34,7 +34,7 @@ import {
 } from "../lib/indicadores";
 
 const rel = relatorioPorId("r06");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 const SERIE: { rotulo: string; formula?: string; v: (i: IndicadoresTrimestre) => number; tipo: "valor" | "x" }[] = [
   { rotulo: "Dívida bruta", v: (i) => i.dividaBruta, tipo: "valor" },
@@ -309,16 +309,16 @@ export function R06Indicadores() {
           <div className="h-72 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={grafico} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="tri" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="tri" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
                 <YAxis yAxisId="v" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />
                 <YAxis yAxisId="x" orientation="right" domain={[0, 3.5]} ticks={[0, 1, 2, 3]} tickFormatter={(v: number) => `${v}x`} tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => (n === "DL / EBITDA" ? [fmtX(v), n] : [`R$ ${fmtDec(v, 1)} mi`, n])} />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                <ReferenceLine yAxisId="x" y={covDl.cov.limite} stroke="#f53232" strokeDasharray="4 4" label={{ value: `Covenant ${fmtX(covDl.cov.limite, 1)}`, fill: "#aa0808", fontSize: 11, position: "insideTopRight" }} />
-                <Bar yAxisId="v" dataKey="divida" name="Dívida bruta" fill="#df1278" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Bar yAxisId="v" dataKey="caixa" name="Caixa + aplicações" fill="#168eff" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Line yAxisId="x" dataKey="dlEbitda" name="DL / EBITDA" stroke="#1d2d3e" strokeWidth={2.5} dot={{ r: 3.5, fill: "#1d2d3e" }} isAnimationActive={false} />
+                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+                <ReferenceLine yAxisId="x" y={covDl.cov.limite} stroke="#d9563e" strokeDasharray="4 4" label={{ value: `Covenant ${fmtX(covDl.cov.limite, 1)}`, fill: "#e4806c", fontSize: 11, position: "insideTopRight" }} />
+                <Bar yAxisId="v" dataKey="divida" name="Dívida bruta" fill="#c9668f" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar yAxisId="v" dataKey="caixa" name="Caixa + aplicações" fill="#4f8fd1" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Line yAxisId="x" dataKey="dlEbitda" name="DL / EBITDA" stroke="#f7f3e7" strokeWidth={2.5} dot={{ r: 3.5, fill: "#f7f3e7" }} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -326,16 +326,16 @@ export function R06Indicadores() {
 
         <Card className="xl:col-span-2" title="Carry" subtitle={`Rentabilidade das aplicações em R$ − custo da dívida (a.a.) · data-base ${fmtDate(db)}`}>
           <div className="space-y-3 mt-1">
-            <BarraTaxa rotulo="Aplicações em R$ – taxa bruta média" valor={carry.taxaBruta} max={maxTaxa} cor="#168eff" />
-            <BarraTaxa rotulo={`Aplicações em R$ – taxa líquida (IR ${fmtPct(carry.aliquotaMediaIR, 1)})`} valor={carry.taxaLiquida} max={maxTaxa} cor="#75980b" />
-            <BarraTaxa rotulo="Custo médio ponderado da dívida" valor={carry.custoDivida} max={maxTaxa} cor="#df1278" />
+            <BarraTaxa rotulo="Aplicações em R$ – taxa bruta média" valor={carry.taxaBruta} max={maxTaxa} cor="#4f8fd1" />
+            <BarraTaxa rotulo={`Aplicações em R$ – taxa líquida (IR ${fmtPct(carry.aliquotaMediaIR, 1)})`} valor={carry.taxaLiquida} max={maxTaxa} cor="#5e9454" />
+            <BarraTaxa rotulo="Custo médio ponderado da dívida" valor={carry.custoDivida} max={maxTaxa} cor="#c9668f" />
           </div>
           <div className="grid grid-cols-2 gap-3 mt-5">
-            <div className="rounded-lg bg-[#f5f6f7] px-3 py-2">
+            <div className="rounded-lg bg-surface-3 px-3 py-2">
               <div className="text-xs text-label">Carry bruto</div>
               <div className={`text-xl font-bold tabular ${carry.carryBruto >= 0 ? "text-positive" : "text-negative"}`}>{fmtDec(carry.carryBruto * 100, 2)} p.p.</div>
             </div>
-            <div className="rounded-lg bg-[#f5f6f7] px-3 py-2">
+            <div className="rounded-lg bg-surface-3 px-3 py-2">
               <div className="text-xs text-label">{carry.custoCarregamento >= 0 ? "Ganho" : "Custo"} de carregamento</div>
               <div className={`text-xl font-bold tabular ${carry.custoCarregamento >= 0 ? "text-positive" : "text-negative"}`}>{fmtCompact(Math.abs(carry.custoCarregamento))}/ano</div>
             </div>
@@ -396,7 +396,7 @@ export function R06Indicadores() {
             rowKey={(c) => c.id}
           />
         </div>
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {politica.map((c) => (
             <li key={c.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -424,9 +424,9 @@ export function R06Indicadores() {
           <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className="sticky left-0 z-[1] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[150px] sm:min-w-[260px]">Indicador</th>
+                <th className="sticky left-0 z-[1] bg-surface-2 text-left pl-4 pr-3 py-2.5 border-b-2 border-brand min-w-[150px] sm:min-w-[260px]">Indicador</th>
                 {d.serie.map((i) => (
-                  <th key={i.data} className="px-3 py-2.5 text-right font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">
+                  <th key={i.data} className="px-3 py-2.5 text-right border-b-2 border-brand whitespace-nowrap">
                     {fmtQuarter(i.data)}
                   </th>
                 ))}
@@ -435,7 +435,7 @@ export function R06Indicadores() {
             <tbody>
               {SERIE.map((s) => (
                 <tr key={s.rotulo} className={s.rotulo === "Dívida líquida" || s.tipo === "x" ? "font-semibold" : ""}>
-                  <td className="sticky left-0 z-[1] bg-white pl-4 pr-3 py-2 border-b border-line-soft max-w-[170px] sm:max-w-none">
+                  <td className="sticky left-0 z-[1] bg-surface pl-4 pr-3 py-2 border-b border-line-soft max-w-[170px] sm:max-w-none">
                     <div className="sm:whitespace-nowrap leading-snug">{s.rotulo}</div>
                     {s.formula && <div className="text-xs text-label font-normal leading-snug">{s.formula}</div>}
                   </td>
@@ -487,7 +487,7 @@ export function R06Indicadores() {
             defaultSort={{ key: "tot", dir: "desc" }}
           />
         </div>
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {[...dividas]
             .sort((a, b) => b.circulante + b.naoCirculante - (a.circulante + a.naoCirculante))
             .map((x) => (
@@ -507,7 +507,7 @@ export function R06Indicadores() {
                 </dl>
               </li>
             ))}
-          <li className="px-4 py-3 bg-[#f5f6f7]">
+          <li className="px-4 py-3 bg-surface-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-sm font-bold text-text">Total</div>
@@ -633,7 +633,7 @@ function CardCovenants({ covenants, dataBase }: { covenants: ApuracaoCovenant[];
         <DataTable columns={colunas} rows={covenants} rowKey={(a) => a.cov.id} />
       </div>
       {/* Pop-in (sap.m.Table responsiva): em telas estreitas as colunas descem para baixo do indicador */}
-      <ul className="xl:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+      <ul className="xl:hidden border-t border-line divide-y divide-line-soft">
         {covenants.map((a) => {
           const r = rotuloCovenant(a);
           return (
@@ -716,7 +716,7 @@ function BarraTaxa({ rotulo, valor, max, cor }: { rotulo: string; valor: number;
           {fmtPct(valor)}
         </span>
       </div>
-      <div className="h-2.5 rounded-full bg-[#eff1f2] overflow-hidden">
+      <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${(valor / max) * 100}%`, backgroundColor: cor }} />
       </div>
     </div>

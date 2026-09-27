@@ -430,18 +430,18 @@ export const GRUPO_MODALIDADE: Record<Modalidade, string> = {
 
 /** Cor de cada grupo de modalidade – a mesma em todas as telas de Captações (Launchpad, C00–C06) */
 export const COR_MODALIDADE: Record<string, string> = {
-  Debêntures: "#168eff",
-  BNDES: "#c87b00",
-  CRA: "#75980b",
-  CCB: "#df1278",
-  CRI: "#8b47d7",
+  Debêntures: "#009994",
+  BNDES: "#c97d24",
+  CRA: "#a462a6",
+  CCB: "#5e9454",
+  CRI: "#4f8fd1",
 };
 
-/** Cor de cada indexador (paleta sequencial própria, distinta da de modalidades) */
+/** Cor de cada indexador: as posições 6–10 da paleta categórica (distintas das de modalidades), em ordem validada */
 export const COR_INDEXADOR: Record<IndexadorDivida, string> = {
-  CDI: "#0b4f6c",
-  IPCA: "#1f8a8a",
-  TJLP: "#4fb3a9",
-  TLP: "#8fd3c7",
-  "Pré": "#556b82",
+  CDI: "#1fa2c0",
+  IPCA: "#cf7a5c",
+  TJLP: "#8a7fd6",
+  TLP: "#a38a3c",
+  "Pré": "#c9668f",
 };

@@ -1712,7 +1712,7 @@ export function KpisAplicacoes() {
         </>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -1755,7 +1755,7 @@ export function KpisAplicacoes() {
                 origem={ORIGEM.cm}
                 rodape={`Moeda estrangeira: ${fmtCompact(d.moedaEstrangeira)} (${fmtPct(d.f.saldo > 0 ? d.moedaEstrangeira / d.f.saldo : 0, 1)})`}
               >
-                <div className="flex h-3 rounded-full overflow-hidden bg-[#e5e5e5]" aria-hidden>
+                <div className="flex h-3 rounded-full overflow-hidden bg-surface-2" aria-hidden>
                   {d.composicao
                     .filter((c) => c.valor > 0)
                     .map((c) => (
@@ -1801,7 +1801,7 @@ export function KpisAplicacoes() {
                     { rotulo: "(−) IR", valor: d.r12.ir, cor: CHART_SEMANTIC.bad },
                     { rotulo: "(−) IOF", valor: d.r12.iof, cor: CHART_SEMANTIC.bad },
                     { rotulo: "(−) Custódia e tarifas", valor: d.r12.taxas, cor: CHART_SEMANTIC.critical },
-                    { rotulo: "Rendimento líquido", valor: d.r12.liq, cor: "#0070f2", forte: true },
+                    { rotulo: "Rendimento líquido", valor: d.r12.liq, cor: "#009994", forte: true },
                   ]}
                 />
               </KpiPainel>
@@ -1828,10 +1828,10 @@ export function KpisAplicacoes() {
                 <KpiPonte
                   base={d.endiv.dividaBruta}
                   linhas={[
-                    { rotulo: "Dívida bruta", valor: d.endiv.dividaBruta, cor: "#df1278", forte: true },
-                    { rotulo: `(−) Caixa${d.endiv.dataCaixa && !caixaNaData ? ` (${fmtDate(d.endiv.dataCaixa)})` : ""}`, valor: d.endiv.caixa, cor: "#758ca4" },
-                    { rotulo: "(−) Aplicações (valor contábil)", valor: d.endiv.aplicacoesContabil, cor: "#0070f2" },
-                    { rotulo: "Dívida líquida", valor: d.endiv.dividaLiquida, cor: "#8b47d7", forte: true },
+                    { rotulo: "Dívida bruta", valor: d.endiv.dividaBruta, cor: "#c9668f", forte: true },
+                    { rotulo: `(−) Caixa${d.endiv.dataCaixa && !caixaNaData ? ` (${fmtDate(d.endiv.dataCaixa)})` : ""}`, valor: d.endiv.caixa, cor: "#908c85" },
+                    { rotulo: "(−) Aplicações (valor contábil)", valor: d.endiv.aplicacoesContabil, cor: "#009994" },
+                    { rotulo: "Dívida líquida", valor: d.endiv.dividaLiquida, cor: "#a462a6", forte: true },
                   ]}
                 />
               </KpiPainel>

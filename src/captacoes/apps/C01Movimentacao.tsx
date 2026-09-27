@@ -20,7 +20,7 @@ import { arredondarTabela, ratear, saldosMil } from "../lib/arredondamento";
 import { PERIODOS, periodoApuracao, type Periodo, type PeriodoApuracao } from "../lib/periodos";
 
 const rel = relatorioCaptacao("c01");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 /** Tolerância de conciliação da movimentação e da conferência com a carteira (R$) */
 const TOLERANCIA = 1;
 const ORDEM_GRUPOS = ["BNDES", "Debêntures", "CRA", "CRI", "CCB"];
@@ -265,9 +265,9 @@ interface EventoPeriodo {
 }
 
 const COR_EVENTO: Record<EventoPeriodo["tipo"], string> = {
-  Captação: "#0070f2",
-  Liquidação: "#256f3a",
-  Amortização: "#556b82",
+  Captação: "#009994",
+  Liquidação: "#00b3ac",
+  Amortização: "#a5a099",
 };
 
 function eventosDoPeriodo(linhas: MovContrato[], inicio: string, fim: string): EventoPeriodo[] {
@@ -439,18 +439,18 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
     const y = Number(props.y ?? 0);
     const w = Number(props.width ?? 0);
     const h = Number(props.height ?? 0);
-    const comum = { fontSize: estreito ? 11 : 12, fontFamily: "72, Arial, sans-serif", fontWeight: d.tipo === "saldo" ? 700 : 600 };
+    const comum = { fontSize: estreito ? 11 : 12, fontFamily: "Figtree, system-ui, sans-serif", fontWeight: d.tipo === "saldo" ? 700 : 600 };
     if (estreito) {
       const direita = Math.max(x, x + w);
       return (
-        <text x={direita + 5} y={y + h / 2} dy={4} textAnchor="start" fill="#1d2d3e" {...comum}>
+        <text x={direita + 5} y={y + h / 2} dy={4} textAnchor="start" fill="#f7f3e7" {...comum}>
           {textoRotulo(d)}
         </text>
       );
     }
     const topo = Math.min(y, y + h);
     return (
-      <text x={x + w / 2} y={topo - 6} textAnchor="middle" fill="#1d2d3e" {...comum}>
+      <text x={x + w / 2} y={topo - 6} textAnchor="middle" fill="#f7f3e7" {...comum}>
         {textoRotulo(d)}
       </text>
     );
@@ -497,7 +497,7 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
           { x: d.nivel, y: d.chave },
           { x: d.nivel, y: prox.chave },
         ]}
-        stroke="#788fa6"
+        stroke="#908c85"
         strokeDasharray="3 3"
         ifOverflow="hidden"
       />
@@ -508,7 +508,7 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
           { x: d.chave, y: d.nivel },
           { x: prox.chave, y: d.nivel },
         ]}
-        stroke="#788fa6"
+        stroke="#908c85"
         strokeDasharray="3 3"
         ifOverflow="hidden"
       />
@@ -517,12 +517,12 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
 
   const tooltip = (
     <Tooltip
-      cursor={{ fill: "#0070f2", fillOpacity: 0.05 }}
+      cursor={{ fill: "#009994", fillOpacity: 0.05 }}
       content={({ active, payload }) => {
         const d = active && payload?.[0] ? (payload[0].payload as Degrau) : null;
         if (!d) return null;
         return (
-          <div style={tooltipStyle} className="bg-white px-3 py-2 shadow-fiori">
+          <div style={tooltipStyle} className="bg-surface px-3 py-2 shadow-fiori">
             <div className="font-bold text-text">{d.rotulo}</div>
             <div className="tabular text-text mt-0.5">
               {d.tipo === "saldo" ? fmtBRL(d.valor) : comSinal(d.valor, (x) => fmtBRL(x))}
@@ -548,7 +548,7 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
       <div className="-ml-1" style={{ height: dados.length * 42 + 40 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dados} layout="vertical" barCategoryGap="22%" margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-            <CartesianGrid horizontal={false} stroke="#e5e5e5" />
+            <CartesianGrid horizontal={false} stroke="#3f3f3d" />
             <XAxis
               type="number"
               domain={[lo, hi]}
@@ -557,7 +557,7 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
               tickFormatter={(v: number) => fmtDec(v, ticks.some((x) => !Number.isInteger(x)) ? 1 : 0)}
               tick={AXIS_STYLE}
               tickLine={false}
-              axisLine={{ stroke: "#a8b2bd" }}
+              axisLine={{ stroke: "#575653" }}
             />
             <YAxis type="category" dataKey="chave" tick={tickCategoria} tickLine={false} axisLine={false} width={92} interval={0} />
             {conectores}
@@ -573,8 +573,8 @@ function Waterfall({ t, estreito }: { t: Totais; estreito: boolean }) {
     <div className="h-80 xl:h-auto xl:flex-1 xl:min-h-[340px] -ml-2">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={dados} barCategoryGap="22%" margin={{ top: 22, right: 8, left: 0, bottom: 4 }}>
-          <CartesianGrid vertical={false} stroke="#e5e5e5" />
-          <XAxis dataKey="chave" tick={tickCategoria} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} height={42} />
+          <CartesianGrid vertical={false} stroke="#3f3f3d" />
+          <XAxis dataKey="chave" tick={tickCategoria} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} height={42} />
           <YAxis
             domain={[lo, hi]}
             ticks={ticks}
@@ -765,7 +765,7 @@ export function C01Movimentacao() {
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-text">{l.c.id}</span>
-            {l.captacoes > 0 && <Tag color="#0070f2">Nova</Tag>}
+            {l.captacoes > 0 && <Tag color="#009994">Nova</Tag>}
             {l.saldoInicial > 0 && Math.abs(l.saldoFinal) < 1 && <Tag>Liquidado</Tag>}
           </div>
           <div className="text-xs text-label whitespace-nowrap">
@@ -841,7 +841,7 @@ export function C01Movimentacao() {
       }
     >
       {/* Barra de filtros */}
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:gap-6">
           <FilterField label="Empresa" className="lg:w-72 shrink-0">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} ariaLabel="Empresa" />
@@ -1040,20 +1040,20 @@ function TabelaModalidade({
   const larguraRotulo = estreito ? 148 : 400;
   const celula = (c: Coluna, i: number, destaque = true) =>
     clsx("text-right tabular px-3 whitespace-nowrap", c.total && destaque && "font-semibold", i === colunas.length - 1 && "pr-4");
-  const rotuloCls = "sticky left-0 z-[1] pr-3 text-left shadow-[inset_-1px_0_0_#e5e5e5] md:shadow-none";
+  const rotuloCls = "sticky left-0 z-[1] pr-3 text-left shadow-[inset_-1px_0_0_#3f3f3d] md:shadow-none";
   /** linhas informativas (subtotal dos encargos e parcela capitalizada) */
   const memo = "border-b border-line-soft";
-  const fundoMemo = (c?: Coluna) => (c?.total ? "bg-[#eef0f2]" : "bg-[#fafbfc]");
+  const fundoMemo = (c?: Coluna) => (c?.total ? "bg-surface-2" : "bg-surface-3");
   return (
     <div className="overflow-x-auto fiori-scroll">
       <table className="w-full text-sm border-separate border-spacing-0" style={{ minWidth: larguraRotulo + colunas.length * (estreito ? 100 : 112) }}>
         <thead>
           <tr className="text-[13px]">
-            <th className={clsx(rotuloCls, "pl-4 bg-white font-semibold py-2.5 border-b border-[#a8b2bd]")} style={estreito ? { width: larguraRotulo, minWidth: larguraRotulo } : { minWidth: larguraRotulo }}>
+            <th className={clsx(rotuloCls, "pl-4 bg-surface-2 py-2.5 border-b-2 border-brand")} style={estreito ? { width: larguraRotulo, minWidth: larguraRotulo } : { minWidth: larguraRotulo }}>
               {estreito ? "Movimentação" : "R$ mil"}
             </th>
             {colunas.map((c, i) => (
-              <th key={c.chave} className={clsx(celula(c, i), "font-semibold py-2 border-b border-[#a8b2bd]", c.total && "font-bold bg-[#f5f6f7]")}>
+              <th key={c.chave} className={clsx(celula(c, i), "py-2 border-b-2 border-brand", c.total && "bg-surface-2")}>
                 <div>{c.titulo}</div>
                 {c.sub && <div className="text-xs font-normal text-label">{c.sub}</div>}
               </th>
@@ -1063,13 +1063,13 @@ function TabelaModalidade({
         <tbody>
           {ETAPAS.map((e) => {
             const forte = !!e.saldo;
-            const borda = forte ? "border-y border-[#a8b2bd]" : "border-b border-line-soft";
+            const borda = forte ? "border-y border-line" : "border-b border-line-soft";
             const py = forte ? "py-2.5" : "py-2";
             return [
               <tr key={e.campo} className={forte ? "font-bold" : undefined}>
-                <td className={clsx(rotuloCls, "pl-4", py, borda, forte ? "bg-[#f5f6f7]" : "bg-white")}>{e.rotulo(inicio, fim)}</td>
+                <td className={clsx(rotuloCls, "pl-4", py, borda, forte ? "bg-surface-3" : "bg-surface")}>{e.rotulo(inicio, fim)}</td>
                 {colunas.map((c, i) => (
-                  <td key={c.chave} className={clsx(celula(c, i), py, borda, (forte || c.total) && "bg-[#f5f6f7]", forte && "font-bold")}>
+                  <td key={c.chave} className={clsx(celula(c, i), py, borda, (forte || c.total) && "bg-surface-3", forte && "font-bold")}>
                     {fmtK(c.v[e.campo])}
                   </td>
                 ))}
@@ -1128,7 +1128,7 @@ function LinhaDFC({ rotulo, valor, tipo, nota }: LinhaReconciliacao) {
   return (
     <tr
       className={clsx(
-        forte && "font-bold bg-[#f5f6f7]",
+        forte && "font-bold bg-surface-3",
         tipo === "subtotal" && "font-semibold",
       )}
     >
@@ -1136,7 +1136,7 @@ function LinhaDFC({ rotulo, valor, tipo, nota }: LinhaReconciliacao) {
         className={clsx(
           "pr-3 py-2",
           tipo === "item" ? "pl-7" : "pl-4",
-          forte ? "border-y border-[#a8b2bd]" : tipo === "subtotal" ? "border-t border-[#a8b2bd] border-b border-line-soft" : "border-b border-line-soft",
+          forte ? "border-y border-line" : tipo === "subtotal" ? "border-t border-line border-b border-line-soft" : "border-b border-line-soft",
         )}
       >
         {rotulo}
@@ -1145,7 +1145,7 @@ function LinhaDFC({ rotulo, valor, tipo, nota }: LinhaReconciliacao) {
       <td
         className={clsx(
           "text-right tabular pl-3 pr-4 py-2 whitespace-nowrap",
-          forte ? "border-y border-[#a8b2bd]" : tipo === "subtotal" ? "border-t border-[#a8b2bd] border-b border-line-soft" : "border-b border-line-soft",
+          forte ? "border-y border-line" : tipo === "subtotal" ? "border-t border-line border-b border-line-soft" : "border-b border-line-soft",
         )}
       >
         {valor === null ? "" : fmtK(valor)}
@@ -1175,7 +1175,7 @@ function Checagem({ ok, titulo, children }: { ok: boolean; titulo: string; child
 
 function Mini({ rotulo, valor, sub }: { rotulo: string; valor: ReactNode; sub?: string }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0">
       <div className="text-xs text-label leading-tight">{rotulo}</div>
       <div className="text-base sm:text-lg font-bold tabular text-text whitespace-nowrap mt-0.5">{valor}</div>
       {sub && <div className="text-xs text-label leading-tight truncate">{sub}</div>}

@@ -13,12 +13,13 @@ const TEXT: Record<ValueState, string> = {
   neutral: "text-label",
 };
 
+/** Etiqueta (inverted): filete de 1px na cor do estado, texto no tom legível do mesmo estado, sem preenchimento */
 const INVERTED: Record<ValueState, string> = {
-  positive: "bg-positive-bg text-positive border-[#30914c]/40",
-  critical: "bg-critical-bg text-critical border-[#e76500]/40",
-  negative: "bg-negative-bg text-negative border-[#f53232]/40",
-  information: "bg-info-bg text-[#0057d2] border-[#0070f2]/30",
-  neutral: "bg-neutral-bg text-[#475e75] border-[#788fa6]/40",
+  positive: "text-positive border-brand/70",
+  critical: "text-critical border-amarelo/60",
+  negative: "text-negative border-negative-border/80",
+  information: "text-info border-line",
+  neutral: "text-label border-line-soft",
 };
 
 const ICON: Record<ValueState, typeof Info> = {
@@ -33,7 +34,7 @@ export function semaforoState(s: Semaforo): ValueState {
   return s === "ok" ? "positive" : s === "atencao" ? "critical" : "negative";
 }
 
-/** sap.m.ObjectStatus – texto semântico, opcionalmente "inverted" (tag) */
+/** Status semântico (texto + ícone); `inverted` vira etiqueta mono no padrão .dx-tag */
 export function ObjectStatus({
   state = "neutral",
   children,
@@ -51,8 +52,10 @@ export function ObjectStatus({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1 font-semibold whitespace-nowrap",
-        inverted ? `rounded-md border px-1.5 py-0.5 text-xs ${INVERTED[state]}` : `text-[13px] ${TEXT[state]}`,
+        "inline-flex items-center gap-1 whitespace-nowrap",
+        inverted
+          ? `border px-1.5 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.06em] leading-tight ${INVERTED[state]}`
+          : `text-[13px] font-semibold ${TEXT[state]}`,
         className,
       )}
     >
@@ -62,16 +65,15 @@ export function ObjectStatus({
   );
 }
 
-/** Pequena tag neutra (sap.m.Token/Tag) */
+/**
+ * Etiqueta neutra no padrão .dx-tag (mono, filete de 1px). Com `color`, a cor entra como filete lateral de 3px – o
+ * texto continua nos tons de texto, para não depender do contraste da cor da categoria.
+ */
 export function Tag({ children, color }: { children: ReactNode; color?: string }) {
   return (
     <span
-      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold border whitespace-nowrap"
-      style={
-        color
-          ? { color, borderColor: `${color}55`, backgroundColor: `${color}12` }
-          : { color: "#475e75", borderColor: "#c5ccd3", backgroundColor: "#f5f6f7" }
-      }
+      className="inline-flex items-center px-1.5 py-0.5 font-mono text-[10.5px] tracking-[0.06em] leading-tight border border-line-soft text-suave whitespace-nowrap"
+      style={color ? { borderLeftColor: color, borderLeftWidth: 3 } : undefined}
     >
       {children}
     </span>

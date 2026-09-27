@@ -48,7 +48,7 @@ import {
 import { taxaContratada } from "../lib/finance";
 
 const rel = relatorioPorId("benchmark");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 /** Contrato cadastrado (qualquer data) com a chave do benchmark: tipo, produto, portfolio e taxa contratada */
 interface ContratoBenchmark {
@@ -101,10 +101,10 @@ const ROTULO_ESCOPO: Record<EscopoBenchmark, string> = {
   produto: "Produto",
 };
 const COR_ESCOPO: Record<EscopoBenchmark, string> = {
-  carteira: "#556b82",
-  empresa: "#0070f2",
-  portfolio: "#8b47d7",
-  produto: "#049f9a",
+  carteira: "#a5a099",
+  empresa: "#009994",
+  portfolio: "#a462a6",
+  produto: "#c97d24",
 };
 
 function opcoesValor(escopo: EscopoBenchmark): { value: string; label: string }[] {
@@ -671,7 +671,7 @@ export function BenchmarkApp() {
           <DataTable columns={colunasCadastro} rows={ordenado} rowKey={(b) => b.id} onRowClick={editar} />
         </div>
         {/* Celular e tablet: lista em cartões */}
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {ordenado.map((b) => {
             const n = d.cobertura.get(b.id) ?? 0;
             return (
@@ -733,11 +733,11 @@ export function BenchmarkApp() {
               Realizado (cor do tipo de contrato)
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-[2px] bg-[#a8b2bd]" />
+              <span className="w-2.5 h-2.5 rounded-[2px] bg-line" />
               Benchmark cadastrado
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-4 border-t border-dashed border-[#556b82]" />
+              <span className="w-4 border-t border-dashed border-line" />
               100% do CDI
             </span>
           </div>
@@ -745,8 +745,8 @@ export function BenchmarkApp() {
             <div className="h-72 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dadosGrafico} margin={{ top: 16, right: 8, left: 0, bottom: 0 }} barGap={3}>
-                  <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                  <XAxis dataKey="chave" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                  <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                  <XAxis dataKey="chave" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                   <YAxis
                     tick={AXIS_STYLE}
                     tickLine={false}
@@ -757,13 +757,13 @@ export function BenchmarkApp() {
                     tickFormatter={(v: number) => `${fmtDec(v, 0)}%`}
                   />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]} />
-                  <ReferenceLine y={100} stroke="#556b82" strokeDasharray="4 3" />
+                  <ReferenceLine y={100} stroke="#a5a099" strokeDasharray="4 3" />
                   <Bar dataKey="realizado" name="Realizado" radius={[3, 3, 0, 0]} maxBarSize={44} isAnimationActive={false}>
                     {dadosGrafico.map((x) => (
                       <Cell key={x.chave} fill={x.cor} />
                     ))}
                   </Bar>
-                  <Bar dataKey="benchmark" name="Benchmark" fill="#a8b2bd" radius={[3, 3, 0, 0]} maxBarSize={44} isAnimationActive={false} />
+                  <Bar dataKey="benchmark" name="Benchmark" fill="#575653" radius={[3, 3, 0, 0]} maxBarSize={44} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -771,25 +771,25 @@ export function BenchmarkApp() {
             <div className="-ml-2" style={{ height: Math.max(288, dadosGrafico.length * 30 + 40) }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dadosGrafico} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 0 }} barGap={1} barCategoryGap={6}>
-                  <CartesianGrid horizontal={false} stroke="#e5e5e5" />
+                  <CartesianGrid horizontal={false} stroke="#3f3f3d" />
                   <XAxis
                     type="number"
                     tick={AXIS_STYLE}
                     tickLine={false}
-                    axisLine={{ stroke: "#a8b2bd" }}
+                    axisLine={{ stroke: "#575653" }}
                     domain={escala.domain}
                     ticks={escala.ticks}
                     tickFormatter={(v: number) => `${fmtDec(v, 0)}%`}
                   />
                   <YAxis type="category" dataKey="chave" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={false} width={158} interval={0} tickFormatter={rotuloCurtoProduto} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]} />
-                  <ReferenceLine x={100} stroke="#556b82" strokeDasharray="4 3" />
+                  <ReferenceLine x={100} stroke="#a5a099" strokeDasharray="4 3" />
                   <Bar dataKey="realizado" name="Realizado" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                     {dadosGrafico.map((x) => (
                       <Cell key={x.chave} fill={x.cor} />
                     ))}
                   </Bar>
-                  <Bar dataKey="benchmark" name="Benchmark" fill="#a8b2bd" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+                  <Bar dataKey="benchmark" name="Benchmark" fill="#575653" radius={[0, 3, 3, 0]} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -808,7 +808,7 @@ export function BenchmarkApp() {
               return (
                 <li key={e.value} className="flex gap-3">
                   <span
-                    className="w-6 h-6 shrink-0 rounded-full text-white text-xs font-bold flex items-center justify-center"
+                    className="w-6 h-6 shrink-0 rounded-full text-page text-xs font-bold flex items-center justify-center"
                     style={{ backgroundColor: COR_ESCOPO[e.value] }}
                   >
                     {i + 1}
@@ -851,7 +851,7 @@ export function BenchmarkApp() {
           <DataTable columns={colunasOps} rows={linhasTabela} rowKey={(l) => l.r.codigo} showTotals maxHeight={560} defaultSort={{ key: "dif", dir: "asc" }} />
         </div>
         {/* Celular e tablet: lista em cartões (maiores diferenças negativas primeiro, como na tabela) */}
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {listaOps.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum contrato no filtro selecionado</li>}
           {(todosOps ? listaOps : listaOps.slice(0, OPS_INICIAIS)).map((l) => (
             <li key={l.r.codigo} className="px-4 py-3">
@@ -880,7 +880,7 @@ export function BenchmarkApp() {
             </li>
           )}
           {listaOps.length > 0 && (
-            <li className="px-4 py-3 bg-[#f5f6f7]">
+            <li className="px-4 py-3 bg-surface-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="text-sm font-bold text-text">
                   {filtroTipo === "todos" ? "Carteira consolidada" : INFO_TIPO[filtroTipo].curto} · {plural(listaOps.length, "contrato", "contratos")}
@@ -1043,17 +1043,17 @@ function DialogoBenchmark({
 
   const inputCls = (erro?: string) =>
     clsx(
-      "w-full h-9 rounded-[var(--radius-field)] border bg-white px-2.5 text-sm text-text focus:outline-none",
+      "w-full h-9 rounded-[var(--radius-field)] border bg-surface px-2.5 text-sm text-text focus:outline-none",
       erro ? "border-negative shadow-[inset_0_-1px_0_var(--color-negative)]" : "border-field focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)]",
     );
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-[#1d2d3e]/40" onMouseDown={onCancel}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/60" onMouseDown={onCancel}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="bmk-titulo"
-        className="w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-fiori-lg overflow-hidden max-h-[92vh] flex flex-col"
+        className="w-full sm:max-w-lg bg-surface rounded-t-2xl sm:rounded-2xl shadow-fiori-lg overflow-hidden max-h-[92vh] flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={prenderFoco}
       >
@@ -1117,17 +1117,17 @@ function DialogoBenchmark({
               placeholder="Ex.: custo de oportunidade em R$ de aplicações no exterior"
               maxLength={240}
               rows={2}
-              className="w-full rounded-[var(--radius-field)] border border-field bg-white px-2.5 py-2 text-sm text-text focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)] resize-none"
+              className="w-full rounded-[var(--radius-field)] border border-field bg-surface px-2.5 py-2 text-sm text-text focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)] resize-none"
             />
           </Campo>
-          <div className="rounded-lg bg-[#f5f6f7] px-3 py-2.5 text-[13px] text-label">
+          <div className="rounded-lg bg-surface-3 px-3 py-2.5 text-[13px] text-label">
             Equivale a <strong className="text-text tabular">{Number.isFinite(r.pct) ? fmtPct(taxaEquivalenteBenchmark(r.pct / 100, cdi)) : "—"} a.a.</strong> com o
             CDI vigente de {fmtPct(cdi)} a.a. (importado do SAP), capitalizado diariamente. Faixa permitida: {fmtDec(PCT_MINIMO * 100, 0)}% a{" "}
             {fmtDec(PCT_MAXIMO * 100, 0)}% do CDI. A regra vale a partir da vigência; os dias anteriores seguem a regra anterior.
           </div>
           <button type="submit" className="hidden" />
         </form>
-        <footer className="flex justify-end gap-2 px-5 py-3 bg-[#f5f6f7] border-t border-line-soft">
+        <footer className="flex justify-end gap-2 px-5 py-3 bg-surface-3 border-t border-line-soft">
           <Button variant="transparent" onClick={onCancel}>
             Cancelar
           </Button>

@@ -20,10 +20,10 @@ import { COR_MODALIDADE, EMPRESAS_DIVIDA, GRUPO_MODALIDADE, type ContratoDivida 
 import { cronograma, perfilAmortizacao, posicoesDivida, prazoMedioCarteira, totalDivida, type PosicaoDivida } from "../lib/divida";
 
 const rel = relatorioCaptacao("c02");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-const legendStyle = { fontSize: 12, fontFamily: "72, Arial" };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
+const legendStyle = { fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" };
 /** Texto da legenda na cor de texto (a cor da série fica só no marcador – contraste AA) */
-const legendaTexto = (v: string) => <span style={{ color: "#1d2d3e" }}>{v}</span>;
+const legendaTexto = (v: string) => <span style={{ color: "#f7f3e7" }}>{v}</span>;
 
 /** Tolerância de fechamento (R$) entre o perfil de amortização e o principal atualizado */
 const TOLERANCIA = 1;
@@ -33,17 +33,17 @@ const ANOS_INDIVIDUAIS = 5;
 /** Grupos de modalidade na ordem do Launchpad, com as cores únicas de COR_MODALIDADE (as mesmas em todas as telas) */
 const GRUPOS: { id: string; cor: string }[] = ["Debêntures", "BNDES", "CRA", "CCB", "CRI"].map((id) => ({ id, cor: COR_MODALIDADE[id] }));
 const ORDEM_GRUPO = new Map(GRUPOS.map((g, i) => [g.id, i]));
-const COR_PRINCIPAL = "#5d36ff";
-const COR_JUROS = "#049f9a";
-const COR_CP = "#e26300";
-const COR_NC = "#0070f2";
+const COR_PRINCIPAL = "#4f8fd1";
+const COR_JUROS = "#c97d24";
+const COR_CP = "#ffa436";
+const COR_NC = "#009994";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const grupoDe = (c: ContratoDivida) => GRUPO_MODALIDADE[c.modalidade];
-const corDe = (c: ContratoDivida) => GRUPOS.find((g) => g.id === grupoDe(c))?.cor ?? "#758ca4";
+const corDe = (c: ContratoDivida) => GRUPOS.find((g) => g.id === grupoDe(c))?.cor ?? "#908c85";
 const soma = <T,>(xs: T[], fn: (x: T) => number) => xs.reduce((s, x) => s + fn(x), 0);
 const mesCurto = (mes: string) => fmtMonthShort(`${mes}-01`);
 const mesLongo = (mes: string) => fmtMonthLong(`${mes}-01`);
@@ -792,7 +792,7 @@ export function C02Cronograma() {
         </div>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -874,7 +874,7 @@ export function C02Cronograma() {
                 {fmtInteiroMil(m.total)}
                 <span className="text-sm text-label ml-1.5">R$&nbsp;mil</span>
               </div>
-              <div className="flex h-3 rounded-full overflow-hidden bg-[#eff1f2] mt-3" aria-hidden>
+              <div className="flex h-3 rounded-full overflow-hidden bg-surface-2 mt-3" aria-hidden>
                 <div style={{ width: `${pctCirculante * 100}%`, backgroundColor: COR_CP }} />
                 <div style={{ width: `${(1 - pctCirculante) * 100}%`, backgroundColor: COR_NC }} />
               </div>
@@ -945,7 +945,7 @@ export function C02Cronograma() {
                   </dl>
                 </li>
               ))}
-              <li className="px-4 py-3 bg-[#f5f6f7]">
+              <li className="px-4 py-3 bg-surface-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-sm font-bold text-text">Total ({d.composicao.length})</div>
                   <div className="text-sm font-bold text-text tabular">{fmtInteiroMil(m.total)}</div>
@@ -976,12 +976,12 @@ export function C02Cronograma() {
               <div className="h-72 sm:h-80 xl:h-auto xl:flex-1 xl:min-h-[320px] -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={d.grafico} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="rotulo" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                    <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                    <XAxis dataKey="rotulo" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
+                      cursor={{ fill: "#2f2e2e", fillOpacity: 0.6 }}
                       labelFormatter={(_: unknown, pl: ReadonlyArray<{ payload?: { rotuloLongo?: string } }>) => pl?.[0]?.payload?.rotuloLongo ?? ""}
                       formatter={tooltipMi}
                     />
@@ -1072,7 +1072,7 @@ export function C02Cronograma() {
                     </li>
                   );
                 })}
-                <li className="px-4 py-3 bg-[#f5f6f7]">
+                <li className="px-4 py-3 bg-surface-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="text-sm font-bold text-text">Total ({d.perfil.length})</div>
                     <div className="text-sm font-bold text-text tabular">{fmtInteiroMil(m.pa)}</div>
@@ -1129,12 +1129,12 @@ export function C02Cronograma() {
                     onClick={(s: { activeLabel?: string | number } | null) => s?.activeLabel && setMesEscolhido(String(s.activeLabel))}
                     className="cursor-pointer"
                   >
-                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="mes" tickFormatter={mesCurto} tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                    <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                    <XAxis dataKey="mes" tickFormatter={mesCurto} tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
-                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#eaecee", fillOpacity: 0.6 }} labelFormatter={(mes: string) => mesLongo(mes)} formatter={tooltipMi} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#2f2e2e", fillOpacity: 0.6 }} labelFormatter={(mes: string) => mesLongo(mes)} formatter={tooltipMi} />
                     <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={legendaTexto} />
-                    <ReferenceArea x1={mesSel.mes} x2={mesSel.mes} fill="#0070f2" fillOpacity={0.08} stroke="#0070f2" strokeOpacity={0.35} strokeDasharray="3 3" />
+                    <ReferenceArea x1={mesSel.mes} x2={mesSel.mes} fill="#009994" fillOpacity={0.08} stroke="#009994" strokeOpacity={0.35} strokeDasharray="3 3" />
                     <Bar dataKey="principal" name="Principal" stackId="f" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false} />
                     <Bar dataKey="juros" name="Juros" stackId="f" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false} />
                   </BarChart>
@@ -1164,21 +1164,21 @@ export function C02Cronograma() {
                 <table className="w-full text-sm border-separate border-spacing-0">
                   <thead>
                     <tr>
-                      <th className="text-left pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Mês</th>
-                      <th className="text-right px-2 sm:px-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Principal</th>
-                      <th className="text-right px-2 sm:px-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Juros</th>
-                      <th className="text-right pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Total</th>
+                      <th className="text-left pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 border-b-2 border-brand whitespace-nowrap">Mês</th>
+                      <th className="text-right px-2 sm:px-3 py-2.5 border-b-2 border-brand whitespace-nowrap">Principal</th>
+                      <th className="text-right px-2 sm:px-3 py-2.5 border-b-2 border-brand whitespace-nowrap">Juros</th>
+                      <th className="text-right pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 border-b-2 border-brand whitespace-nowrap">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {d.meses.map((mes) => {
                       const sel = mes.mes === mesSel.mes;
                       return (
-                        <tr key={mes.mes} onClick={() => setMesEscolhido(mes.mes)} className={clsx("cursor-pointer", sel ? "bg-selected" : "hover:bg-[#f2f4f6]")}>
+                        <tr key={mes.mes} onClick={() => setMesEscolhido(mes.mes)} className={clsx("cursor-pointer", sel ? "bg-selected" : "hover:bg-hover")}>
                           <td
                             className={clsx(
                               "pl-4 xl:pl-3 pr-2 sm:pr-3 py-2 text-[13px] border-b border-line-soft whitespace-nowrap",
-                              sel && "shadow-[inset_3px_0_0_#0064d9] font-semibold",
+                              sel && "shadow-[inset_3px_0_0_#00b3ac] font-semibold",
                             )}
                           >
                             {mesCurto(mes.mes)}
@@ -1194,11 +1194,11 @@ export function C02Cronograma() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-[#f5f6f7] font-bold">
-                      <td className="pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">Total 12 meses</td>
-                      <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.principal)}</td>
-                      <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.juros)}</td>
-                      <td className="pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.total)}</td>
+                    <tr className="bg-surface-3 font-bold">
+                      <td className="pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 text-[13px] border-t border-line whitespace-nowrap">Total 12 meses</td>
+                      <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-line whitespace-nowrap">{fmtValor(d.fluxo12.principal)}</td>
+                      <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-line whitespace-nowrap">{fmtValor(d.fluxo12.juros)}</td>
+                      <td className="pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 text-right tabular text-[13px] border-t border-line whitespace-nowrap">{fmtValor(d.fluxo12.total)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -1253,12 +1253,12 @@ export function C02Cronograma() {
               <div className="h-72 xl:h-auto xl:flex-1 xl:min-h-[300px] -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={graficoAnos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="ano" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                    <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                    <XAxis dataKey="ano" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
+                      cursor={{ fill: "#2f2e2e", fillOpacity: 0.6 }}
                       labelFormatter={(_: unknown, pl: ReadonlyArray<{ payload?: { rotulo?: string } }>) => pl?.[0]?.payload?.rotulo ?? ""}
                       formatter={tooltipMi}
                     />
@@ -1279,7 +1279,7 @@ export function C02Cronograma() {
                 <div className="hidden md:block">
                   <DataTable columns={colAnos} rows={d.anosFluxo} rowKey={(x) => String(x.ano)} showTotals totalLabel="Total após 12 meses" emptyText="Sem pagamentos após 12 meses" />
                 </div>
-                <ul className="md:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+                <ul className="md:hidden border-t border-line divide-y divide-line-soft">
                   {d.anosFluxo.length === 0 && <li className="py-8 text-center text-label text-sm">Sem pagamentos após 12 meses</li>}
                   {d.anosFluxo.map((a) => (
                     <li key={a.ano} className="px-4 py-2.5">
@@ -1300,7 +1300,7 @@ export function C02Cronograma() {
                     </li>
                   ))}
                   {d.anosFluxo.length > 0 && (
-                    <li className="px-4 py-2.5 bg-[#f5f6f7]">
+                    <li className="px-4 py-2.5 bg-surface-3">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-sm font-bold text-text">Total após 12 meses</span>
                         <span className="text-sm font-bold text-text tabular">{fmtValor(d.fluxoApos.total)}</span>
@@ -1358,7 +1358,7 @@ function BlocoComposicao({
           <LinhaValor key={l.rotulo} rotulo={l.rotulo} valor={l.valor} negativo={l.negativo} />
         ))}
       </dl>
-      <div className="flex items-baseline justify-between gap-3 border-t border-[#a8b2bd] mt-2.5 pt-2">
+      <div className="flex items-baseline justify-between gap-3 border-t border-line mt-2.5 pt-2">
         <span className="text-sm font-bold text-text">= {total.rotulo}</span>
         <span className="text-base font-bold tabular text-text whitespace-nowrap">{fmtInteiroMil(total.valor)}</span>
       </div>
@@ -1418,7 +1418,7 @@ function Conferencia({ ok, children }: { ok: boolean; children: ReactNode }) {
 
 function Mini({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0">
       <div className="text-xs text-label leading-tight truncate">{rotulo}</div>
       <div className="text-sm sm:text-base font-bold tabular text-text whitespace-nowrap mt-0.5">{valor}</div>
     </div>

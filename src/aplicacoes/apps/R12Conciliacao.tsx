@@ -90,13 +90,13 @@ function metaTipo(t: TipoContrato) {
   return META_TIPO.get(t)!;
 }
 
-const DESTAQUE_PENDENTE = "bg-[#fff6f9]! [&>td:first-child]:shadow-[inset_4px_0_0_#f53232]";
-const DESTAQUE_EXPLICADA = "[&>td:first-child]:shadow-[inset_4px_0_0_#e76500]";
+const DESTAQUE_PENDENTE = "bg-negative-bg! [&>td:first-child]:shadow-[inset_4px_0_0_#d9563e]";
+const DESTAQUE_EXPLICADA = "[&>td:first-child]:shadow-[inset_4px_0_0_#ffa436]";
 const destaqueLinha = (s: StatusConc) => (s === "Pendente" ? DESTAQUE_PENDENTE : s === "Diferença explicada" ? DESTAQUE_EXPLICADA : undefined);
 const destaquePopIn = (s: StatusConc) =>
-  s === "Pendente" ? "bg-[#fff6f9] shadow-[inset_4px_0_0_#f53232]" : s === "Diferença explicada" ? "shadow-[inset_4px_0_0_#e76500]" : undefined;
+  s === "Pendente" ? "bg-negative-bg shadow-[inset_4px_0_0_#d9563e]" : s === "Diferença explicada" ? "shadow-[inset_4px_0_0_#ffa436]" : undefined;
 
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 /** "4 nos extratos e 1 no FI-GL" – diferenças explicadas separadas por conciliação */
 function explicadasPorOrigem(extratos: number, gl: number): string {
@@ -601,7 +601,7 @@ export function R12Conciliacao() {
         </div>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select
@@ -717,7 +717,7 @@ export function R12Conciliacao() {
               />
             </div>
 
-            <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
               {linhasGL.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhuma linha com diferença no filtro selecionado</li>}
               {linhasGL.map((l) => (
                 <li key={l.chave} className={clsx("px-4 py-3", destaquePopIn(l.status))}>
@@ -738,7 +738,7 @@ export function R12Conciliacao() {
                 </li>
               ))}
               {linhasGL.length > 0 && (
-                <li className="px-4 py-3 bg-[#f5f6f7]">
+                <li className="px-4 py-3 bg-surface-3">
                   <div className="text-sm font-bold text-text">Total · {plural(new Set(linhasGL.map((l) => l.conta.conta)).size, "conta", "contas")}</div>
                   <PopInValores
                     rotulo="FI-GL (R$)"
@@ -799,10 +799,10 @@ export function R12Conciliacao() {
                 <table className="w-full text-[13px] sm:min-w-[640px]">
                   <thead>
                     <tr className="text-left text-text">
-                      <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Conta</th>
-                      <th className="hidden sm:table-cell font-semibold px-3 py-2 border-b border-[#a8b2bd]">Regra de determinação</th>
-                      <th className="font-semibold px-3 py-2 border-b border-[#a8b2bd] text-right">Contratos</th>
-                      <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd] text-right whitespace-nowrap">Saldo TRM (R$)</th>
+                      <th className="px-4 py-2 border-b-2 border-brand">Conta</th>
+                      <th className="hidden sm:table-cell px-3 py-2 border-b-2 border-brand">Regra de determinação</th>
+                      <th className="px-3 py-2 border-b-2 border-brand text-right">Contratos</th>
+                      <th className="px-4 py-2 border-b-2 border-brand text-right whitespace-nowrap">Saldo TRM (R$)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -829,11 +829,11 @@ export function R12Conciliacao() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-[#f5f6f7] font-bold text-text">
-                      <td className="px-4 py-2 border-t border-[#a8b2bd]">Total do ativo – aplicações financeiras</td>
-                      <td className="hidden sm:table-cell border-t border-[#a8b2bd]" />
-                      <td className="px-3 py-2 border-t border-[#a8b2bd] text-right tabular">{d.contratos.length}</td>
-                      <td className="px-4 py-2 border-t border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtValor(d.totalGL.saldoTRM)}</td>
+                    <tr className="bg-surface-3 font-bold text-text">
+                      <td className="px-4 py-2 border-t border-line">Total do ativo – aplicações financeiras</td>
+                      <td className="hidden sm:table-cell border-t border-line" />
+                      <td className="px-3 py-2 border-t border-line text-right tabular">{d.contratos.length}</td>
+                      <td className="px-4 py-2 border-t border-line text-right tabular whitespace-nowrap">{fmtValor(d.totalGL.saldoTRM)}</td>
                     </tr>
                     {Math.abs(d.arredondamentoCarteira) >= 0.005 && (
                       <>
@@ -952,7 +952,7 @@ export function R12Conciliacao() {
               />
             </div>
 
-            <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
               {linhasExt.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum extrato com diferença no filtro selecionado</li>}
               {linhasExt.map((l) => (
                 <li key={l.c.id} className={clsx("px-4 py-3", destaquePopIn(l.status))}>
@@ -973,7 +973,7 @@ export function R12Conciliacao() {
                 </li>
               ))}
               {linhasExt.length > 0 && (
-                <li className="px-4 py-3 bg-[#f5f6f7]">
+                <li className="px-4 py-3 bg-surface-3">
                   <div className="text-sm font-bold text-text">Total · {plural(linhasExt.length, "extrato", "extratos")}</div>
                   <PopInValores
                     rotulo="Extrato (R$)"
@@ -1169,21 +1169,21 @@ function AbaRollforward({
             <table className="w-full text-[13px] min-w-[760px]">
               <thead>
                 <tr className="text-text">
-                  <th className="text-left font-semibold px-4 py-2.5 border-b border-[#a8b2bd] min-w-[15rem]">Movimentação</th>
+                  <th className="text-left px-4 py-2.5 border-b-2 border-brand min-w-[15rem]">Movimentação</th>
                   {d.porTipo.map((t) => (
-                    <th key={t.tipo} className="text-right font-semibold px-3 py-2.5 border-b border-[#a8b2bd] whitespace-nowrap">
+                    <th key={t.tipo} className="text-right px-3 py-2.5 border-b-2 border-brand whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.cor }} />
                         {t.curto}
                       </span>
                     </th>
                   ))}
-                  <th className="text-right font-semibold px-4 py-2.5 border-b border-[#a8b2bd]">Total</th>
+                  <th className="text-right px-4 py-2.5 border-b-2 border-brand">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {linhas.map((l) => (
-                  <tr key={l.rotulo} className={clsx(l.forte && "bg-[#f5f6f7] font-bold")}>
+                  <tr key={l.rotulo} className={clsx(l.forte && "bg-surface-3 font-bold")}>
                     <td className="px-4 py-2 border-b border-line-soft text-text">{l.rotulo}</td>
                     {movs.map((m, i) => (
                       <td key={i} className="px-3 py-2 border-b border-line-soft text-right tabular whitespace-nowrap">
@@ -1253,10 +1253,10 @@ function AbaRollforward({
           <div className="h-60 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={grafico} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="rubrica" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="rubrica" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={44} tickFormatter={(v: number) => fmtDec(v, 1)} />
-                <ReferenceLine y={0} stroke="#556b82" />
+                <ReferenceLine y={0} stroke="#a5a099" />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtCompact(v * 1e6), n]} />
                 {d.porTipo.map((t) => (
                   <Bar key={t.tipo} dataKey={t.curto} stackId="mov" fill={t.cor} isAnimationActive={false} />
@@ -1291,7 +1291,7 @@ function AbaRollforward({
             {d.checagens.map((c, i) => {
               const link = LINK_CHECAGEM[c.id];
               return (
-                <li key={c.id} className={clsx("flex items-start gap-3 px-4 py-3", !c.ok && "bg-[#fff6f9] shadow-[inset_4px_0_0_#f53232]")}>
+                <li key={c.id} className={clsx("flex items-start gap-3 px-4 py-3", !c.ok && "bg-negative-bg shadow-[inset_4px_0_0_#d9563e]")}>
                   {c.ok ? (
                     <CheckCircle2 className="w-5 h-5 text-positive shrink-0 mt-px" strokeWidth={2} aria-label="OK" />
                   ) : (
@@ -1405,7 +1405,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
           {dias.map((g, gi) => {
             const ressalva = g.etapas.some((e) => e.status === "Com ressalva");
             const aberta = g.etapas.some((e) => e.status === "Pendente");
-            const cor = aberta ? "#758ca4" : ressalva ? "#e76500" : "#30914c";
+            const cor = aberta ? "#908c85" : ressalva ? "#ffa436" : "#009994";
             const ultimo = gi === dias.length - 1;
             return (
               <li key={g.du} className="grid grid-cols-[4.5rem_1.5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_2rem_minmax(0,1fr)]">
@@ -1416,7 +1416,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
                 </div>
                 <div className="relative flex justify-center" aria-hidden>
                   <span className={clsx("absolute w-0.5 bg-line", gi === 0 ? "top-3.5" : "top-0", ultimo ? "h-3.5" : "bottom-0")} />
-                  <span className="relative mt-3 w-3.5 h-3.5 rounded-full border-[3px] bg-white" style={{ borderColor: cor }} />
+                  <span className="relative mt-3 w-3.5 h-3.5 rounded-full border-[3px] bg-surface" style={{ borderColor: cor }} />
                 </div>
                 <ul className={clsx("space-y-2 min-w-0", !ultimo && "pb-5")}>
                   {g.etapas.map((e) => (
@@ -1424,7 +1424,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
                       key={e.id}
                       className={clsx(
                         "rounded-lg border px-3 py-2.5 flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4",
-                        e.status === "Com ressalva" ? "border-[#e76500]/50 bg-critical-bg/40" : "border-line-soft",
+                        e.status === "Com ressalva" ? "border-amarelo/50 bg-critical-bg/40" : "border-line-soft",
                       )}
                     >
                       <div className="min-w-0 flex-1">
@@ -1477,7 +1477,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
             </span>
             <span className="text-sm text-label">etapas concluídas{ressalvas ? ` · ${plural(ressalvas, "com ressalva", "com ressalva")}` : ""}</span>
           </div>
-          <MicroBar className="mt-3 h-2" value={executadas} max={d.checklist.length} color={completo ? "#30914c" : "#e76500"} />
+          <MicroBar className="mt-3 h-2" value={executadas} max={d.checklist.length} color={completo ? "#009994" : "#ffa436"} />
           <div className="text-[13px] font-semibold text-text mt-5 mb-2">Por responsável</div>
           <ul className="space-y-2.5">
             {responsaveis.map((r) => (
@@ -1489,7 +1489,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
                     {r.ressalvas > 0 && <span className="text-critical"> · {plural(r.ressalvas, "ressalva", "ressalvas")}</span>}
                   </span>
                 </div>
-                <MicroBar className="mt-1.5" value={r.executadas} max={r.total} color={r.executadas === r.total ? "#30914c" : "#e76500"} />
+                <MicroBar className="mt-1.5" value={r.executadas} max={r.total} color={r.executadas === r.total ? "#009994" : "#ffa436"} />
               </li>
             ))}
           </ul>
@@ -1582,9 +1582,9 @@ function CartoesTipo({
             disabled={g.vazio}
             onClick={() => onSelect(sel ? null : g.tipo)}
             className={clsx(
-              "text-left bg-white rounded-[var(--radius-card)] shadow-fiori px-3 sm:px-4 py-3 min-w-0 transition-shadow",
+              "text-left bg-surface rounded-[var(--radius-card)] shadow-fiori px-3 sm:px-4 py-3 min-w-0 transition-shadow",
               g.vazio ? "opacity-60 cursor-default" : "hover:shadow-fiori-lg",
-              sel && "shadow-[inset_0_0_0_2px_#0070f2]!",
+              sel && "shadow-[inset_0_0_0_2px_#009994]!",
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
@@ -1702,7 +1702,7 @@ function TabelaDetalhe({ cabecalho, linhas }: { cabecalho: string[]; linhas: { c
               <th
                 key={h}
                 className={clsx(
-                  "font-semibold py-2 border-b border-[#a8b2bd] whitespace-nowrap",
+                  "py-2 border-b-2 border-brand whitespace-nowrap",
                   i === 0 ? "text-left pl-4 pr-3" : "text-right px-3",
                   i === cabecalho.length - 1 && "pr-4",
                 )}
@@ -1714,7 +1714,7 @@ function TabelaDetalhe({ cabecalho, linhas }: { cabecalho: string[]; linhas: { c
         </thead>
         <tbody>
           {linhas.map((l) => (
-            <tr key={l.chave} className={clsx(l.status === "Pendente" && "bg-[#fff6f9]")}>
+            <tr key={l.chave} className={clsx(l.status === "Pendente" && "bg-negative-bg")}>
               {l.celulas.map((c, i) => (
                 <td
                   key={i}
@@ -1722,7 +1722,7 @@ function TabelaDetalhe({ cabecalho, linhas }: { cabecalho: string[]; linhas: { c
                     "py-2 border-b border-line-soft align-top",
                     i === 0 ? "text-left pl-4 pr-3" : "text-right px-3 tabular whitespace-nowrap",
                     i === l.celulas.length - 1 && "pr-4",
-                    i === 0 && l.status === "Diferença explicada" && "shadow-[inset_4px_0_0_#e76500]",
+                    i === 0 && l.status === "Diferença explicada" && "shadow-[inset_4px_0_0_#ffa436]",
                   )}
                 >
                   {c}

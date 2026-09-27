@@ -39,7 +39,7 @@ export function Popover({
       {open && (
         <div
           className={clsx(
-            "z-50 bg-white rounded-[var(--radius-card)] shadow-fiori-lg border border-line-soft overflow-hidden",
+            "z-50 bg-surface border border-line-soft shadow-[0_30px_70px_rgba(0,0,0,0.45)] overflow-hidden",
             "fixed left-2 right-2 top-[calc(3.5rem+env(safe-area-inset-top,0px))]",
             "sm:absolute sm:top-full sm:mt-2 sm:w-[var(--popover-w)] sm:max-w-[calc(100vw-1rem)]",
             align === "right" ? "sm:left-auto sm:right-0" : "sm:right-auto sm:left-0",

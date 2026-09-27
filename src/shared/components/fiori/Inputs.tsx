@@ -2,11 +2,11 @@ import clsx from "clsx";
 import { ChevronDown, Search, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-/** Campo de filtro (label acima, padrão Filter Bar Horizon) */
+/** Campo de filtro no padrão .dx-field: rótulo mono em caixa alta acima do controle */
 export function FilterField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <label className={clsx("flex flex-col gap-1 min-w-0", className)}>
-      <span className="text-[13px] text-label">{label}</span>
+    <label className={clsx("flex flex-col gap-1.5 min-w-0", className)}>
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.13em] text-label">{label}</span>
       {children}
     </label>
   );
@@ -31,7 +31,7 @@ export function Select<T extends string>({
         aria-label={ariaLabel}
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="w-full h-9 appearance-none rounded-[var(--radius-field)] border border-field bg-white pl-2.5 pr-8 text-sm text-text hover:bg-[#f7f9fb] focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)] cursor-pointer"
+        className="w-full h-9 appearance-none border border-line-soft bg-surface-3 pl-2.5 pr-8 text-sm text-text hover:border-line focus:border-brand focus-visible:outline-offset-2 cursor-pointer"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -39,7 +39,7 @@ export function Select<T extends string>({
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-link" />
+      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-label" />
     </div>
   );
 }
@@ -61,13 +61,13 @@ export function SearchField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-9 rounded-[var(--radius-field)] border border-field bg-white pl-2.5 pr-9 text-sm text-text placeholder:text-[#556b82]/80 placeholder:italic focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)]"
+        className="w-full h-9 border border-line-soft bg-surface-3 pl-2.5 pr-9 text-sm text-text placeholder:text-muted hover:border-line focus:border-brand focus-visible:outline-offset-2"
       />
       {value ? (
         <button
           type="button"
           onClick={() => onChange("")}
-          className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-label hover:bg-hover"
+          className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-label hover:text-text hover:bg-hover"
           aria-label="Limpar pesquisa"
         >
           <X className="w-3.5 h-3.5" />
@@ -184,16 +184,16 @@ export function NumberInput({
           else if (allowEmpty && !texto.trim()) setTexto("");
           else setTexto(formatarNumero(value));
         }}
-        className="w-full h-9 rounded-[var(--radius-field)] border border-field bg-white pl-2.5 pr-12 text-sm text-right tabular text-text focus:outline-none focus:border-brand focus:shadow-[inset_0_-1px_0_var(--color-brand)]"
+        className="w-full h-9 border border-line-soft bg-surface-3 pl-2.5 pr-12 font-mono text-[13px] text-right tabular text-text hover:border-line focus:border-brand focus-visible:outline-offset-2"
       />
       {suffix && (
-        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[13px] text-label">{suffix}</span>
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-label">{suffix}</span>
       )}
     </div>
   );
 }
 
-/** sap.m.SegmentedButton */
+/** Alternância em grupo de .dx-chip: mono em caixa alta; o item ativo é preenchido de cerceta */
 export function SegmentedButton<T extends string>({
   value,
   onChange,
@@ -206,7 +206,7 @@ export function SegmentedButton<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={clsx("inline-flex rounded-[var(--radius-button)] border border-[#bcc3ca] bg-white p-0.5", className)} role="tablist">
+    <div className={clsx("inline-flex", className)} role="tablist">
       {items.map((it) => (
         <button
           key={it.value}
@@ -215,8 +215,10 @@ export function SegmentedButton<T extends string>({
           aria-selected={value === it.value}
           onClick={() => onChange(it.value)}
           className={clsx(
-            "inline-flex items-center gap-1.5 h-7 px-3 text-[13px] font-semibold rounded-md transition-colors whitespace-nowrap",
-            value === it.value ? "bg-[#ebf8ff] text-[#0057d2] shadow-[inset_0_0_0_1px_#0070f2]" : "text-link hover:bg-hover",
+            "relative inline-flex items-center gap-1.5 h-8 px-3 -ml-px first:ml-0 border font-mono text-[11px] uppercase tracking-[0.1em] whitespace-nowrap transition-[background-color,color,border-color] duration-150",
+            value === it.value
+              ? "z-[1] bg-brand border-brand text-page"
+              : "border-line-soft text-label hover:z-[1] hover:text-text hover:border-text",
           )}
         >
           {it.icon}
@@ -227,7 +229,7 @@ export function SegmentedButton<T extends string>({
   );
 }
 
-/** sap.m.IconTabBar (modo texto) */
+/** Abas em texto: Barlow Condensed em caixa alta, aba ativa em creme com filete cerceta */
 export function TabBar<T extends string>({
   value,
   onChange,
@@ -249,15 +251,15 @@ export function TabBar<T extends string>({
             aria-selected={ativo}
             onClick={() => onChange(it.value)}
             className={clsx(
-              "relative px-3 pt-2.5 pb-3 text-sm font-semibold whitespace-nowrap transition-colors",
-              ativo ? "text-brand" : "text-text hover:text-brand",
+              "relative px-3 pt-2.5 pb-3 font-display text-[16px] font-semibold uppercase tracking-[0.05em] whitespace-nowrap transition-colors",
+              ativo ? "text-text" : "text-label hover:text-text",
             )}
           >
             {it.label}
-            {it.count !== undefined && <span className="ml-1.5 text-label font-normal">({it.count})</span>}
+            {it.count !== undefined && <span className="ml-1.5 font-mono text-[11px] font-normal tracking-normal text-label">({it.count})</span>}
             <span
               className={clsx(
-                "absolute left-2 right-2 bottom-0 h-[3px] rounded-t-full transition-colors",
+                "absolute left-3 right-3 bottom-0 h-[2px] transition-colors",
                 ativo ? "bg-brand" : "bg-transparent",
               )}
             />

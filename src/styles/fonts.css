@@ -1,36 +1,82 @@
-/* SAP "72" – fonte oficial do SAP Fiori (Apache-2.0, @sap-theming/theming-base-content) */
+/*
+ * Fontes da marca Dexterity – Barlow Condensed (títulos), Figtree (corpo) e IBM Plex Mono (rótulos técnicos).
+ * Servidas pelo próprio app a partir do @fontsource (SIL Open Font License 1.1), só woff2 e só o subconjunto latino:
+ * a demo não depende do Google Fonts e o build de arquivo único não embute a cópia .woff de cada peso.
+ */
 @font-face {
-  font-family: "72";
-  src: url("../assets/fonts/72-Light.woff2") format("woff2");
-  font-weight: 300;
+  font-family: "Barlow Condensed";
   font-style: normal;
+  font-weight: 500;
   font-display: swap;
+  src: url("../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-500-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "72";
-  src: url("../assets/fonts/72-Regular.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "Barlow Condensed";
   font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "72";
-  src: url("../assets/fonts/72-Semibold.woff2") format("woff2");
   font-weight: 600;
-  font-style: normal;
   font-display: swap;
+  src: url("../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-600-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "72";
-  src: url("../assets/fonts/72-Bold.woff2") format("woff2");
+  font-family: "Barlow Condensed";
+  font-style: normal;
   font-weight: 700;
-  font-style: normal;
   font-display: swap;
+  src: url("../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "72";
-  src: url("../assets/fonts/72-Black.woff2") format("woff2");
-  font-weight: 900;
+  font-family: "Figtree";
   font-style: normal;
+  font-weight: 300;
   font-display: swap;
+  src: url("../../node_modules/@fontsource/figtree/files/figtree-latin-300-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/figtree/files/figtree-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/figtree/files/figtree-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/figtree/files/figtree-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/figtree/files/figtree-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
 }

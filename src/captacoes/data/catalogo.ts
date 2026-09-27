@@ -28,7 +28,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "parametrizacao",
     rota: "/premissas",
     icone: SlidersHorizontal,
-    cor: "#556b82",
+    cor: "#00b3ac",
   },
   {
     id: "c00",
@@ -44,7 +44,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "posicao",
     rota: "/c00-carteira",
     icone: Landmark,
-    cor: "#0070f2",
+    cor: "#00b3ac",
   },
   {
     id: "c02",
@@ -59,7 +59,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "posicao",
     rota: "/c02-cronograma",
     icone: CalendarRange,
-    cor: "#8b47d7",
+    cor: "#00b3ac",
   },
   {
     id: "c01",
@@ -75,7 +75,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "movimentacao",
     rota: "/c01-movimentacao",
     icone: Waypoints,
-    cor: "#049f9a",
+    cor: "#00b3ac",
   },
   {
     id: "c03",
@@ -91,7 +91,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "movimentacao",
     rota: "/c03-encargos",
     icone: Coins,
-    cor: "#c87b00",
+    cor: "#00b3ac",
   },
   {
     id: "kpis",
@@ -107,7 +107,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "covenants",
     rota: "/kpis",
     icone: Gauge,
-    cor: "#0070f2",
+    cor: "#00b3ac",
   },
   {
     id: "c04",
@@ -123,7 +123,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "covenants",
     rota: "/c04-covenants",
     icone: Scale,
-    cor: "#df1278",
+    cor: "#00b3ac",
   },
   {
     id: "c05",
@@ -139,7 +139,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "fechamento",
     rota: "/c05-fechamento",
     icone: ClipboardCheck,
-    cor: "#256f3a",
+    cor: "#00b3ac",
   },
   {
     id: "c06",
@@ -155,7 +155,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "fechamento",
     rota: "/c06-nota-explicativa",
     icone: FileText,
-    cor: "#1d2d3e",
+    cor: "#00b3ac",
   },
   {
     id: "cds",
@@ -171,7 +171,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     secao: "tecnica",
     rota: "/cds",
     icone: Database,
-    cor: "#5d36ff",
+    cor: "#00b3ac",
   },
 ];
 

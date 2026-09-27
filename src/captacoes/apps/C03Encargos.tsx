@@ -40,17 +40,17 @@ import { arredondarTabela, ratear } from "../lib/arredondamento";
 import { PERIODOS, periodoApuracao, type Periodo, type PeriodoApuracao } from "../lib/periodos";
 
 const rel = relatorioCaptacao("c03");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-const legendStyle = { fontSize: 12, fontFamily: "72, Arial" };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
+const legendStyle = { fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" };
 
 /** Cores dos componentes dos encargos */
 const COR = {
   juros: CHART_COLORS[0],
   atualizacao: CHART_COLORS[1],
   custos: CHART_COLORS[8],
-  despesa: "#1d2d3e",
+  despesa: "#f7f3e7",
   capitalizado: CHART_COLORS[5],
-  cdi: "#1d2d3e",
+  cdi: "#f7f3e7",
   custoMedio: CHART_COLORS[4],
 };
 
@@ -359,7 +359,7 @@ export function C03Encargos() {
           <div className="text-xs text-label whitespace-nowrap">{taxaContratadaDivida(x.c)}</div>
           {(x.captadoNoPeriodo || x.liquidadoNoPeriodo) && (
             <div className="mt-1">
-              <Tag color={x.liquidadoNoPeriodo ? "#556b82" : "#0070f2"}>
+              <Tag color={x.liquidadoNoPeriodo ? "#a5a099" : "#009994"}>
                 {x.liquidadoNoPeriodo ? `Liquidado em ${fmtDate(x.c.vencimento)}` : `Captado em ${fmtDate(x.c.dataCaptacao)}`}
               </Tag>
             </div>
@@ -664,7 +664,7 @@ export function C03Encargos() {
       }
     >
       {/* Barra de filtros */}
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
           <FilterField label="Empresa" className="lg:w-80">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -695,7 +695,7 @@ export function C03Encargos() {
           />
         </div>
         {/* Pop-in (sap.m.Table responsiva): em telas estreitas os valores descem para baixo do contrato */}
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {[...linhas]
             .sort((a, b) => b.total - a.total)
             .map((x) => (
@@ -709,7 +709,7 @@ export function C03Encargos() {
                     <div className="text-xs text-label">{taxaContratadaDivida(x.c)}</div>
                     {(x.captadoNoPeriodo || x.liquidadoNoPeriodo) && (
                       <div className="mt-1">
-                        <Tag color={x.liquidadoNoPeriodo ? "#556b82" : "#0070f2"}>
+                        <Tag color={x.liquidadoNoPeriodo ? "#a5a099" : "#009994"}>
                           {x.liquidadoNoPeriodo ? `Liquidado em ${fmtDate(x.c.vencimento)}` : `Captado em ${fmtDate(x.c.dataCaptacao)}`}
                         </Tag>
                       </div>
@@ -724,7 +724,7 @@ export function C03Encargos() {
                 <PopInValores x={inteiro(x)} />
               </li>
             ))}
-          <li className="px-4 py-3 bg-[#f5f6f7]">
+          <li className="px-4 py-3 bg-surface-3">
             <div className="flex items-start justify-between gap-3">
               <div className="text-sm font-bold text-text">Total ({linhas.length})</div>
               <div className="text-right">
@@ -760,8 +760,8 @@ export function C03Encargos() {
           <div className="h-80 xl:h-auto xl:flex-1 xl:min-h-[320px] -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={d.mensal} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
                 <YAxis
                   domain={[0, eixoMensal.max]}
                   ticks={eixoMensal.ticks}
@@ -771,7 +771,7 @@ export function C03Encargos() {
                   width={48}
                   tickFormatter={(v: number) => fmtNum(v / 1000)}
                 />
-                <Tooltip cursor={{ fill: "#f2f4f6" }} content={({ active, payload }) => (active && payload?.length ? <TooltipMes m={payload[0].payload as MesEncargos} /> : null)} />
+                <Tooltip cursor={{ fill: "#2f2e2e" }} content={({ active, payload }) => (active && payload?.length ? <TooltipMes m={payload[0].payload as MesEncargos} /> : null)} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                 <Bar dataKey="juros" name="Juros" stackId="e" fill={COR.juros} isAnimationActive={false}>
                   {d.mensal.map((m) => (
@@ -815,12 +815,12 @@ export function C03Encargos() {
             <span className="text-[13px] text-label">Encargos – {curto}</span>
             <span className="text-base font-bold tabular text-text whitespace-nowrap">{fmtBRL(d.inteiros.total.total)}</span>
           </div>
-          <div className="flex h-2.5 rounded-full overflow-hidden bg-[#eff1f2] mt-2" aria-hidden>
-            <div style={{ width: `${(1 - pctCapitalizado) * 100}%`, backgroundColor: "#475e75" }} />
+          <div className="flex h-2.5 rounded-full overflow-hidden bg-surface-2 mt-2" aria-hidden>
+            <div style={{ width: `${(1 - pctCapitalizado) * 100}%`, backgroundColor: "#d8d2c6" }} />
             <div style={{ width: `${pctCapitalizado * 100}%`, backgroundColor: COR.capitalizado }} />
           </div>
           <ul className="mt-2.5 space-y-1.5 text-[13px]">
-            <LinhaSplit cor="#475e75" rotulo="Despesa financeira" valor={d.inteiros.total.despesaFinanceira} pct={1 - pctCapitalizado} />
+            <LinhaSplit cor="#d8d2c6" rotulo="Despesa financeira" valor={d.inteiros.total.despesaFinanceira} pct={1 - pctCapitalizado} />
             <LinhaSplit cor={COR.capitalizado} rotulo="Capitalizados no ativo" valor={d.inteiros.total.capitalizados} pct={pctCapitalizado} />
           </ul>
 
@@ -856,7 +856,7 @@ export function C03Encargos() {
               </div>
             ))
           ) : (
-            <p className="mt-4 text-[13px] text-label rounded-lg bg-[#f5f6f7] px-3 py-2.5">
+            <p className="mt-4 text-[13px] text-label rounded-lg bg-surface-3 px-3 py-2.5">
               Nenhum contrato da empresa selecionada financia ativo qualificável: todos os encargos vão para a despesa financeira.
             </p>
           )}
@@ -899,7 +899,7 @@ export function C03Encargos() {
           <div className="-ml-2" style={{ height: Math.max(160, d.custo.length * 30 + 36) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={d.custo} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 0 }} barCategoryGap={6}>
-                <CartesianGrid horizontal={false} stroke="#e5e5e5" />
+                <CartesianGrid horizontal={false} stroke="#3f3f3d" />
                 <XAxis
                   type="number"
                   domain={[0, xMax]}
@@ -907,7 +907,7 @@ export function C03Encargos() {
                   tickFormatter={(v: number) => `${fmtDec(v, 0)}%`}
                   tick={AXIS_STYLE}
                   tickLine={false}
-                  axisLine={{ stroke: "#a8b2bd" }}
+                  axisLine={{ stroke: "#575653" }}
                 />
                 <YAxis yAxisId="id" type="category" dataKey="id" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={60} interval={0} />
                 {/* Valores em coluna à direita da área do gráfico (não se sobrepõem às linhas de referência) */}
@@ -917,13 +917,13 @@ export function C03Encargos() {
                   type="category"
                   dataKey="id"
                   tickFormatter={(id: string) => fmtPct((d.custo.find((x) => x.id === id)?.taxa ?? 0) / 100)}
-                  tick={{ ...AXIS_STYLE, fill: "#1d2d3e", fontWeight: 600 }}
+                  tick={{ ...AXIS_STYLE, fill: "#f7f3e7", fontWeight: 600 }}
                   tickLine={false}
                   axisLine={false}
                   width={58}
                   interval={0}
                 />
-                <Tooltip cursor={{ fill: "#f2f4f6" }} content={({ active, payload }) => (active && payload?.length ? <TooltipCusto x={payload[0].payload as CustoContrato} cdi={p.cdi} /> : null)} />
+                <Tooltip cursor={{ fill: "#2f2e2e" }} content={({ active, payload }) => (active && payload?.length ? <TooltipCusto x={payload[0].payload as CustoContrato} cdi={p.cdi} /> : null)} />
                 <Bar yAxisId="id" dataKey="taxa" name="Taxa efetiva a.a." radius={[0, 4, 4, 0]} maxBarSize={20} isAnimationActive={false}>
                   {d.custo.map((x) => (
                     <Cell key={x.id} fill={x.cor} />
@@ -945,7 +945,7 @@ export function C03Encargos() {
           <div className="hidden md:block">
             <DataTable columns={colIndexadores} rows={d.indexadores} rowKey={(x) => x.indexador} showTotals totalLabel="Carteira" />
           </div>
-          <ul className="md:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="md:hidden border-t border-line divide-y divide-line-soft">
             {d.indexadores.map((x) => (
               <li key={x.indexador} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
@@ -983,7 +983,7 @@ export function C03Encargos() {
                 </dl>
               </li>
             ))}
-            <li className="px-4 py-3 bg-[#f5f6f7] flex items-start justify-between gap-3">
+            <li className="px-4 py-3 bg-surface-3 flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-bold text-text">Carteira</div>
                 <div className="text-xs text-label mt-0.5 tabular">
@@ -1093,7 +1093,7 @@ function Item({ rotulo, sub, children, className }: { rotulo: string; sub?: stri
 
 /** Legenda dos gráficos: texto na cor do texto (a cor da série fica só no marcador) */
 function textoLegenda(valor: string) {
-  return <span style={{ color: "#1d2d3e" }}>{valor}</span>;
+  return <span style={{ color: "#f7f3e7" }}>{valor}</span>;
 }
 
 /** Parcelas arredondadas para inteiros que somam o total arredondado (maior resto) */
@@ -1129,7 +1129,7 @@ function TooltipMes({ m }: { m: MesEncargos }) {
     { rotulo: "Despesa financeira", v: despesa, cor: COR.despesa, forte: true },
   ];
   return (
-    <div className="bg-white px-3 py-2 shadow-fiori" style={tooltipStyle}>
+    <div className="bg-surface px-3 py-2 shadow-fiori" style={tooltipStyle}>
       <div className="font-semibold text-text mb-1">
         {fmtMonthLong(m.fim)} <span className="font-normal text-label">· R$ mil</span>
       </div>
@@ -1156,7 +1156,7 @@ function TooltipMes({ m }: { m: MesEncargos }) {
 function TooltipCusto({ x, cdi }: { x: CustoContrato; cdi: number }) {
   const dif = (x.pos.taxaEfetivaAA - cdi) * 100;
   return (
-    <div className="bg-white px-3 py-2 shadow-fiori max-w-[280px]" style={tooltipStyle}>
+    <div className="bg-surface px-3 py-2 shadow-fiori max-w-[280px]" style={tooltipStyle}>
       <div className="font-semibold text-text">{x.id}</div>
       <div className="text-xs text-label leading-snug">{x.pos.c.instrumento}</div>
       <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 text-xs mt-1.5">

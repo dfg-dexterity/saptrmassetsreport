@@ -32,18 +32,18 @@ import { custoMedioDivida } from "../lib/indicadores";
 import { vnaLFT, vnaNTNB } from "../lib/tesouro";
 
 const rel = relatorioPorId("premissas");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 /** Origem de cada parâmetro: só os dados de mercado vêm do SAP */
 type Origem = "sap" | "usuario" | "derivado" | "constante" | "parametro" | "legal";
 
 const ORIGEM: Record<Origem, { rotulo: string; cor: string; bloqueado: boolean }> = {
-  sap: { rotulo: "Importado do SAP", cor: "#556b82", bloqueado: true },
-  usuario: { rotulo: "Seleção do usuário", cor: "#0070f2", bloqueado: false },
-  derivado: { rotulo: "Derivado da data-base", cor: "#8b47d7", bloqueado: false },
-  constante: { rotulo: "Constante de cálculo", cor: "#788fa6", bloqueado: true },
-  parametro: { rotulo: "Parâmetro SAP (customizing)", cor: "#556b82", bloqueado: true },
-  legal: { rotulo: "Norma legal", cor: "#c87b00", bloqueado: true },
+  sap: { rotulo: "Importado do SAP", cor: "#a5a099", bloqueado: true },
+  usuario: { rotulo: "Seleção do usuário", cor: "#009994", bloqueado: false },
+  derivado: { rotulo: "Derivado da data-base", cor: "#a462a6", bloqueado: false },
+  constante: { rotulo: "Constante de cálculo", cor: "#908c85", bloqueado: true },
+  parametro: { rotulo: "Parâmetro SAP (customizing)", cor: "#a5a099", bloqueado: true },
+  legal: { rotulo: "Norma legal", cor: "#5e9454", bloqueado: true },
 };
 
 interface Parametro {
@@ -506,10 +506,10 @@ export function PremissasApp() {
           <table className="w-full text-sm min-w-[760px]">
             <thead>
               <tr className="text-left text-[13px] text-text">
-                <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Parâmetro</th>
-                <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd] text-right w-48">Valor</th>
-                <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Origem / fonte</th>
-                <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Usado em</th>
+                <th className="px-4 py-2 border-b-2 border-brand">Parâmetro</th>
+                <th className="px-4 py-2 border-b-2 border-brand text-right w-48">Valor</th>
+                <th className="px-4 py-2 border-b-2 border-brand">Origem / fonte</th>
+                <th className="px-4 py-2 border-b-2 border-brand">Usado em</th>
               </tr>
             </thead>
             <tbody>
@@ -539,7 +539,7 @@ export function PremissasApp() {
                 <td className="px-4 py-2.5 border-b border-line-soft">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-text">Custo médio ponderado da dívida a.a.</span>
-                    <Tag color="#8b47d7">Calculado</Tag>
+                    <Tag color="#a462a6">Calculado</Tag>
                   </div>
                 </td>
                 <td className="px-4 py-2.5 border-b border-line-soft text-right tabular font-bold text-text">{fmtPct(custoDivida)}</td>
@@ -554,7 +554,7 @@ export function PremissasApp() {
                 <td className="px-4 py-2.5 border-b border-line-soft">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-text">Benchmark da carteira</span>
-                    <Tag color="#049f9a">Cadastro</Tag>
+                    <Tag color="#c97d24">Cadastro</Tag>
                   </div>
                 </td>
                 <td className="px-4 py-2.5 border-b border-line-soft text-right tabular font-bold text-text whitespace-nowrap">
@@ -588,8 +588,8 @@ export function PremissasApp() {
         <div className="h-64 -ml-2">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={serieCDI} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="#e5e5e5" />
-              <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval="preserveStartEnd" minTickGap={24} />
+              <CartesianGrid vertical={false} stroke="#3f3f3d" />
+              <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval="preserveStartEnd" minTickGap={24} />
               <YAxis
                 tick={AXIS_STYLE}
                 tickLine={false}
@@ -603,12 +603,12 @@ export function PremissasApp() {
               <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 2)}%`, n]} />
               <ReferenceLine
                 x={fmtMonthShort(`${p.dataBase.slice(0, 7)}-01`)}
-                stroke="#556b82"
+                stroke="#a5a099"
                 strokeDasharray="3 3"
-                label={{ value: "Data-base", fill: "#556b82", fontSize: 11, position: "insideTopLeft" }}
+                label={{ value: "Data-base", fill: "#a5a099", fontSize: 11, position: "insideTopLeft" }}
               />
-              <Line dataKey="historico" name="Importado do SAP" stroke="#0070f2" strokeWidth={2.5} dot={false} connectNulls={false} isAnimationActive={false} />
-              <Line dataKey="projecao" name="Projeção" stroke="#0070f2" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
+              <Line dataKey="historico" name="Importado do SAP" stroke="#009994" strokeWidth={2.5} dot={false} connectNulls={false} isAnimationActive={false} />
+              <Line dataKey="projecao" name="Projeção" stroke="#009994" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -620,16 +620,16 @@ export function PremissasApp() {
             <table className="w-full text-sm min-w-[340px]">
               <thead>
                 <tr className="text-[13px] text-text">
-                  <th className="text-left font-semibold py-2 border-b border-[#a8b2bd] align-bottom">Moeda</th>
-                  <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">
+                  <th className="text-left py-2 border-b-2 border-brand align-bottom">Moeda</th>
+                  <th className="text-right py-2 pl-3 border-b-2 border-brand whitespace-nowrap">
                     Data-base
                     <div className="text-xs font-normal text-label tabular">{fmtDate(p.dataBase)}</div>
                   </th>
-                  <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">
+                  <th className="text-right py-2 pl-3 border-b-2 border-brand whitespace-nowrap">
                     Mês anterior
                     <div className="text-xs font-normal text-label tabular">{fmtDate(cambio.mesAnterior)}</div>
                   </th>
-                  <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] align-bottom">Variação</th>
+                  <th className="text-right py-2 pl-3 border-b-2 border-brand align-bottom">Variação</th>
                 </tr>
               </thead>
               <tbody>
@@ -687,10 +687,10 @@ export function PremissasApp() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[13px] text-text">
-                <th className="text-left font-semibold py-2 border-b border-[#a8b2bd]">Faixa</th>
-                <th className="text-right font-semibold py-2 border-b border-[#a8b2bd]">Dias de</th>
-                <th className="text-right font-semibold py-2 border-b border-[#a8b2bd]">Dias até</th>
-                <th className="text-right font-semibold py-2 border-b border-[#a8b2bd]">Alíquota</th>
+                <th className="text-left py-2 border-b-2 border-brand">Faixa</th>
+                <th className="text-right py-2 border-b-2 border-brand">Dias de</th>
+                <th className="text-right py-2 border-b-2 border-brand">Dias até</th>
+                <th className="text-right py-2 border-b-2 border-brand">Alíquota</th>
               </tr>
             </thead>
             <tbody>
@@ -723,17 +723,17 @@ export function PremissasApp() {
           <div className="h-56 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={[...TABELA_IOF.map((v, i) => ({ dia: i + 1, v: v * 100 })), { dia: 30, v: 0 }]}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="dia" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={1} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="dia" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval={1} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} unit="%" width={44} />
                 <Tooltip formatter={(v: number) => [`${v.toFixed(0)}%`, "IOF s/ rendimento"]} labelFormatter={(l) => `D+${l}`} contentStyle={tooltipStyle} />
-                <Bar dataKey="v" fill="#c87b00" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="v" fill="#5e9454" radius={[3, 3, 0, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-1.5 mt-3">
             {[...TABELA_IOF, 0].map((v, i) => (
-              <div key={i} className="rounded-md bg-[#f5f6f7] px-1.5 py-1 text-center">
+              <div key={i} className="rounded-md bg-surface-3 px-1.5 py-1 text-center">
                 <div className="text-[11px] text-label">D+{i + 1}</div>
                 <div className="text-[13px] font-bold tabular text-text">{v ? `${Math.round(v * 100)}%` : "–"}</div>
               </div>

@@ -42,12 +42,12 @@ export async function exportarExcel(arquivo: string, planilhas: PlanilhaExport[]
       const n = pl.colunas.length;
       const pad = (row: object[]) => [...row, ...Array(Math.max(0, n - row.length)).fill(null)];
       const data: unknown[][] = [];
-      data.push(pad([{ value: pl.titulo, fontWeight: "bold", fontSize: 14, textColor: "#1D2D3E" }]));
+      data.push(pad([{ value: pl.titulo, fontWeight: "bold", fontSize: 14, textColor: "#1B1B1B" }]));
       data.push(
         pad([
           {
             value: `${pl.subtitulo ? pl.subtitulo + " · " : ""}Data-base: ${fmtDate(dataBase)} · Dados fictícios (demo)`,
-            textColor: "#556B82",
+            textColor: "#4D4D4D",
           },
         ]),
       );
@@ -56,8 +56,8 @@ export async function exportarExcel(arquivo: string, planilhas: PlanilhaExport[]
         pl.colunas.map((c) => ({
           value: c.titulo,
           fontWeight: "bold",
-          textColor: "#FFFFFF",
-          backgroundColor: "#0070F2",
+          textColor: "#1B1B1B",
+          backgroundColor: "#009994",
           align: c.tipo && c.tipo !== "texto" ? "right" : "left",
         })),
       );
@@ -77,15 +77,15 @@ export async function exportarExcel(arquivo: string, planilhas: PlanilhaExport[]
         data.push(
           pl.colunas.map((c, i) => ({
             ...(cell(pl.total![i], c, true) ?? { value: "" }),
-            backgroundColor: "#EFF1F2",
+            backgroundColor: "#F7F3E7",
             topBorderStyle: "thin",
-            topBorderColor: "#A8B2BD",
+            topBorderColor: "#4D4D4D",
           })),
         );
       }
       if (pl.notas?.length) {
         data.push(pad([]));
-        for (const nota of pl.notas) data.push(pad([{ value: nota, textColor: "#556B82", fontStyle: "italic" }]));
+        for (const nota of pl.notas) data.push(pad([{ value: nota, textColor: "#4D4D4D", fontStyle: "italic" }]));
       }
       return {
         sheet: pl.nome.slice(0, 31),

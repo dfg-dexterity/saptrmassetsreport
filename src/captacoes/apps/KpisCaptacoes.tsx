@@ -558,7 +558,7 @@ function fotoMensal(data: string, p: PremissasMercado): FotoMensal {
   for (const x of pos) {
     const grupo = GRUPO_MODALIDADE[x.c.modalidade];
     const rotulo = grupo === "CCB" ? x.c.credor : grupo;
-    const f = porFonte.get(rotulo) ?? { saldo: 0, cor: COR_MODALIDADE[grupo] ?? "#758ca4" };
+    const f = porFonte.get(rotulo) ?? { saldo: 0, cor: COR_MODALIDADE[grupo] ?? "#908c85" };
     f.saldo += x.saldoContabil;
     porFonte.set(rotulo, f);
   }
@@ -1403,10 +1403,10 @@ export function KpisCaptacoes() {
               <KpiPonte
                 base={atual.dividaBruta}
                 linhas={[
-                  { rotulo: "Dívida bruta", valor: atual.dividaBruta, cor: "#df1278", forte: true },
-                  { rotulo: `(−) Caixa${atual.dataCaixa && !caixaNaData ? ` (${fmtDate(atual.dataCaixa)})` : ""}`, valor: atual.caixa ?? 0, cor: "#758ca4" },
-                  { rotulo: "(−) Aplicações (valor contábil)", valor: atual.aplicacoes, cor: "#0070f2" },
-                  { rotulo: "Dívida líquida", valor: dlNaData, cor: "#8b47d7", forte: true },
+                  { rotulo: "Dívida bruta", valor: atual.dividaBruta, cor: "#c9668f", forte: true },
+                  { rotulo: `(−) Caixa${atual.dataCaixa && !caixaNaData ? ` (${fmtDate(atual.dataCaixa)})` : ""}`, valor: atual.caixa ?? 0, cor: "#908c85" },
+                  { rotulo: "(−) Aplicações (valor contábil)", valor: atual.aplicacoes, cor: "#009994" },
+                  { rotulo: "Dívida líquida", valor: dlNaData, cor: "#a462a6", forte: true },
                 ]}
               />
             </KpiPainel>,
@@ -1433,13 +1433,13 @@ export function KpisCaptacoes() {
               <KpiPonte
                 base={Math.max((atual.caixa ?? 0) + atual.aplicacoesCirculantes, atual.circulante, atual.principal12m + atual.juros12m)}
                 linhas={[
-                  { rotulo: `Caixa${atual.dataCaixa && !caixaNaData ? ` (${fmtDate(atual.dataCaixa)})` : ""}`, valor: atual.caixa ?? 0, cor: "#758ca4" },
-                  { rotulo: "(+) Aplicações circulantes (valor contábil)", valor: atual.aplicacoesCirculantes, cor: "#0070f2" },
+                  { rotulo: `Caixa${atual.dataCaixa && !caixaNaData ? ` (${fmtDate(atual.dataCaixa)})` : ""}`, valor: atual.caixa ?? 0, cor: "#908c85" },
+                  { rotulo: "(+) Aplicações circulantes (valor contábil)", valor: atual.aplicacoesCirculantes, cor: "#009994" },
                   { rotulo: "Caixa + aplicações circulantes", valor: (atual.caixa ?? 0) + atual.aplicacoesCirculantes, cor: CHART_SEMANTIC.good, forte: true },
                   {
                     rotulo: `Dívida circulante${atual.reclassificados.length ? " (com reclassificação CPC 26)" : ""}`,
                     valor: atual.circulante,
-                    cor: "#df1278",
+                    cor: "#c9668f",
                     forte: true,
                   },
                   { rotulo: "Serviço da dívida – próximos 12 meses", valor: atual.principal12m + atual.juros12m, cor: CHART_SEMANTIC.critical },
@@ -1493,10 +1493,10 @@ function CartaoKpi({ k, serie, foto }: { k: ResultadoKpi; serie?: { x: string; y
 /** Barra segmentada (mix por indexador / fontes) com legenda */
 function BarraFatias({ fatias, resto = [] }: { fatias: Fatia[]; resto?: Fatia[] }) {
   const outros = resto.reduce((s, f) => s + f.share, 0);
-  const itens = outros > 0 ? [...fatias, { rotulo: "Outros", saldo: 0, share: outros, cor: "#a8b2bd" }] : fatias;
+  const itens = outros > 0 ? [...fatias, { rotulo: "Outros", saldo: 0, share: outros, cor: "#575653" }] : fatias;
   return (
     <div>
-      <div className="flex h-2 rounded-full overflow-hidden bg-[#e5e5e5] gap-px" aria-hidden>
+      <div className="flex h-2 rounded-full overflow-hidden bg-surface-2 gap-px" aria-hidden>
         {itens
           .filter((f) => f.share > 0.0005)
           .map((f) => (
@@ -1521,19 +1521,19 @@ function BarraFatias({ fatias, resto = [] }: { fatias: Fatia[]; resto?: Fatia[] 
 // ---------------------------------------------------------------------------
 
 const COR_ESTADO: Record<ValueState, string> = {
-  positive: "#30914c",
-  critical: "#e26300",
-  negative: "#f53232",
-  information: "#0070f2",
-  neutral: "#758ca4",
+  positive: "#009994",
+  critical: "#ffa436",
+  negative: "#d9563e",
+  information: "#009994",
+  neutral: "#908c85",
 };
 
 const COR_TEXTO: Record<ValueState, string> = {
-  positive: "#256f3a",
-  critical: "#b44f00",
-  negative: "#aa0808",
-  information: "#0070f2",
-  neutral: "#1d2d3e",
+  positive: "#00b3ac",
+  critical: "#ffa436",
+  negative: "#e4806c",
+  information: "#d8d2c6",
+  neutral: "#f7f3e7",
 };
 
 /** Folga de cada covenant em % do limite, com a marca do início da faixa de atenção */
@@ -1575,12 +1575,12 @@ function PainelFolgaCovenants({ kpis, dataBase, className }: { kpis: ResultadoKp
                 </span>
               </span>
             </div>
-            <div className="mt-1 relative h-2 rounded-full bg-[#eef0f2]">
+            <div className="mt-1 relative h-2 rounded-full bg-surface-2">
               <div
                 className="absolute inset-y-0 left-0 rounded-full"
                 style={{ width: `${folgaRel > 0 ? Math.max(1.5, (folgaRel / escala) * 100) : 1.5}%`, backgroundColor: COR_ESTADO[k.estado] }}
               />
-              <div className="absolute -top-0.5 -bottom-0.5 w-0.5 rounded bg-[#1d2d3e]" style={{ left: `${Math.min(100, (atencaoRel / escala) * 100)}%` }} aria-hidden />
+              <div className="absolute -top-0.5 -bottom-0.5 w-0.5 rounded bg-text" style={{ left: `${Math.min(100, (atencaoRel / escala) * 100)}%` }} aria-hidden />
             </div>
           </li>
         ))}

@@ -1,9 +1,10 @@
-# Reporting Pack Tesouraria – Demos (SAP Fiori Horizon)
+# Reporting Pack Tesouraria – Demos (tema Dexterity)
 
 Aplicativos de demonstração dos relatórios da planilha **“DXT – CDS View + Pacote de Relatórios”** (Reporting Pack sobre
 o SAP S/4HANA Treasury and Risk Management), no mesmo formato do demo *Gestão de Lote App* (Launchpad + aplicativos), com o
-visual do **SAP Fiori mais recente – tema Horizon** (fonte SAP “72”, shell bar branca, tiles e cards arredondados, paleta e
-cores semânticas do Horizon).
+a **identidade visual web da Dexterity IT Solutions** – o tema escuro do site institucional: fundo grafite, cerceta como
+cor de ação, títulos em Barlow Condensed caixa alta, corpo em Figtree, rótulos técnicos em IBM Plex Mono, cantos vivos e
+filetes de 1px no lugar de sombras (folha da marca em `src/styles/dexterity.css`, tokens do app em `src/styles/theme.css`).
 
 São **dois produtos separados**, cada um com a sua página, Launchpad, rotas e alertas:
 
@@ -96,7 +97,7 @@ disponível. Detalhes em [docs/GUIA-CAPTACOES.md](docs/GUIA-CAPTACOES.md).
 - **Data-base selecionável** (topo da página): todos os relatórios são recalculados para o fechamento escolhido.
 - **Conciliações automáticas**: R05 = R02 = Carteira-Mestre e roll-forward / FI-GL (R12) nas aplicações; roll-forward, CP/LP e FI-GL nas captações.
 - **Exportar Excel** em todos os relatórios (arquivo `.xlsx` real, com cabeçalho, totais e notas) e **Imprimir/PDF**.
-- **Central de alertas** (sino na shell bar) própria de cada produto.
+- **Central de alertas** (sino no cabeçalho) própria de cada produto.
 - Layout responsivo (desktop, tablet e celular).
 
 ## Rodando localmente
@@ -146,7 +147,7 @@ O workflow `.github/workflows/deploy.yml` compila o projeto a cada PR e publica 
 ```
 src/
   shared/          tudo que os dois produtos usam
-    components/    fiori/ (tile, card, tabela, filtros, status, KPI…) e shell/ (shell bar, Dynamic Page, "Sobre")
+    components/    fiori/ (tile, card, tabela, filtros, status, KPI…) e shell/ (cabeçalho com a marca, página de relatório, "Sobre")
     context/       data-base e premissas importadas do SAP; informações do produto e alertas
     data/          mercado (premissas SAP, CDI mensal), empresas, dados corporativos, CDS Views
     lib/           calendário de dias úteis, taxas, formatação, exportação Excel

@@ -23,7 +23,7 @@ import { compararCarteira, compararOperacao, corExcesso, SITUACAO_STATE, SITUACA
 import { consolidarPorTipo, rentabilidadeMestre, TIPOS_CONTRATO, type RentabContrato, type TipoContrato } from "../lib/carteiraMestre";
 
 const rel = relatorioPorId("r03");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 type Periodo = "mes" | "tri" | "ano" | "12m";
 const PERIODOS: { value: Periodo; label: string }[] = [
@@ -189,7 +189,7 @@ export function R03Rentabilidade() {
       chave: "total",
       rotulo: "Carteira consolidada",
       curto: "Consolidado",
-      cor: "#475e75",
+      cor: "#d8d2c6",
       origem: "",
       rota: "",
       contratos: ls.length,
@@ -546,12 +546,12 @@ export function R03Rentabilidade() {
 
   // linhas "(−)" mostram a dedução em valor positivo (negativo só se houver reversão, ex.: IR revertido no período)
   const passos = [
-    { rotulo: "Rentabilidade bruta", v: cart.rentabBruta, cor: "#0070f2" },
-    { rotulo: "(−) IOF realizado", v: (cart.iof / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
-    { rotulo: "(−) IR (competência)", v: (cart.ir / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
-    { rotulo: "Rentabilidade líquida", v: cart.rentabLiquida, cor: "#256f3a" },
-    { rotulo: `(−) Efeito da inflação (IPCA ${fmtPct(cart.ipcaPeriodo)})`, v: cart.rentabLiquida - cart.rentabReal, cor: "#aa0808" },
-    { rotulo: "Rentabilidade real", v: cart.rentabReal, cor: "#049f9a" },
+    { rotulo: "Rentabilidade bruta", v: cart.rentabBruta, cor: "#009994" },
+    { rotulo: "(−) IOF realizado", v: (cart.iof / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#ffa436" },
+    { rotulo: "(−) IR (competência)", v: (cart.ir / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#ffa436" },
+    { rotulo: "Rentabilidade líquida", v: cart.rentabLiquida, cor: "#00b3ac" },
+    { rotulo: `(−) Efeito da inflação (IPCA ${fmtPct(cart.ipcaPeriodo)})`, v: cart.rentabLiquida - cart.rentabReal, cor: "#e4806c" },
+    { rotulo: "Rentabilidade real", v: cart.rentabReal, cor: "#c97d24" },
   ];
   const maxPasso = Math.max(...passos.map((x) => Math.abs(x.v)), 0.0001);
 
@@ -579,7 +579,7 @@ export function R03Rentabilidade() {
         </div>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
           <FilterField label="Empresa" className="lg:w-80">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -611,11 +611,11 @@ export function R03Rentabilidade() {
           <DataTable columns={colunasTipo} rows={tipos} rowKey={(t) => t.chave} showTotals />
         </div>
         {/* celular: lista em cartões (identificação → resultado → detalhes) */}
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {[...tipos, total].map((t) => {
             const tot = t.chave === "total";
             return (
-              <li key={t.chave} className={tot ? "px-4 py-3 bg-[#f5f6f7]" : "px-4 py-3"}>
+              <li key={t.chave} className={tot ? "px-4 py-3 bg-surface-3" : "px-4 py-3"}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex items-start gap-2">
                     {!tot && <span className="w-2.5 h-2.5 rounded-sm shrink-0 mt-1.5" style={{ backgroundColor: t.cor }} />}
@@ -680,33 +680,33 @@ export function R03Rentabilidade() {
         <Card className="xl:col-span-3" title="% do CDI por tipo de contrato" subtitle="Bruto × líquido de IOF, IR e taxas no período · traço = benchmark cadastrado">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-text mb-2">
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm bg-[#475e75]" />% CDI bruto (cor cheia)
+              <span className="w-3 h-3 rounded-sm bg-muted" />% CDI bruto (cor cheia)
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm bg-[#475e75]/40" />% CDI líquido (cor clara)
+              <span className="w-3 h-3 rounded-sm bg-muted/40" />% CDI líquido (cor clara)
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-4 h-[3px] rounded-full bg-[#1d2d3e]" />
+              <span className="w-4 h-[3px] rounded-full bg-text" />
               Benchmark
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-4 border-t-2 border-dashed border-[#788fa6]" />
+              <span className="w-4 border-t-2 border-dashed border-line" />
               100% do CDI
             </span>
           </div>
           <div className="h-72 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={graficoTipos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="nome" tick={<TickQuebrado />} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} height={40} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="nome" tick={<TickQuebrado />} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} height={40} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={44} domain={[escalaTipos.lo, escalaTipos.hi]} ticks={escalaTipos.ticks} tickFormatter={(v: number) => `${fmtDec(v, 0)}%`} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]}
                   labelFormatter={(l: string, pl: readonly { payload?: { rotulo?: string } }[]) => pl?.[0]?.payload?.rotulo ?? l}
                 />
-                <ReferenceLine y={0} stroke="#a8b2bd" />
-                <ReferenceLine y={100} stroke="#788fa6" strokeDasharray="4 4" />
+                <ReferenceLine y={0} stroke="#575653" />
+                <ReferenceLine y={100} stroke="#908c85" strokeDasharray="4 4" />
                 <Bar dataKey="bruto" name="% CDI bruto" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {graficoTipos.map((d) => (
                     <Cell key={d.nome} fill={d.cor} />
@@ -720,7 +720,7 @@ export function R03Rentabilidade() {
                 <Line
                   dataKey="benchmark"
                   name="Benchmark"
-                  stroke="#1d2d3e"
+                  stroke="#f7f3e7"
                   strokeWidth={0}
                   activeDot={false}
                   isAnimationActive={false}
@@ -728,7 +728,7 @@ export function R03Rentabilidade() {
                     props.value === null || props.value === undefined || props.cy === undefined ? (
                       <g key={props.index} />
                     ) : (
-                      <line key={props.index} x1={(props.cx ?? 0) - 18} x2={(props.cx ?? 0) + 18} y1={props.cy} y2={props.cy} stroke="#1d2d3e" strokeWidth={3} strokeLinecap="round" />
+                      <line key={props.index} x1={(props.cx ?? 0) - 18} x2={(props.cx ?? 0) + 18} y1={props.cy} y2={props.cy} stroke="#f7f3e7" strokeWidth={3} strokeLinecap="round" />
                     )
                   }
                 />
@@ -758,7 +758,7 @@ export function R03Rentabilidade() {
         <div className="hidden lg:block">
           <DataTable columns={colunas} rows={linhas} rowKey={(r) => r.op.transacao} showTotals defaultSort={{ key: "rend", dir: "desc" }} maxHeight={560} />
         </div>
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {[...linhas]
             .sort((a, b) => b.rendimento - a.rendimento)
             .map((r) => {
@@ -795,7 +795,7 @@ export function R03Rentabilidade() {
                 </li>
               );
             })}
-          <li className="px-4 py-3 bg-[#f5f6f7]">
+          <li className="px-4 py-3 bg-surface-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-sm font-bold text-text">Carteira</div>
@@ -828,24 +828,24 @@ export function R03Rentabilidade() {
           <div className="h-72 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={porProduto} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="produto" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} angle={-30} textAnchor="end" height={64} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="produto" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#575653" }} interval={0} angle={-30} textAnchor="end" height={64} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit="%" />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% CDI`, n]} />
-                <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                <ReferenceLine y={100} stroke="#788fa6" strokeDasharray="4 4" />
-                <Bar dataKey="bruto" name="% CDI bruto" fill="#168eff" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="liquido" name="% CDI líquido" fill="#75980b" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+                <ReferenceLine y={100} stroke="#908c85" strokeDasharray="4 4" />
+                <Bar dataKey="bruto" name="% CDI bruto" fill="#4f8fd1" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="liquido" name="% CDI líquido" fill="#5e9454" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 <Line
                   dataKey="benchmark"
                   name="Benchmark"
-                  stroke="#1d2d3e"
+                  stroke="#f7f3e7"
                   strokeWidth={0}
                   legendType="plainline"
                   activeDot={false}
                   isAnimationActive={false}
                   dot={(props: { cx?: number; cy?: number; index?: number }) => (
-                    <line key={props.index} x1={(props.cx ?? 0) - 16} x2={(props.cx ?? 0) + 16} y1={props.cy} y2={props.cy} stroke="#1d2d3e" strokeWidth={3} strokeLinecap="round" />
+                    <line key={props.index} x1={(props.cx ?? 0) - 16} x2={(props.cx ?? 0) + 16} y1={props.cy} y2={props.cy} stroke="#f7f3e7" strokeWidth={3} strokeLinecap="round" />
                   )}
                 />
               </ComposedChart>
@@ -862,7 +862,7 @@ export function R03Rentabilidade() {
                     {fmtPct(x.v)}
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-[#eff1f2] overflow-hidden">
+                <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${(Math.abs(x.v) / maxPasso) * 100}%`, backgroundColor: x.cor }} />
                 </div>
               </li>

@@ -27,8 +27,8 @@ import { useBenchmarks } from "../context/BenchmarkContext";
 import { compararCarteira, corExcesso, situacaoBenchmark, SITUACAO_STATE, type ComparacaoBenchmark, type SituacaoBenchmark } from "../lib/benchmark";
 
 const rel = relatorioPorId("r05");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-const legendStyle = { fontSize: 12, fontFamily: "72, Arial" };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
+const legendStyle = { fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" };
 
 /** Tolerância das checagens (R$): diferenças abaixo de meio centavo são ruído de ponto flutuante */
 const TOL = 0.005;
@@ -329,7 +329,7 @@ export function R05Evolucao() {
         </>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -381,8 +381,8 @@ export function R05Evolucao() {
           <div className="h-72 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={dadosGrafico} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
                 <YAxis yAxisId="v" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />
                 <YAxis yAxisId="p" orientation="right" domain={[pctMin, pctMax]} ticks={pctTicks} tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit="%" />
                 <Tooltip
@@ -390,10 +390,10 @@ export function R05Evolucao() {
                   formatter={(v: number, n: string) => (n === "% do CDI" || n === "Benchmark" ? [`${fmtDec(v, 1)}%`, n] : [`R$ ${fmtDec(v, 2)} mi`, n])}
                 />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                <ReferenceLine yAxisId="p" y={100} stroke="#788fa6" strokeDasharray="4 4" />
-                <Bar yAxisId="v" dataKey="saldo" name="Saldo final" fill="#168eff" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Line yAxisId="p" dataKey="pctCDI" name="% do CDI" stroke="#c87b00" strokeWidth={2.5} dot={{ r: 3, fill: "#c87b00" }} isAnimationActive={false} />
-                <Line yAxisId="p" dataKey="benchmark" name="Benchmark" stroke="#1d2d3e" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
+                <ReferenceLine yAxisId="p" y={100} stroke="#908c85" strokeDasharray="4 4" />
+                <Bar yAxisId="v" dataKey="saldo" name="Saldo final" fill="#4f8fd1" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Line yAxisId="p" dataKey="pctCDI" name="% do CDI" stroke="#5e9454" strokeWidth={2.5} dot={{ r: 3, fill: "#5e9454" }} isAnimationActive={false} />
+                <Line yAxisId="p" dataKey="benchmark" name="Benchmark" stroke="#f7f3e7" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -402,14 +402,14 @@ export function R05Evolucao() {
           <div className="h-72 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={dadosGrafico} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} tickFormatter={(v: number) => fmtDec(v, 0)} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(Math.abs(v), 2)} mi`, n]} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                <ReferenceLine y={0} stroke="#a8b2bd" />
+                <ReferenceLine y={0} stroke="#575653" />
                 <Bar dataKey="aplicacoes" name="Aplicações" stackId="f" fill={CHART_SEMANTIC.good} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="resgates" name="Resgates" stackId="f" fill="#da6c6c" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="resgates" name="Resgates" stackId="f" fill="#ffa436" radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -421,20 +421,20 @@ export function R05Evolucao() {
           <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className="sticky left-0 z-[2] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[180px]">Movimentação</th>
+                <th className="sticky left-0 z-[2] bg-surface-2 text-left pl-4 pr-3 py-2.5 border-b-2 border-brand min-w-[180px]">Movimentação</th>
                 {d.meses.map((m) => (
                   <th
                     key={m.fim}
                     onClick={() => setMesSel(m.fim)}
                     className={clsx(
-                      "px-2.5 py-2.5 text-right font-semibold text-[13px] border-b border-[#a8b2bd] cursor-pointer whitespace-nowrap",
-                      m.fim === mes.fim ? "bg-selected text-[#0057d2]" : "bg-white hover:bg-hover",
+                      "px-2.5 py-2.5 text-right border-b-2 border-brand cursor-pointer whitespace-nowrap",
+                      m.fim === mes.fim ? "bg-selected text-link" : "bg-surface-2 hover:bg-hover",
                     )}
                   >
                     {fmtMonthShort(m.fim)}
                   </th>
                 ))}
-                <th className="px-2.5 py-2.5 text-right font-bold text-[13px] border-b border-[#a8b2bd] bg-[#f5f6f7] whitespace-nowrap">12 meses</th>
+                <th className="px-2.5 py-2.5 text-right border-b-2 border-brand bg-surface-2 whitespace-nowrap">12 meses</th>
               </tr>
             </thead>
             <tbody>
@@ -443,13 +443,13 @@ export function R05Evolucao() {
                   <tr>
                     <td
                       className={clsx(
-                        "sticky left-0 z-[1] bg-white pl-4 pr-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-label whitespace-nowrap border-b border-line-soft",
+                        "sticky left-0 z-[1] bg-surface pl-4 pr-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-label whitespace-nowrap border-b border-line-soft",
                         si === 0 ? "pt-2.5" : "pt-4",
                       )}
                     >
                       {s.titulo}
                     </td>
-                    <td colSpan={d.meses.length + 1} className="border-b border-line-soft bg-white" />
+                    <td colSpan={d.meses.length + 1} className="border-b border-line-soft bg-surface" />
                   </tr>
                   {s.linhas.map((l) => {
                     const fmt = (v: number | null) => {
@@ -468,7 +468,7 @@ export function R05Evolucao() {
                           className={clsx(
                             "sticky left-0 z-[1] pr-3 py-2 text-[13px] border-b border-line-soft whitespace-nowrap",
                             l.recuo ? "pl-8 italic" : "pl-4",
-                            l.destaque ? "bg-[#f5f6f7]" : "bg-white",
+                            l.destaque ? "bg-surface-3" : "bg-surface",
                             (l.tipo || l.recuo) && "text-label font-normal",
                           )}
                         >
@@ -479,7 +479,7 @@ export function R05Evolucao() {
                             key={m.fim}
                             className={clsx(
                               "px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap",
-                              m.fim === mes.fim ? "bg-selected" : l.destaque ? "bg-[#f5f6f7]" : "",
+                              m.fim === mes.fim ? "bg-selected" : l.destaque ? "bg-surface-3" : "",
                               l.recuo && "text-label",
                               l.tipo === "cdi" && COR_SITUACAO[m.situacao],
                               l.cor && corExcesso(l.valor(m)),
@@ -491,7 +491,7 @@ export function R05Evolucao() {
                         ))}
                         <td
                           className={clsx(
-                            "px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-[#f5f6f7] font-bold whitespace-nowrap",
+                            "px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-surface-3 font-bold whitespace-nowrap",
                             l.recuo && "text-label font-normal",
                             l.tipo === "cdi" && COR_SITUACAO[sit12],
                             l.cor && corExcesso(d.total12.bmk.excesso),
@@ -538,8 +538,8 @@ export function R05Evolucao() {
           <div className="h-72 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dadosTipo} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
@@ -561,10 +561,10 @@ export function R05Evolucao() {
             <table className="w-full text-[13px] min-w-[420px]">
               <thead>
                 <tr>
-                  <th className="text-left font-semibold pl-4 pr-2 py-2 border-b border-[#a8b2bd]">Tipo de contrato</th>
-                  <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd] whitespace-nowrap">R05</th>
-                  <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd] whitespace-nowrap">Carteira-Mestre</th>
-                  <th className="text-right font-semibold pl-2 pr-4 py-2 border-b border-[#a8b2bd]">Diferença</th>
+                  <th className="text-left pl-4 pr-2 py-2 border-b-2 border-brand">Tipo de contrato</th>
+                  <th className="text-right px-2 py-2 border-b-2 border-brand whitespace-nowrap">R05</th>
+                  <th className="text-right px-2 py-2 border-b-2 border-brand whitespace-nowrap">Carteira-Mestre</th>
+                  <th className="text-right pl-2 pr-4 py-2 border-b-2 border-brand">Diferença</th>
                 </tr>
               </thead>
               <tbody>
@@ -587,11 +587,11 @@ export function R05Evolucao() {
                     </td>
                   </tr>
                 ))}
-                <tr className="font-bold bg-[#f5f6f7]">
-                  <td className="pl-4 pr-2 py-2.5 border-b border-[#a8b2bd]">Saldo bruto</td>
-                  <td className="px-2 py-2.5 border-b border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtNum(final.saldoFinal)}</td>
-                  <td className="px-2 py-2.5 border-b border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtNum(conc.mestre)}</td>
-                  <td className={clsx("pl-2 pr-4 py-2.5 border-b border-[#a8b2bd] text-right tabular", okMestre ? "text-positive" : "text-negative")}>
+                <tr className="font-bold bg-surface-3">
+                  <td className="pl-4 pr-2 py-2.5 border-b border-line">Saldo bruto</td>
+                  <td className="px-2 py-2.5 border-b border-line text-right tabular whitespace-nowrap">{fmtNum(final.saldoFinal)}</td>
+                  <td className="px-2 py-2.5 border-b border-line text-right tabular whitespace-nowrap">{fmtNum(conc.mestre)}</td>
+                  <td className={clsx("pl-2 pr-4 py-2.5 border-b border-line text-right tabular", okMestre ? "text-positive" : "text-negative")}>
                     {fmtDec(okMestre ? 0 : conc.dif, 2)}
                   </td>
                 </tr>
@@ -622,26 +622,26 @@ export function R05Evolucao() {
           <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className="sticky left-0 z-[2] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[200px]">Tipo de contrato</th>
+                <th className="sticky left-0 z-[2] bg-surface-2 text-left pl-4 pr-3 py-2.5 border-b-2 border-brand min-w-[200px]">Tipo de contrato</th>
                 {d.meses.map((m) => (
                   <th
                     key={m.fim}
                     onClick={() => setMesSel(m.fim)}
                     className={clsx(
-                      "px-2.5 py-2.5 text-right font-semibold text-[13px] border-b border-[#a8b2bd] cursor-pointer whitespace-nowrap",
-                      m.fim === mes.fim ? "bg-selected text-[#0057d2]" : "bg-white hover:bg-hover",
+                      "px-2.5 py-2.5 text-right border-b-2 border-brand cursor-pointer whitespace-nowrap",
+                      m.fim === mes.fim ? "bg-selected text-link" : "bg-surface-2 hover:bg-hover",
                     )}
                   >
                     {fmtMonthShort(m.fim)}
                   </th>
                 ))}
-                <th className="px-2.5 py-2.5 text-right font-bold text-[13px] border-b border-[#a8b2bd] bg-[#f5f6f7] whitespace-nowrap">12 meses</th>
+                <th className="px-2.5 py-2.5 text-right border-b-2 border-brand bg-surface-2 whitespace-nowrap">12 meses</th>
               </tr>
             </thead>
             <tbody>
               {tiposComMov.map((t) => (
                 <tr key={t.tipo}>
-                  <td className="sticky left-0 z-[1] bg-white pl-4 pr-3 py-2 text-[13px] border-b border-line-soft whitespace-nowrap">
+                  <td className="sticky left-0 z-[1] bg-surface pl-4 pr-3 py-2 text-[13px] border-b border-line-soft whitespace-nowrap">
                     <span className="inline-flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
                       {t.tipo}
@@ -663,7 +663,7 @@ export function R05Evolucao() {
                       </td>
                     );
                   })}
-                  <td className="px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-[#f5f6f7] font-bold whitespace-nowrap">
+                  <td className="px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-surface-3 font-bold whitespace-nowrap">
                     {fmtNum(
                       d.meses.reduce((s, m) => s + m.porTipo[t.tipo].rendimentos, 0),
                       { dash: true },
@@ -672,16 +672,16 @@ export function R05Evolucao() {
                 </tr>
               ))}
               <tr className="font-bold">
-                <td className="sticky left-0 z-[1] bg-[#f5f6f7] pl-4 pr-3 py-2.5 text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Total</td>
+                <td className="sticky left-0 z-[1] bg-surface-3 pl-4 pr-3 py-2.5 text-[13px] border-b border-line whitespace-nowrap">Total</td>
                 {d.meses.map((m) => (
                   <td
                     key={m.fim}
-                    className={clsx("px-2.5 py-2.5 text-right tabular text-[13px] border-b border-[#a8b2bd] whitespace-nowrap", m.fim === mes.fim ? "bg-selected" : "bg-[#f5f6f7]")}
+                    className={clsx("px-2.5 py-2.5 text-right tabular text-[13px] border-b border-line whitespace-nowrap", m.fim === mes.fim ? "bg-selected" : "bg-surface-3")}
                   >
                     {fmtNum(m.rendimentos, { dash: true })}
                   </td>
                 ))}
-                <td className="px-2.5 py-2.5 text-right tabular text-[13px] border-b border-[#a8b2bd] bg-[#f5f6f7] whitespace-nowrap">{fmtNum(rend12)}</td>
+                <td className="px-2.5 py-2.5 text-right tabular text-[13px] border-b border-line bg-surface-3 whitespace-nowrap">{fmtNum(rend12)}</td>
               </tr>
             </tbody>
           </table>
@@ -715,7 +715,7 @@ export function R05Evolucao() {
   );
 }
 
-const corTipo = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)?.cor ?? "#758ca4";
+const corTipo = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)?.cor ?? "#908c85";
 
 function itemSaida(e: EventoMestre) {
   const base = { k: `${e.codigo}-${e.data}-${e.tipo}`, cor: corTipo(e.tipoContrato) };

@@ -20,19 +20,34 @@ import { useProduto } from "../../context/ProdutoContext";
 import { DATA_BASE_PADRAO } from "../../data/mercado";
 import { fmtDate, fmtMonthLong } from "../../lib/dates";
 import { Popover } from "../fiori/Popover";
+import { DexterityLogo } from "./DexterityLogo";
 import { SobreDialog } from "./SobreDialog";
 
+/** Marca no cabeçalho: lockup inline (só o símbolo no celular), com a animação das pétalas do .dx-brand */
 export function Logo() {
   return (
-    <div className="flex items-center gap-2">
-      <svg viewBox="0 0 32 32" className="w-8 h-8 shrink-0" aria-hidden>
-        <rect width="32" height="32" rx="8" fill="#0070F2" />
-        <path d="M8 22V12m5.5 10V8m5.5 14v-7m5.5 7V10" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-      <span className="text-base font-black tracking-tight text-text hidden sm:inline">Dexterity</span>
-    </div>
+    <>
+      <DexterityLogo className="h-[22px] w-auto hidden sm:block" />
+      <DexterityLogo simbolo className="h-[24px] w-auto sm:hidden" />
+    </>
   );
 }
+
+/** Selo DEMO: etiqueta mono com filete âmbar */
+function SeloDemo({ className }: { className?: string }) {
+  return (
+    <span className={clsx("border border-amarelo/60 text-amarelo font-mono text-[9.5px] leading-none tracking-[0.16em] px-1.5 py-[3px] shrink-0", className)}>
+      DEMO
+    </span>
+  );
+}
+
+/** Botão de ícone do cabeçalho: sem fundo, ícone em cinza-areia que acende em creme */
+const BOTAO_ICONE = "p-1.5 sm:p-2 text-label hover:text-text hover:bg-hover transition-colors";
+
+/** Cabeçalho dos popovers do cabeçalho (padrão .dx-painel__hd) */
+const CABECALHO_POPOVER = "px-4 pt-3.5 pb-3 bg-surface-2 border-b border-line-soft";
+const TITULO_POPOVER = "font-display text-[17px] font-semibold uppercase tracking-[0.04em] leading-none text-text";
 
 const SEV_ICON = { negative: XCircle, critical: AlertTriangle, information: Info };
 
@@ -40,9 +55,9 @@ const SEV_ICON = { negative: XCircle, critical: AlertTriangle, information: Info
 function maiusculaInicial(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-const SEV_COR = { negative: "text-negative", critical: "text-critical-strong", information: "text-brand" };
+const SEV_COR = { negative: "text-negative", critical: "text-critical", information: "text-link" };
 
-/** sap.f.ShellBar – tema Horizon (barra branca) */
+/** Cabeçalho fixo no padrão .dx-nav: barra grafite translúcida com filete inferior e a marca à esquerda */
 export function ShellBar({
   appTitle,
   back,
@@ -64,62 +79,61 @@ export function ShellBar({
 
   return (
     <>
-      <header className="sticky top-[env(safe-area-inset-top,0px)] z-40 bg-shell shadow-shell no-print">
-        <div className="h-[3.25rem] px-3 sm:px-4 flex items-center gap-1 sm:gap-2">
+      <header className="dx-nav top-[env(safe-area-inset-top,0px)] z-40 no-print">
+        <div className="h-14 px-3 sm:px-4 lg:px-6 flex items-center gap-1 sm:gap-2">
           {back && (
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="p-1.5 sm:p-2 rounded-lg text-link hover:bg-hover"
+              className={BOTAO_ICONE}
               aria-label="Voltar ao Launchpad"
               title="Voltar ao Launchpad"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-hover shrink-0" aria-label="Início – Launchpad">
+          <button type="button" onClick={() => navigate("/")} className="dx-brand px-1 py-1.5 shrink-0" aria-label="Início – Launchpad">
             <Logo />
           </button>
+          <span className="hidden sm:block w-px h-6 bg-line-soft mx-1 shrink-0" aria-hidden />
           {/* Celular: nome curto do produto (ex.: "Aplicações") com o selo DEMO embaixo */}
-          <div className="flex flex-col items-start min-w-0 sm:hidden leading-none" title={produto.nome}>
-            <span className="max-w-full text-[13px] font-semibold text-text truncate">{nomeCurto}</span>
-            <span className="mt-1 rounded bg-[#fff8d6] border border-[#e76500]/40 text-[#b44f00] text-[9px] font-bold px-1 py-px tracking-wider">DEMO</span>
+          <div className="flex flex-col items-start min-w-0 sm:hidden leading-none ml-1" title={produto.nome}>
+            <span className="max-w-full font-mono text-[10.5px] uppercase tracking-[0.12em] text-text truncate">{nomeCurto}</span>
+            <SeloDemo className="mt-1.5" />
           </div>
           <div className="hidden sm:flex items-center gap-2 min-w-0">
             {/* Tablet: nome curto; a partir de md, o nome completo */}
-            <span className="text-sm text-label truncate min-w-0 md:hidden shrink-0" title={produto.nome}>
+            <span className="font-mono text-[11px] uppercase tracking-[0.13em] text-label truncate min-w-0 md:hidden shrink-0" title={produto.nome}>
               {nomeCurto}
             </span>
-            <span className="text-sm text-label hidden md:inline whitespace-nowrap">{produto.nome}</span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.13em] text-label hidden md:inline whitespace-nowrap">{produto.nome}</span>
             {appTitle && (
               <>
-                <span className="text-line hidden sm:inline">/</span>
-                <span className="text-sm font-semibold text-text truncate hidden sm:inline min-w-0" title={appTitle}>
+                <span className="text-muted">/</span>
+                <span className="text-sm font-medium text-text truncate min-w-0" title={appTitle}>
                   {appTitle}
                 </span>
               </>
             )}
-            <span className="rounded-md bg-[#fff8d6] border border-[#e76500]/40 text-[#b44f00] text-[10px] font-bold px-1.5 py-0.5 tracking-wider shrink-0">
-              DEMO
-            </span>
+            <SeloDemo />
           </div>
 
           <div className="flex-1" />
 
           {search && (
-            <div className={clsx("items-center", buscaAberta ? "flex absolute inset-x-2 top-2 sm:static sm:inset-auto" : "hidden sm:flex")}>
+            <div className={clsx("items-center", buscaAberta ? "flex absolute inset-x-2 top-2.5 sm:static sm:inset-auto" : "hidden sm:flex")}>
               <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-label" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-label pointer-events-none" />
                 <input
                   value={search.value}
                   onChange={(e) => search.onChange(e.target.value)}
                   placeholder="Pesquisar relatórios"
-                  className="w-full h-9 rounded-full bg-[#eff1f2] pl-9 pr-9 text-sm text-text placeholder:text-label focus:outline-none focus:bg-white focus:shadow-[0_0_0_1px_#0070f2]"
+                  className="w-full h-9 bg-surface-3 border border-line-soft pl-9 pr-9 text-sm text-text placeholder:text-muted hover:border-line focus:border-brand focus-visible:outline-offset-2"
                 />
                 {(search.value || buscaAberta) && (
                   <button
                     type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-label hover:bg-hover"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-label hover:text-text hover:bg-hover"
                     onClick={() => {
                       search.onChange("");
                       setBuscaAberta(false);
@@ -133,12 +147,7 @@ export function ShellBar({
             </div>
           )}
           {search && !buscaAberta && (
-            <button
-              type="button"
-              className="sm:hidden p-1.5 rounded-lg text-link hover:bg-hover"
-              onClick={() => setBuscaAberta(true)}
-              aria-label="Pesquisar"
-            >
+            <button type="button" className={clsx(BOTAO_ICONE, "sm:hidden")} onClick={() => setBuscaAberta(true)} aria-label="Pesquisar">
               <Search className="w-5 h-5" />
             </button>
           )}
@@ -151,24 +160,24 @@ export function ShellBar({
                 type="button"
                 onClick={toggle}
                 className={clsx(
-                  "flex items-center gap-1.5 h-9 px-1.5 sm:px-2.5 rounded-lg text-sm hover:bg-hover",
-                  open ? "bg-selected text-[#0057d2]" : "text-link",
+                  "flex items-center gap-1.5 h-9 px-1.5 sm:px-2.5 border text-text transition-colors",
+                  open ? "border-brand bg-surface" : "border-transparent hover:border-line-soft",
                 )}
                 title="Data-base do relatório"
               >
-                <CalendarDays className="w-[18px] h-[18px]" />
-                <span className="hidden lg:inline text-label">Data-base</span>
-                <span className="font-semibold tabular hidden min-[400px]:inline">{fmtDate(premissas.dataBase)}</span>
+                <CalendarDays className="w-[18px] h-[18px] text-link" />
+                <span className="hidden lg:inline font-mono text-[10.5px] uppercase tracking-[0.13em] text-label">Data-base</span>
+                <span className="font-mono text-[13px] tabular hidden min-[400px]:inline">{fmtDate(premissas.dataBase)}</span>
                 {/* dd/mm/aa em telas muito estreitas */}
-                <span className="font-semibold tabular min-[400px]:hidden">{fmtDate(premissas.dataBase).replace(/\/(\d{2})(\d{2})$/, "/$2")}</span>
+                <span className="font-mono text-[13px] tabular min-[400px]:hidden">{fmtDate(premissas.dataBase).replace(/\/(\d{2})(\d{2})$/, "/$2")}</span>
               </button>
             )}
           >
             {(close) => (
               <div>
-                <div className="px-4 pt-3 pb-2 border-b border-line-soft">
-                  <div className="text-sm font-bold text-text">Data-base do relatório</div>
-                  <div className="text-xs text-label">Data de corte usada por todos os relatórios</div>
+                <div className={CABECALHO_POPOVER}>
+                  <div className={TITULO_POPOVER}>Data-base do relatório</div>
+                  <div className="text-xs text-label mt-1.5">Data de corte usada por todos os relatórios</div>
                 </div>
                 <ul className="py-1">
                   {DATAS_BASE.map((d) => (
@@ -183,10 +192,10 @@ export function ShellBar({
                         className="w-full flex items-center justify-between px-4 py-2 text-sm text-text hover:bg-hover"
                       >
                         <span>
-                          <span className="font-semibold tabular">{fmtDate(d)}</span>
+                          <span className="font-mono text-[13px] tabular">{fmtDate(d)}</span>
                           <span className="text-label ml-2">{maiusculaInicial(fmtMonthLong(d))}</span>
                         </span>
-                        {d === premissas.dataBase && <Check className="w-4 h-4 text-brand" />}
+                        {d === premissas.dataBase && <Check className="w-4 h-4 text-link" />}
                       </button>
                     </li>
                   ))}
@@ -202,7 +211,7 @@ export function ShellBar({
               <button
                 type="button"
                 onClick={toggle}
-                className="relative p-1.5 sm:p-2 rounded-lg text-link hover:bg-hover"
+                className={clsx(BOTAO_ICONE, "relative")}
                 aria-label={`Notificações (${alertas.length})`}
                 title="Notificações"
               >
@@ -210,8 +219,8 @@ export function ShellBar({
                 {alertas.length > 0 && (
                   <span
                     className={clsx(
-                      "absolute top-0.5 right-0.5 min-w-[1.05rem] h-[1.05rem] px-1 rounded-full text-[10px] leading-[1.05rem] font-bold text-white text-center",
-                      criticos > 0 ? "bg-[#d20a0a]" : "bg-brand",
+                      "absolute top-0.5 right-0.5 min-w-[1.05rem] h-[1.05rem] px-1 font-mono text-[10px] leading-[1.05rem] font-semibold text-page text-center",
+                      criticos > 0 ? "bg-amarelo" : "bg-brand",
                     )}
                   >
                     {alertas.length}
@@ -222,9 +231,9 @@ export function ShellBar({
           >
             {(close) => (
               <div>
-                <div className="px-4 pt-3 pb-2 border-b border-line-soft flex items-center justify-between">
-                  <div className="text-sm font-bold text-text">Notificações</div>
-                  <div className="text-xs text-label">{alertas.length} itens</div>
+                <div className={clsx(CABECALHO_POPOVER, "flex items-center justify-between")}>
+                  <div className={TITULO_POPOVER}>Notificações</div>
+                  <div className="font-mono text-[10.5px] uppercase tracking-[0.13em] text-label">{alertas.length} itens</div>
                 </div>
                 <ul className="max-h-[60vh] overflow-y-auto fiori-scroll divide-y divide-line-soft">
                   {alertas.length === 0 && <li className="px-4 py-6 text-sm text-label text-center">Nenhum alerta para a data-base.</li>}
@@ -257,7 +266,7 @@ export function ShellBar({
           <button
             type="button"
             onClick={() => setSobre(true)}
-            className="p-2 rounded-lg text-link hover:bg-hover hidden sm:block"
+            className={clsx(BOTAO_ICONE, "hidden sm:block")}
             aria-label="Sobre esta demo"
             title="Sobre esta demo"
           >
@@ -271,7 +280,7 @@ export function ShellBar({
               <button
                 type="button"
                 onClick={toggle}
-                className="ml-0.5 w-8 h-8 rounded-full bg-[#5d36ff] text-white text-xs font-bold flex items-center justify-center hover:ring-2 hover:ring-[#5d36ff]/30"
+                className="ml-1 w-8 h-8 border border-line bg-surface-2 text-text font-mono text-[11px] tracking-[0.06em] flex items-center justify-center hover:border-text transition-colors"
                 aria-label="Perfil do usuário"
               >
                 TS
@@ -280,10 +289,10 @@ export function ShellBar({
           >
             {(close) => (
               <div>
-                <div className="px-4 py-3 border-b border-line-soft flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#5d36ff] text-white text-sm font-bold flex items-center justify-center">TS</div>
+                <div className={clsx(CABECALHO_POPOVER, "flex items-center gap-3")}>
+                  <div className="w-10 h-10 border border-line text-text font-mono text-[12px] tracking-[0.06em] flex items-center justify-center">TS</div>
                   <div>
-                    <div className="text-sm font-bold text-text">Tesouraria (usuário demo)</div>
+                    <div className="text-sm font-semibold text-text">Tesouraria (usuário demo)</div>
                     <div className="text-xs text-label">Empresa ABC S.A.</div>
                   </div>
                 </div>

@@ -10,19 +10,19 @@ export const PRODUTO_CAPTACOES: ProdutoInfo = {
   sobre: [
     {
       icone: FileSpreadsheet,
-      cor: "#0070f2",
+      cor: "#00b3ac",
       texto:
         "Os relatórios reproduzem as abas de captações da planilha base (C00 a C06): carteira, movimentação, vencimentos, encargos, covenants, fechamento e nota explicativa.",
     },
     {
       icone: Scale,
-      cor: "#df1278",
+      cor: "#00b3ac",
       texto:
         "Saldos pelo custo amortizado (CPC 48), classificação circulante × não circulante com reclassificação por covenant (CPC 26) e juros capitalizados em ativo qualificável (CPC 20).",
     },
     {
       icone: Database,
-      cor: "#5d36ff",
+      cor: "#00b3ac",
       texto: "No ambiente produtivo os contratos vêm das CDS Views do SAP (IFINTRAN, IFINTRSMANAGE, IFINTRANSCNDN, CMATPROFILEQ), documentadas no Catálogo de CDS Views.",
     },
   ],

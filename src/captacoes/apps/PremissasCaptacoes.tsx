@@ -18,7 +18,7 @@ import { COR_INDEXADOR, type ContratoDivida, type IndexadorDivida } from "../dat
 import { custoMedioPonderado, prazoMedioCarteira, totalDivida, type PosicaoDivida } from "../lib/divida";
 
 const rel = relatorioCaptacao("premissas");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 const COR_CDI = COR_INDEXADOR.CDI;
 const MESES_PROJECAO = 12;
 
@@ -522,7 +522,7 @@ export function PremissasCaptacoes() {
         title="Premissas gerais"
         subtitle={`Vigentes na data-base ${fmtDate(p.dataBase)} · importação de ${importacao}`}
         status={
-          <Tag color="#556b82">
+          <Tag color="#a5a099">
             <Lock className="w-2.5 h-2.5 mr-1" />
             Importado do SAP
           </Tag>
@@ -533,7 +533,7 @@ export function PremissasCaptacoes() {
           <DataTable columns={colPremissas} rows={premissas} rowKey={(x) => x.id} />
         </div>
         {/* Pop-in (sap.m.Table responsiva): em telas estreitas as colunas descem para baixo da premissa */}
-        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
           {premissas.map((x) => (
             <li key={x.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -571,7 +571,7 @@ export function PremissasCaptacoes() {
         <div className="hidden xl:block">
           <DataTable columns={colIndexadores} rows={d.indexadores} rowKey={(x) => x.def.id} showTotals totalLabel="Total da carteira" />
         </div>
-        <ul className="xl:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+        <ul className="xl:hidden border-t border-line divide-y divide-line-soft">
           {d.indexadores.map((x) => (
             <li key={x.def.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -601,7 +601,7 @@ export function PremissasCaptacoes() {
               </div>
             </li>
           ))}
-          <li className="px-4 py-3 bg-[#f5f6f7] flex items-start justify-between gap-3">
+          <li className="px-4 py-3 bg-surface-3 flex items-start justify-between gap-3">
             <div>
               <div className="text-sm font-bold text-text">Total da carteira</div>
               <div className="text-xs text-label mt-0.5 tabular">
@@ -694,8 +694,8 @@ export function PremissasCaptacoes() {
           <div className="h-72 sm:h-80 xl:h-auto xl:flex-1 xl:min-h-[320px] -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={d.cdi} margin={{ top: 20, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <ReferenceArea x1={d.mesBase} x2={ultimoMes} fill="#0070f2" fillOpacity={0.05} ifOverflow="visible" />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <ReferenceArea x1={d.mesBase} x2={ultimoMes} fill="#009994" fillOpacity={0.05} ifOverflow="visible" />
                 <XAxis
                   dataKey="mes"
                   ticks={ticksAno}
@@ -703,7 +703,7 @@ export function PremissasCaptacoes() {
                   tickFormatter={mesCurto}
                   tick={AXIS_STYLE}
                   tickLine={false}
-                  axisLine={{ stroke: "#a8b2bd" }}
+                  axisLine={{ stroke: "#575653" }}
                 />
                 <YAxis
                   domain={[8, 16]}
@@ -720,16 +720,16 @@ export function PremissasCaptacoes() {
                   formatter={(v: number, n: string) => [`${fmtDec(v, 2)}% a.a.`, n]}
                 />
                 <Legend
-                  wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }}
+                  wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }}
                   iconType="plainline"
                   iconSize={16}
-                  formatter={(v: string) => <span style={{ color: "#1d2d3e" }}>{v}</span>}
+                  formatter={(v: string) => <span style={{ color: "#f7f3e7" }}>{v}</span>}
                 />
                 <ReferenceLine
                   x={d.mesBase}
-                  stroke="#1d2d3e"
+                  stroke="#f7f3e7"
                   strokeWidth={1.25}
-                  label={{ value: `Data-base ${fmtDate(p.dataBase)}`, fill: "#1d2d3e", fontSize: 11, position: "insideTopRight", offset: 6 }}
+                  label={{ value: `Data-base ${fmtDate(p.dataBase)}`, fill: "#f7f3e7", fontSize: 11, position: "insideTopRight", offset: 6 }}
                 />
                 <Line
                   dataKey="realizado"
@@ -763,7 +763,7 @@ export function PremissasCaptacoes() {
 
 function Mini({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0 flex flex-col justify-between">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0 flex flex-col justify-between">
       <div className="text-xs text-label leading-tight">{rotulo}</div>
       <div className="text-base sm:text-lg font-bold tabular text-text whitespace-nowrap mt-0.5">{valor}</div>
     </div>

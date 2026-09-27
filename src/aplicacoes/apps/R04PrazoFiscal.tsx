@@ -17,7 +17,7 @@ import { aliquotaIOF, aliquotaIR, analiseFiscal, simularCargaTributaria, taxaCon
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 
 const rel = relatorioPorId("r04");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
 const REC_STATE: Record<Recomendacao, ValueState> = {
   "Evitar resgate (IOF)": "negative",
@@ -106,7 +106,7 @@ export function R04PrazoFiscal() {
             <MicroBar
               value={a.pos.diasCorridos}
               max={a.proxima.aPartirDe}
-              color={a.venceAntes ? "#a8b2bd" : a.diasAteProxima! <= 45 ? CHART_SEMANTIC.critical : "#168eff"}
+              color={a.venceAntes ? "#575653" : a.diasAteProxima! <= 45 ? CHART_SEMANTIC.critical : "#4f8fd1"}
               className="mt-1"
             />
             <div className="text-[11px] text-label mt-0.5">{a.venceAntes ? `Vence antes (${fmtDate(a.pos.op.dataVencimento)})` : fmtDate(a.dataProxima)}</div>
@@ -195,7 +195,7 @@ export function R04PrazoFiscal() {
         </>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
@@ -226,7 +226,7 @@ export function R04PrazoFiscal() {
                     {fmtCompact(f.valor)} · {f.qtd}
                   </span>
                 </div>
-                <MicroBar value={f.valor} max={maxFaixa} color={f.fixo ? "#8b47d7" : f.aliq > 0.2 ? "#e26300" : f.aliq > 0.15 ? "#c87b00" : "#30914c"} className="h-2" />
+                <MicroBar value={f.valor} max={maxFaixa} color={f.fixo ? "#a462a6" : f.aliq > 0.2 ? "#ffa436" : f.aliq > 0.15 ? "#5e9454" : "#009994"} className="h-2" />
               </li>
             ))}
           </ul>
@@ -256,7 +256,7 @@ function Simulador({ cdi, className }: { cdi: number; className?: string }) {
   const irV = (bruto - iofV) * aliquotaIR(prazo, "Regressivo");
 
   return (
-    <Card className={className} title="Simulação de carga tributária por prazo" subtitle="Aplicação pós-fixada em % do CDI · IR regressivo + IOF" icon={<Calculator className="w-5 h-5 text-[#c87b00]" />}>
+    <Card className={className} title="Simulação de carga tributária por prazo" subtitle="Aplicação pós-fixada em % do CDI · IR regressivo + IOF" icon={<Calculator className="w-5 h-5 text-link" />}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <FilterField label="Valor aplicado (R$)">
           <NumberInput value={valor} onChange={setValor} step={100000} min={0} suffix="R$" />
@@ -265,7 +265,7 @@ function Simulador({ cdi, className }: { cdi: number; className?: string }) {
           <NumberInput value={pct} onChange={setPct} step={1} min={50} max={150} suffix="% CDI" />
         </FilterField>
         <FilterField label={`Prazo: ${prazo} dias`}>
-          <input type="range" min={1} max={900} value={prazo} onChange={(e) => setPrazo(Number(e.target.value))} className="w-full h-9 accent-[#0070f2]" aria-label="Prazo em dias" />
+          <input type="range" min={1} max={900} value={prazo} onChange={(e) => setPrazo(Number(e.target.value))} className="w-full h-9 accent-brand" aria-label="Prazo em dias" />
         </FilterField>
       </div>
 
@@ -280,8 +280,8 @@ function Simulador({ cdi, className }: { cdi: number; className?: string }) {
       <div className="h-64 mt-4 -ml-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={serie.filter((s) => s.dias <= 900)} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="#e5e5e5" />
-            <XAxis dataKey="dias" type="number" domain={[1, 900]} ticks={[30, 180, 360, 720, 900]} tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+            <CartesianGrid vertical={false} stroke="#3f3f3d" />
+            <XAxis dataKey="dias" type="number" domain={[1, 900]} ticks={[30, 180, 360, 720, 900]} tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} />
             <YAxis yAxisId="c" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit="%" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
             <YAxis yAxisId="l" orientation="right" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit="%" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
             <Tooltip
@@ -289,10 +289,10 @@ function Simulador({ cdi, className }: { cdi: number; className?: string }) {
               labelFormatter={(l) => `${l} dias`}
               formatter={(v: number, n: string) => [`${fmtDec(v, 1)}%`, n]}
             />
-            <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-            <ReferenceLine yAxisId="c" x={prazo} stroke="#0070f2" strokeDasharray="4 4" />
-            <Line yAxisId="c" type="stepAfter" dataKey={(d: { carga: number }) => d.carga * 100} name="Carga tributária s/ rendimento" stroke="#e26300" strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Line yAxisId="l" type="monotone" dataKey={(d: { pctCDILiquido: number }) => d.pctCDILiquido * 100} name="% CDI líquido" stroke="#30914c" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
+            <ReferenceLine yAxisId="c" x={prazo} stroke="#009994" strokeDasharray="4 4" />
+            <Line yAxisId="c" type="stepAfter" dataKey={(d: { carga: number }) => d.carga * 100} name="Carga tributária s/ rendimento" stroke="#ffa436" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line yAxisId="l" type="monotone" dataKey={(d: { pctCDILiquido: number }) => d.pctCDILiquido * 100} name="% CDI líquido" stroke="#009994" strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -303,7 +303,7 @@ function Simulador({ cdi, className }: { cdi: number; className?: string }) {
             <tr className="text-label">
               <th className="text-left font-normal py-1">Dias</th>
               {MARCOS.map((m) => (
-                <th key={m} className="text-right font-semibold text-text py-1 tabular">
+                <th key={m} className="text-right text-text py-1 tabular">
                   {m}
                 </th>
               ))}
@@ -335,7 +335,7 @@ function Simulador({ cdi, className }: { cdi: number; className?: string }) {
 
 function Resultado({ label, valor, destaque }: { label: string; valor: string; destaque?: boolean }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0">
       <div className="text-xs text-label truncate">{label}</div>
       <div className={destaque ? "text-base font-bold text-positive tabular truncate" : "text-base font-semibold text-text tabular truncate"}>{valor}</div>
     </div>

@@ -1,3 +1,5 @@
 @import "tailwindcss";
 @import "./fonts.css";
+/* Folha da marca na camada base: os utilitários do Tailwind continuam prevalecendo sobre ela, e ela sobre o preflight */
+@import "./dexterity.css" layer(base);
 @import "./theme.css";

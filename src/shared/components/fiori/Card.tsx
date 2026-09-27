@@ -15,7 +15,7 @@ function paddingPadrao(temCabecalho: boolean, extra?: string): string {
   return out.join(" ");
 }
 
-/** Cartão no padrão Horizon (sap.f.Card / Integration Card) */
+/** Cartão no padrão .dx-card: superfície grafite, filete de 1px, cantos vivos e título em Barlow Condensed */
 export function Card({
   title,
   subtitle,
@@ -36,14 +36,14 @@ export function Card({
   status?: ReactNode;
 }) {
   return (
-    <section className={clsx("bg-white rounded-[var(--radius-card)] shadow-fiori print-flat", className)}>
+    <section className={clsx("bg-surface border border-line-soft print-flat", className)}>
       {(title || actions) && (
         <header className="flex items-start justify-between gap-3 px-4 pt-3.5 pb-2.5">
           <div className="flex items-start gap-2.5 min-w-0">
             {icon && <div className="mt-0.5 shrink-0">{icon}</div>}
             <div className="min-w-0">
-              {title && <h3 className="text-base font-bold text-text leading-snug">{title}</h3>}
-              {subtitle && <p className="text-[13px] text-label leading-snug mt-0.5">{subtitle}</p>}
+              {title && <h3 className="text-[19px] font-semibold tracking-[0.03em] leading-[1.05] text-text">{title}</h3>}
+              {subtitle && <p className="text-[13px] text-label leading-snug mt-1">{subtitle}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -57,23 +57,23 @@ export function Card({
   );
 }
 
-/** Título de seção (sap.m.Title H5 + linha) */
+/** Título de seção: Barlow Condensed em caixa alta seguido do filete da marca */
 export function SectionTitle({ children, extra, id }: { children: ReactNode; extra?: ReactNode; id?: string }) {
   return (
     <div id={id} className="flex items-center gap-3 mb-3 mt-1 scroll-mt-28">
-      <h2 className="text-lg font-bold text-text whitespace-nowrap">{children}</h2>
+      <h2 className="text-[22px] sm:text-[26px] font-semibold tracking-[0.01em] leading-[0.95] text-text min-w-0 sm:whitespace-nowrap">{children}</h2>
       <div className="flex-1 h-px bg-line-soft" />
       {extra}
     </div>
   );
 }
 
-/** Rótulo + valor (sap.m.Label / Text em formulário de exibição) */
+/** Rótulo mono + valor (formulário de exibição) */
 export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
     <div className={clsx("min-w-0", className)}>
-      <div className="text-[13px] text-label leading-tight">{label}</div>
-      <div className="text-sm text-text font-semibold leading-snug mt-0.5 truncate">{children}</div>
+      <div className="font-mono text-[10.5px] uppercase tracking-[0.13em] text-label leading-tight">{label}</div>
+      <div className="text-sm text-text font-medium leading-snug mt-1 truncate">{children}</div>
     </div>
   );
 }

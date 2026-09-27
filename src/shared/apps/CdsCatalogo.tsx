@@ -187,10 +187,10 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
                     onClick={() => setSel(v.nome)}
                     className={clsx(
                       "w-full text-left px-4 py-2.5 border-b border-line-soft flex items-center gap-3",
-                      v.nome === visao.nome ? "bg-selected shadow-[inset_3px_0_0_#0064d9]" : "hover:bg-[#f2f4f6]",
+                      v.nome === visao.nome ? "bg-selected shadow-[inset_3px_0_0_#00b3ac]" : "hover:bg-hover",
                     )}
                   >
-                    <Database className={clsx("w-4 h-4 shrink-0", v.nome.startsWith("C") ? "text-[#5d36ff]" : "text-[#049f9a]")} />
+                    <Database className={clsx("w-4 h-4 shrink-0", v.nome.startsWith("C") ? "text-link" : "text-link")} />
                     <span className="min-w-0 flex-1">
                       <span className="block font-mono text-[13px] font-semibold text-text">{v.nome}</span>
                       <span className="block text-xs text-label truncate">{v.descricao ?? "—"}</span>
@@ -206,7 +206,7 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
           <Card
             title={<span className="font-mono">{visao.nome}</span>}
             subtitle={visao.descricao ?? "Sem descrição"}
-            status={<Tag color={visao.nome.startsWith("C") ? "#5d36ff" : "#049f9a"}>{tipoVisao(visao.nome)}</Tag>}
+            status={<Tag color={visao.nome.startsWith("C") ? "#4f8fd1" : "#c97d24"}>{tipoVisao(visao.nome)}</Tag>}
             bodyClassName="px-0 pb-0"
             className="min-w-0 overflow-hidden"
           >
@@ -236,7 +236,7 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
                   value: (c) => c.campo,
                   render: (c) => (
                     <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-semibold">
-                      {c.chave && <KeyRound className="w-3.5 h-3.5 text-[#c87b00]" aria-label="Campo chave" />}
+                      {c.chave && <KeyRound className="w-3.5 h-3.5 text-link" aria-label="Campo chave" />}
                       {c.campo}
                     </span>
                   ),
@@ -260,7 +260,7 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
                   render: (c) => (
                     <span className="inline-flex items-center gap-1.5">
                       <span className="font-mono text-[12px]">{c.dominio}</span>
-                      {c.valoresFixos && <Tag color="#0070f2">valores fixos</Tag>}
+                      {c.valoresFixos && <Tag color="#009994">valores fixos</Tag>}
                     </span>
                   ),
                 },
@@ -281,7 +281,7 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
               { key: "d", header: "Domínio", value: (d) => d.dominio, render: (d) => <span className="font-mono text-[12px] font-semibold">{d.dominio}</span> },
               { key: "e", header: "Elementos de dados", value: (d) => [...d.elementos].join(", "), render: (d) => <span className="font-mono text-[12px] text-label">{[...d.elementos].slice(0, 4).join(", ")}{d.elementos.size > 4 ? ` +${d.elementos.size - 4}` : ""}</span> },
               { key: "x", header: "Exemplo de uso", value: (d) => d.exemplo },
-              { key: "vf", header: "Valores fixos", align: "center", value: (d) => (d.valoresFixos ? 1 : 0), render: (d) => (d.valoresFixos ? <Tag color="#0070f2">Sim</Tag> : <span className="text-label">–</span>) },
+              { key: "vf", header: "Valores fixos", align: "center", value: (d) => (d.valoresFixos ? 1 : 0), render: (d) => (d.valoresFixos ? <Tag color="#009994">Sim</Tag> : <span className="text-label">–</span>) },
               { key: "tv", header: "Tabela de valores", value: (d) => d.tabelaValores ?? "", render: (d) => <span className="font-mono text-[12px]">{d.tabelaValores ?? ""}</span> },
               { key: "u", header: "Usos", align: "right", value: (d) => d.usos },
             ]}
@@ -313,12 +313,12 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
                           setSel(b);
                           setAba("visoes");
                         }}
-                        className="inline-flex items-center gap-1 rounded-md border border-[#5d36ff]/40 bg-[#5d36ff]/5 px-2 py-0.5 font-mono text-[12px] text-[#5d36ff] hover:bg-[#5d36ff]/10"
+                        className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/5 px-2 py-0.5 font-mono text-[12px] text-link hover:bg-brand/10"
                       >
                         <Database className="w-3 h-3" /> {b}
                       </button>
                     ) : (
-                      <span key={b} className="inline-flex items-center gap-1 rounded-md border border-line bg-[#f5f6f7] px-2 py-0.5 font-mono text-[12px] text-text">
+                      <span key={b} className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-3 px-2 py-0.5 font-mono text-[12px] text-text">
                         <Table2 className="w-3 h-3 text-label" /> {b}
                       </span>
                     ),
@@ -349,7 +349,7 @@ export function CdsCatalogo({ relatorio: rel, mapeamentos }: { relatorio: Relato
                 key: "v",
                 header: "CDS View",
                 value: (m) => m.visao ?? "",
-                render: (m) => (m.visao ? <span className="font-mono text-[12px] text-[#5d36ff]">{m.visao}</span> : <Tag>Calculado</Tag>),
+                render: (m) => (m.visao ? <span className="font-mono text-[12px] text-link">{m.visao}</span> : <Tag>Calculado</Tag>),
               },
               { key: "c", header: "Campo", value: (m) => m.campo ?? "", render: (m) => <span className="font-mono text-[12px]">{m.campo ?? ""}</span> },
               {

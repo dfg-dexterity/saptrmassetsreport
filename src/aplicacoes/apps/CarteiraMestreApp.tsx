@@ -450,7 +450,7 @@ export function CarteiraMestreApp() {
       }
     >
       {/* Barra de filtros */}
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
           <FilterField label="Empresa">
             <Select
@@ -509,7 +509,7 @@ export function CarteiraMestreApp() {
                 aria-pressed={ativo}
                 title={ativo ? "Remover o filtro de tipo" : `Filtrar ${t.tipo}`}
                 className={clsx(
-                  "flex flex-col text-left bg-white rounded-[var(--radius-card)] shadow-fiori px-4 pt-3 pb-3.5 min-w-0 transition-shadow hover:shadow-fiori-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                  "flex flex-col text-left bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 pt-3 pb-3.5 min-w-0 transition-shadow hover:shadow-fiori-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
                   ativo && "ring-2 ring-brand bg-selected",
                 )}
               >
@@ -594,7 +594,7 @@ export function CarteiraMestreApp() {
           </div>
 
           {/* Celular e tablet: lista em cartões */}
-          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
             {lista.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum contrato no filtro selecionado</li>}
             {lista.map((c) => (
               <li key={c.id}>
@@ -623,7 +623,7 @@ export function CarteiraMestreApp() {
               </li>
             ))}
             {lista.length > 0 && (
-              <li className="px-4 py-3 bg-[#f5f6f7]">
+              <li className="px-4 py-3 bg-surface-3">
                 <div className="text-sm font-bold text-text">Total R$ · {plural(lista.length, "contrato", "contratos")}</div>
                 <ValoresCartao bruto={somar(lista, (c) => c.saldoCurva)} contabil={somar(lista, (c) => c.valorContabil)} liquido={somar(lista, (c) => c.rendimentoLiquido)} forte />
               </li>
@@ -693,7 +693,7 @@ function DetalheContrato({ c, onClose }: { c: ContratoMestre; onClose: () => voi
   const rotuloIR = td ? `IRPJ/CSLL (${fmtPct(c.aliqIR, 0)})` : `IRRF (${fmtPct(c.aliqIR, 1)})`;
   const rotuloIOF = td ? `IOF câmbio na remessa (${fmtPct(aliqIofRemessa(c))})` : "IOF realizado";
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-surface rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

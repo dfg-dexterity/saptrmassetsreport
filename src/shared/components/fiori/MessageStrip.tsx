@@ -4,19 +4,20 @@ import type { ReactNode } from "react";
 
 type Design = "information" | "positive" | "critical" | "negative";
 
-const STYLE: Record<Design, { box: string; icon: typeof Info; iconColor: string }> = {
-  information: { box: "bg-info-bg border-[#0070f2]/30", icon: Info, iconColor: "text-brand" },
-  positive: { box: "bg-positive-bg border-[#30914c]/40", icon: CheckCircle2, iconColor: "text-positive" },
-  critical: { box: "bg-critical-bg border-[#e76500]/40", icon: AlertTriangle, iconColor: "text-critical-strong" },
-  negative: { box: "bg-negative-bg border-[#f53232]/40", icon: XCircle, iconColor: "text-negative" },
+/** Filete lateral de 3px na cor do aviso (como .dx-realce / .dx-erro); o texto fica sempre no tom suave */
+const STYLE: Record<Design, { rule: string; icon: typeof Info; iconColor: string }> = {
+  information: { rule: "border-l-brand", icon: Info, iconColor: "text-link" },
+  positive: { rule: "border-l-brand", icon: CheckCircle2, iconColor: "text-positive" },
+  critical: { rule: "border-l-amarelo", icon: AlertTriangle, iconColor: "text-critical" },
+  negative: { rule: "border-l-negative-border", icon: XCircle, iconColor: "text-negative" },
 };
 
-/** sap.m.MessageStrip */
+/** Faixa de aviso no padrão .dx-realce */
 export function MessageStrip({ design = "information", children, className }: { design?: Design; children: ReactNode; className?: string }) {
   const s = STYLE[design];
   const Icon = s.icon;
   return (
-    <div className={clsx("flex items-start gap-2.5 rounded-lg border px-3 py-2 text-[13px] text-text", s.box, className)}>
+    <div className={clsx("flex items-start gap-2.5 bg-surface border border-line-soft border-l-[3px] px-3.5 py-2.5 text-[13px] text-suave", s.rule, className)}>
       <Icon className={clsx("w-4 h-4 mt-px shrink-0", s.iconColor)} />
       <div className="min-w-0 leading-relaxed">{children}</div>
     </div>

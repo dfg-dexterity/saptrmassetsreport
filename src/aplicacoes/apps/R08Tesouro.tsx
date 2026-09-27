@@ -24,12 +24,12 @@ import { aliquotaIR } from "../lib/finance";
 import { eventosTitulo, posicaoTitulo, taxaMercado, vnaLFT, vnaNTNB, type EventoTitulo, type PosicaoTitulo } from "../lib/tesouro";
 
 const rel = relatorioPorId("r08");
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 
-const COR_CURVA = "#168eff";
-const COR_MERCADO = "#049f9a";
-const COR_CUPOM = "#049f9a";
-const COR_VENCIMENTO = "#c87b00";
+const COR_CURVA = "#4f8fd1";
+const COR_MERCADO = "#c97d24";
+const COR_CUPOM = "#c97d24";
+const COR_VENCIMENTO = "#5e9454";
 
 const CPC48_STATE: Record<ClassificacaoCPC48, ValueState> = {
   "Custo Amortizado": "information",
@@ -533,7 +533,7 @@ export function R08Tesouro() {
         </>
       }
     >
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <FilterField label="Empresa">
             <Select
@@ -570,14 +570,14 @@ export function R08Tesouro() {
               emptyText="Nenhum título público ativo nesta empresa na data-base"
             />
           </div>
-          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
             {listaCelular.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum título público ativo nesta empresa na data-base</li>}
             {listaCelular.map((x) => (
               <li key={x.t.id}>
                 <button
                   type="button"
                   onClick={() => alternar(x.t.id)}
-                  className={clsx("w-full text-left px-4 py-3", x.t.id === selecionado ? "bg-selected" : "hover:bg-[#f2f4f6]")}
+                  className={clsx("w-full text-left px-4 py-3", x.t.id === selecionado ? "bg-selected" : "hover:bg-hover")}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -604,7 +604,7 @@ export function R08Tesouro() {
               </li>
             ))}
             {listaCelular.length > 0 && (
-              <li className="px-4 py-3 bg-[#f5f6f7]">
+              <li className="px-4 py-3 bg-surface-3">
                 <div className="text-sm font-bold text-text">Total · {plural(listaCelular.length, "título", "títulos")}</div>
                 <ValoresCelular
                   itens={[
@@ -683,7 +683,7 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
   const vnaCompra = t.tipo === "LFT" ? vnaLFT(t.dataCompra, p) : t.tipo === "NTN-B" || t.tipo === "NTN-B Principal" ? vnaNTNB(t.dataCompra, p) : null;
 
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-surface rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -771,7 +771,7 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
         <section>
           <h4 className="text-sm font-bold text-text mb-2">Valor nominal atualizado (VNA)</h4>
           {pos.vna !== null && vnaCompra !== null ? (
-            <div className="rounded-lg bg-[#f5f6f7] px-3 py-2.5">
+            <div className="rounded-lg bg-surface-3 px-3 py-2.5">
               <div className="grid grid-cols-2 gap-3">
                 <Field label={`VNA em ${fmtDate(p.dataBase)}`}>{fmtBRL(pos.vna, true)}</Field>
                 <Field label={`VNA na compra (${fmtDate(t.dataCompra)})`}>{fmtBRL(vnaCompra, true)}</Field>
@@ -796,8 +796,8 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
           <div className="h-48 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={serie} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval="preserveStartEnd" minTickGap={16} />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
+                <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval="preserveStartEnd" minTickGap={16} />
                 <YAxis
                   tick={AXIS_STYLE}
                   tickLine={false}
@@ -807,7 +807,7 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
                   tickFormatter={(v: number) => fmtDec(v, 0)}
                 />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtDec(v, 6), n]} />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
+                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
                 <Line dataKey="curva" name="PU curva" stroke={COR_CURVA} strokeWidth={2} dot={false} isAnimationActive={false} />
                 <Line dataKey="mercado" name="PU mercado" stroke={COR_MERCADO} strokeWidth={2} strokeDasharray="5 3" dot={false} isAnimationActive={false} />
               </LineChart>
@@ -821,10 +821,10 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
             <table className="w-full text-[13px] border-separate border-spacing-0">
               <thead>
                 <tr className="text-text">
-                  <th className="text-left font-semibold pl-4 pr-2 py-2 border-b border-[#a8b2bd]">Data</th>
-                  <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd]">Bruto</th>
-                  <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd]">IR</th>
-                  <th className="text-right font-semibold pl-2 pr-4 py-2 border-b border-[#a8b2bd]">Líquido</th>
+                  <th className="text-left pl-4 pr-2 py-2 border-b-2 border-brand">Data</th>
+                  <th className="text-right px-2 py-2 border-b-2 border-brand">Bruto</th>
+                  <th className="text-right px-2 py-2 border-b-2 border-brand">IR</th>
+                  <th className="text-right pl-2 pr-4 py-2 border-b-2 border-brand">Líquido</th>
                 </tr>
               </thead>
               <tbody>
@@ -908,11 +908,11 @@ function CurvaMercado({ posicoes }: { posicoes: PosicaoTitulo[] }) {
                 barGap={2}
                 barCategoryGap={dados.length === 1 ? "36%" : dados.length === 2 ? "24%" : "12%"}
               >
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
+                <CartesianGrid vertical={false} stroke="#3f3f3d" />
                 <XAxis
                   dataKey="codigo"
                   tickLine={false}
-                  axisLine={{ stroke: "#a8b2bd" }}
+                  axisLine={{ stroke: "#575653" }}
                   height={40}
                   interval={0}
                   tick={(props: { x: number; y: number; payload: { value: string } }) => (
@@ -935,7 +935,7 @@ function CurvaMercado({ posicoes }: { posicoes: PosicaoTitulo[] }) {
                     return x ? `${l} · ${x.tipo} · MTM ${comSinal(x.mtm, fmtBRL)}` : l;
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
+                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
                 <Bar dataKey="curva" name="Saldo na curva" fill={COR_CURVA} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 <Bar dataKey="mercado" name="Saldo a mercado" fill={COR_MERCADO} radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </BarChart>
@@ -1000,26 +1000,26 @@ function Cronograma({ eventos, p }: { eventos: EventoCarteira[]; p: PremissasMer
       subtitle={`Valores brutos por mês de pagamento · ${d.meses[0].rotulo} a ${d.meses[23].rotulo} · projeção com o último dado disponível`}
     >
       {d.qtd === 0 ? (
-        <div className="h-60 flex items-center justify-center rounded-lg bg-[#f5f6f7] text-sm text-label text-center px-4">
+        <div className="h-60 flex items-center justify-center rounded-lg bg-surface-3 text-sm text-label text-center px-4">
           Sem cupons ou vencimentos dos títulos desta empresa nos próximos 24 meses.
         </div>
       ) : (
         <div className="h-60 -ml-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={d.meses} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="#e5e5e5" />
-              <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval="preserveStartEnd" minTickGap={12} />
+              <CartesianGrid vertical={false} stroke="#3f3f3d" />
+              <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#575653" }} interval="preserveStartEnd" minTickGap={12} />
               <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={52} tickFormatter={fmtEixo} />
               <Tooltip
                 contentStyle={tooltipStyle}
-                cursor={{ fill: "#f2f4f6" }}
+                cursor={{ fill: "#2f2e2e" }}
                 formatter={(v: number, n: string) => [fmtBRL(v), n]}
                 labelFormatter={(l: string) => {
                   const m = d.meses.find((x) => x.rotulo === l);
                   return m && m.itens.length ? `${l} · ${m.itens.join(" · ")}` : l;
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
+              <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" }} iconType="circle" iconSize={8} />
               <Bar dataKey="cupom" name="Cupons" stackId="e" fill={COR_CUPOM} isAnimationActive={false} />
               <Bar dataKey="vencimento" name="Vencimentos" stackId="e" fill={COR_VENCIMENTO} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
@@ -1043,7 +1043,7 @@ function Cronograma({ eventos, p }: { eventos: EventoCarteira[]; p: PremissasMer
 
 function Resumo({ rotulo, valor, sub, cor }: { rotulo: string; valor: string; sub: string; cor?: string }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+    <div className="rounded-lg bg-surface-3 px-3 py-2 min-w-0">
       <div className="text-xs text-label flex items-center gap-1.5">
         {cor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />}
         {rotulo}
@@ -1173,7 +1173,7 @@ function TratamentoContabil({ posicoes }: { posicoes: PosicaoTitulo[] }) {
               </div>
               <ul className="space-y-2">
                 {lancamentos(g.cpc, mtm).map((l) => (
-                  <li key={l.evento} className="rounded-md bg-[#f5f6f7] px-3 py-2 text-[12px] leading-snug">
+                  <li key={l.evento} className="rounded-md bg-surface-3 px-3 py-2 text-[12px] leading-snug">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-semibold text-text">
                         {l.evento} <span className="font-normal text-label">· {l.transacao}</span>
@@ -1279,7 +1279,7 @@ function Parametros({ posicoes, p }: { posicoes: PosicaoTitulo[]; p: PremissasMe
         title="Parâmetros (Premissas)"
         subtitle={`Somente leitura · último dado disponível em ${fmtDate(ultimo)}`}
         status={
-          <Tag color="#556b82">
+          <Tag color="#a5a099">
             <Lock className="w-2.5 h-2.5 mr-1" />
             Importado do SAP
           </Tag>
@@ -1312,11 +1312,11 @@ function Parametros({ posicoes, p }: { posicoes: PosicaoTitulo[]; p: PremissasMe
           <table className="w-full text-[13px] border-separate border-spacing-0">
             <thead>
               <tr className="text-text">
-                <th className="text-left font-semibold pl-4 pr-2 py-2 border-b border-[#a8b2bd]">Título</th>
-                <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd]">Compra</th>
-                <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd] whitespace-nowrap">{fmtMonthShort(mesAnterior)}</th>
-                <th className="text-right font-semibold px-2 py-2 border-b border-[#a8b2bd] whitespace-nowrap">{fmtMonthShort(p.dataBase)}</th>
-                <th className="text-right font-semibold pl-2 pr-4 py-2 border-b border-[#a8b2bd] whitespace-nowrap">Var. mês</th>
+                <th className="text-left pl-4 pr-2 py-2 border-b-2 border-brand">Título</th>
+                <th className="text-right px-2 py-2 border-b-2 border-brand">Compra</th>
+                <th className="text-right px-2 py-2 border-b-2 border-brand whitespace-nowrap">{fmtMonthShort(mesAnterior)}</th>
+                <th className="text-right px-2 py-2 border-b-2 border-brand whitespace-nowrap">{fmtMonthShort(p.dataBase)}</th>
+                <th className="text-right pl-2 pr-4 py-2 border-b-2 border-brand whitespace-nowrap">Var. mês</th>
               </tr>
             </thead>
             <tbody>

@@ -76,7 +76,7 @@ function plural(n: number, singular: string, pluralTxt: string): string {
 
 /** Cor do grupo contábil = cor da modalidade em todas as telas de Captações; "CRA/CRI" usa a cor de CRA */
 function corDoGrupo(grupo: GrupoContabil): string {
-  return COR_MODALIDADE[grupo === "CRA/CRI" ? "CRA" : grupo] ?? "#758ca4";
+  return COR_MODALIDADE[grupo === "CRA/CRI" ? "CRA" : grupo] ?? "#908c85";
 }
 
 /** Grupos contábeis do passivo de captações, com o nome do plano de contas do FI-GL */
@@ -126,7 +126,7 @@ const STATUS_EXTRATO_TEXTO: Record<LinhaConciliacaoExtrato["status"], string> = 
 const STATUS_ETAPA: Record<StatusEtapa, ValueState> = { Concluído: "positive", "Com pendência": "critical", Pendente: "neutral" };
 
 /** Linha divergente: destaque do sap.m.ListItem (faixa à esquerda) + fundo suave */
-const DESTAQUE_DIVERGENTE = "bg-[#fff6f9]! [&>td:first-child]:shadow-[inset_4px_0_0_#f53232]";
+const DESTAQUE_DIVERGENTE = "bg-negative-bg! [&>td:first-child]:shadow-[inset_4px_0_0_#d9563e]";
 
 const DIAS_SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
@@ -698,8 +698,8 @@ export function C05Fechamento() {
                   aria-pressed={ativo}
                   onClick={() => setGrupo(ativo ? null : g.grupo)}
                   className={clsx(
-                    "text-left bg-white rounded-[var(--radius-card)] shadow-fiori px-3 sm:px-4 py-3 min-w-0 transition-shadow hover:shadow-fiori-lg",
-                    ativo && "shadow-[inset_0_0_0_2px_#0070f2]!",
+                    "text-left bg-surface rounded-[var(--radius-card)] shadow-fiori px-3 sm:px-4 py-3 min-w-0 transition-shadow hover:shadow-fiori-lg",
+                    ativo && "shadow-[inset_0_0_0_2px_#009994]!",
                   )}
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -764,12 +764,12 @@ export function C05Fechamento() {
             </div>
 
             {/* Pop-in (sap.m.Table responsiva) */}
-            <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
               {linhasGL.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhuma conta divergente no filtro selecionado</li>}
               {linhasGL.map((l) => (
                 <li
                   key={l.conta.conta}
-                  className={clsx("px-4 py-3", l.status === "Divergente" && "bg-[#fff6f9] shadow-[inset_4px_0_0_#f53232]")}
+                  className={clsx("px-4 py-3", l.status === "Divergente" && "bg-negative-bg shadow-[inset_4px_0_0_#d9563e]")}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -786,7 +786,7 @@ export function C05Fechamento() {
                 </li>
               ))}
               {linhasGL.length > 0 && (
-                <li className="px-4 py-3 bg-[#f5f6f7]">
+                <li className="px-4 py-3 bg-surface-3">
                   <div className="text-sm font-bold text-text">Total · {plural(linhasGL.length, "conta", "contas")}</div>
                   <PopInValores
                     rotulo="FI-GL (R$)"
@@ -853,11 +853,11 @@ export function C05Fechamento() {
             />
           </div>
 
-          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
             {d.extratos.map((l) => (
               <li
                 key={l.pos.c.id}
-                className={clsx("px-4 py-3", l.status === "Divergente" && "bg-[#fff6f9] shadow-[inset_4px_0_0_#f53232]")}
+                className={clsx("px-4 py-3", l.status === "Divergente" && "bg-negative-bg shadow-[inset_4px_0_0_#d9563e]")}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -873,7 +873,7 @@ export function C05Fechamento() {
                 {l.status === "Divergente" && l.motivo && <p className="text-xs text-text leading-snug mt-2">{l.motivo}</p>}
               </li>
             ))}
-            <li className="px-4 py-3 bg-[#f5f6f7]">
+            <li className="px-4 py-3 bg-surface-3">
               <div className="text-sm font-bold text-text">Total · {plural(d.extratos.length, "contrato", "contratos")}</div>
               <PopInValores
                 rotulo="Extrato (R$)"
@@ -918,7 +918,7 @@ export function C05Fechamento() {
               {d.checagens.map((c, i) => {
                 const link = LINK_CHECAGEM[c.id];
                 return (
-                  <li key={c.id} className={clsx("flex items-start gap-3 px-4 py-3", !c.ok && "bg-[#fff6f9] shadow-[inset_4px_0_0_#f53232]")}>
+                  <li key={c.id} className={clsx("flex items-start gap-3 px-4 py-3", !c.ok && "bg-negative-bg shadow-[inset_4px_0_0_#d9563e]")}>
                     {c.ok ? (
                       <CheckCircle2 className="w-5 h-5 text-positive shrink-0 mt-px" strokeWidth={2} aria-label="OK" />
                     ) : (
@@ -969,7 +969,7 @@ export function C05Fechamento() {
                 className="mt-3 h-2"
                 value={d.checagensOk}
                 max={d.checagens.length}
-                color={d.checagensOk === d.checagens.length ? "#30914c" : "#e76500"}
+                color={d.checagensOk === d.checagens.length ? "#009994" : "#ffa436"}
               />
               <p className="text-xs text-label mt-3 leading-relaxed">
                 As checagens cruzam a carteira (C00), a movimentação (C01), o cronograma (C02) e as conciliações desta tela. A
@@ -1028,7 +1028,7 @@ export function C05Fechamento() {
               {d.dias.map((g, gi) => {
                 const pend = g.etapas.some((e) => e.status === "Com pendência");
                 const aberta = g.etapas.some((e) => e.status !== "Concluído");
-                const cor = pend ? "#e76500" : aberta ? "#758ca4" : "#30914c";
+                const cor = pend ? "#ffa436" : aberta ? "#908c85" : "#009994";
                 const ultimo = gi === d.dias.length - 1;
                 return (
                   <li key={g.dia} className="grid grid-cols-[4.5rem_1.5rem_minmax(0,1fr)] sm:grid-cols-[6.5rem_2rem_minmax(0,1fr)]">
@@ -1039,7 +1039,7 @@ export function C05Fechamento() {
                     </div>
                     <div className="relative flex justify-center" aria-hidden>
                       <span className={clsx("absolute w-0.5 bg-line", gi === 0 ? "top-3.5" : "top-0", ultimo ? "h-3.5" : "bottom-0")} />
-                      <span className="relative mt-3 w-3.5 h-3.5 rounded-full border-[3px] bg-white" style={{ borderColor: cor }} />
+                      <span className="relative mt-3 w-3.5 h-3.5 rounded-full border-[3px] bg-surface" style={{ borderColor: cor }} />
                     </div>
                     <ul className={clsx("space-y-2 min-w-0", !ultimo && "pb-5")}>
                       {g.etapas.map((e) => (
@@ -1047,7 +1047,7 @@ export function C05Fechamento() {
                           key={e.id}
                           className={clsx(
                             "rounded-lg border px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4",
-                            e.status === "Com pendência" ? "border-[#e76500]/50 bg-critical-bg/40" : "border-line-soft",
+                            e.status === "Com pendência" ? "border-amarelo/50 bg-critical-bg/40" : "border-line-soft",
                           )}
                         >
                           <div className="min-w-0 flex-1">
@@ -1095,7 +1095,7 @@ export function C05Fechamento() {
                 className="mt-3 h-2"
                 value={d.etapasConcluidas}
                 max={d.checklist.length}
-                color={d.etapasConcluidas === d.checklist.length ? "#30914c" : "#e76500"}
+                color={d.etapasConcluidas === d.checklist.length ? "#009994" : "#ffa436"}
               />
               <div className="text-[13px] font-semibold text-text mt-5 mb-2">Por responsável</div>
               <ul className="space-y-2.5">
@@ -1111,7 +1111,7 @@ export function C05Fechamento() {
                       className="mt-1.5"
                       value={r.concluidas}
                       max={r.total}
-                      color={r.concluidas === r.total ? "#30914c" : "#e76500"}
+                      color={r.concluidas === r.total ? "#009994" : "#ffa436"}
                     />
                   </li>
                 ))}
@@ -1225,7 +1225,7 @@ function LinkChecagem({ link, onAba }: { link: { rotulo: string; rota?: string; 
 
 function Pendencia({ titulo, valor, motivo, onVer }: { titulo: string; valor: number; motivo: string | null; onVer: () => void }) {
   return (
-    <li className="rounded-lg border border-[#f53232]/30 bg-[#fff6f9] px-3 py-2.5 text-[13px]">
+    <li className="rounded-lg border border-negative-border/30 bg-negative-bg px-3 py-2.5 text-[13px]">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-semibold text-text tabular">{titulo}</span>
         <span className="tabular font-bold text-negative whitespace-nowrap">{fmtDifBRL(valor)}</span>

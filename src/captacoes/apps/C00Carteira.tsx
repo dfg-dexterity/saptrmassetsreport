@@ -30,15 +30,15 @@ import { calcularPosicaoDivida, custoMedioPonderado, prazoMedioCarteira, totalDi
 
 const rel = relatorioCaptacao("c00");
 const TODOS = "__todos";
-const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
+const tooltipStyle = { backgroundColor: "#2e2e2e", border: "1px solid rgba(247, 243, 231, 0.13)", borderRadius: 0, color: "#f7f3e7", fontFamily: "Figtree, system-ui, sans-serif", fontSize: 12 };
 /** Ordem fixa dos indexadores (cores de COR_INDEXADOR, as mesmas da tela de Premissas) */
 const ORDEM_INDEXADOR: IndexadorDivida[] = ["CDI", "IPCA", "TJLP", "TLP", "Pré"];
 /** Circulante × não circulante: mesmas cores do C02 */
-const COR_CP = "#e26300";
-const COR_NC = "#0070f2";
-const corModalidade = (c: ContratoDivida) => COR_MODALIDADE[GRUPO_MODALIDADE[c.modalidade]] ?? "#758ca4";
+const COR_CP = "#ffa436";
+const COR_NC = "#009994";
+const corModalidade = (c: ContratoDivida) => COR_MODALIDADE[GRUPO_MODALIDADE[c.modalidade]] ?? "#908c85";
 /** sap.m.ColumnListItem com highlight "Error" (barra vermelha à esquerda da linha) */
-const HIGHLIGHT_RECLASSIFICADO = "[&>td:first-child]:shadow-[inset_3px_0_0_#f53232]";
+const HIGHLIGHT_RECLASSIFICADO = "[&>td:first-child]:shadow-[inset_3px_0_0_#d9563e]";
 
 // ---------------------------------------------------------------------------
 // Helpers locais
@@ -202,8 +202,8 @@ export function C00Carteira() {
       grupos: new Set(linhas.map((x) => GRUPO_MODALIDADE[x.c.modalidade])).size,
       reclass,
       valorReclass: reclass.reduce((s, x) => s + valorReclassificado(x, p.dataBase, p), 0),
-      porModalidade: fatiar(linhas, (x) => GRUPO_MODALIDADE[x.c.modalidade], (g) => COR_MODALIDADE[g] ?? "#758ca4"),
-      porIndexador: fatiar(linhas, (x) => x.c.indexador, (i) => COR_INDEXADOR[i as IndexadorDivida] ?? "#758ca4"),
+      porModalidade: fatiar(linhas, (x) => GRUPO_MODALIDADE[x.c.modalidade], (g) => COR_MODALIDADE[g] ?? "#908c85"),
+      porIndexador: fatiar(linhas, (x) => x.c.indexador, (i) => COR_INDEXADOR[i as IndexadorDivida] ?? "#908c85"),
     };
   }, [linhas, p]);
 
@@ -578,7 +578,7 @@ export function C00Carteira() {
       }
     >
       {/* Barra de filtros */}
-      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <FilterField label="Empresa">
             <Select
@@ -649,7 +649,7 @@ export function C00Carteira() {
             />
           </div>
           {/* Pop-in (sap.m.Table responsiva): em telas estreitas os valores descem para baixo do contrato */}
-          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          <ul className="lg:hidden border-t border-line divide-y divide-line-soft">
             {ordenadasSaldo.length === 0 && <li className="py-12 text-center text-label text-sm">Nenhum contrato atende aos filtros</li>}
             {ordenadasSaldo.map((x) => {
               const ativo = x.c.id === selecionado;
@@ -661,8 +661,8 @@ export function C00Carteira() {
                     aria-expanded={ativo}
                     className={clsx(
                       "w-full text-left px-4 py-3",
-                      ativo ? "bg-selected shadow-[inset_3px_0_0_#0064d9]" : "hover:bg-[#f2f4f6]",
-                      x.reclassificado && !ativo && "shadow-[inset_3px_0_0_#f53232]",
+                      ativo ? "bg-selected shadow-[inset_3px_0_0_#00b3ac]" : "hover:bg-hover",
+                      x.reclassificado && !ativo && "shadow-[inset_3px_0_0_#d9563e]",
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -699,7 +699,7 @@ export function C00Carteira() {
               );
             })}
             {ordenadasSaldo.length > 0 && (
-              <li className="px-4 py-3 bg-[#f5f6f7]">
+              <li className="px-4 py-3 bg-surface-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-sm font-bold text-text">Total ({linhas.length})</div>
                   <div className="text-sm font-bold text-text tabular">{fmtNum(k.saldo)}</div>
@@ -842,7 +842,7 @@ function DetalheContrato({
   const mapa = MAPEAMENTO_C00.filter((m) => m.visao && valorCampo[m.id] !== undefined);
 
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg xl:shadow-fiori overflow-hidden self-auto xl:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 xl:sticky xl:inset-auto xl:top-[4.25rem] xl:z-auto xl:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-surface rounded-[var(--radius-card)] shadow-fiori-lg xl:shadow-fiori overflow-hidden self-auto xl:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 xl:sticky xl:inset-auto xl:top-[4.25rem] xl:z-auto xl:max-h-[calc(100vh-5.5rem)]">
       <header className="shrink-0 px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -909,8 +909,8 @@ function DetalheContrato({
             <Linha label={`Circulante (${pct(pos.circulante)})`} valor={fmtBRL(pos.circulante, true)} cor={pos.reclassificado ? "text-negative font-semibold" : undefined} />
             <Linha label={`Não circulante (${pct(pos.naoCirculante)})`} valor={fmtBRL(pos.naoCirculante, true)} />
           </dl>
-          <div className="flex h-2 rounded-full overflow-hidden mt-3 bg-[#e5e5e5]" aria-hidden>
-            <div style={{ width: `${pos.saldoContabil > 0 ? (pos.circulante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: pos.reclassificado ? "#f53232" : COR_CP }} />
+          <div className="flex h-2 rounded-full overflow-hidden mt-3 bg-surface-2" aria-hidden>
+            <div style={{ width: `${pos.saldoContabil > 0 ? (pos.circulante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: pos.reclassificado ? "#d9563e" : COR_CP }} />
             <div style={{ width: `${pos.saldoContabil > 0 ? (pos.naoCirculante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: COR_NC }} />
           </div>
           <div className="flex justify-between text-[11px] text-label mt-1">
@@ -929,7 +929,7 @@ function DetalheContrato({
               <span className={clsx(pos.diasAteVencimento <= 365 && "text-critical")}>{fmtInt(pos.diasAteVencimento)} dias</span>
             </Field>
           </div>
-          <div className="mt-3 rounded-lg border border-line-soft bg-[#f5f6f7] px-3 py-2.5">
+          <div className="mt-3 rounded-lg border border-line-soft bg-surface-3 px-3 py-2.5">
             <div className="flex items-center gap-1.5 text-[13px] font-semibold text-text">
               <CalendarClock className="w-4 h-4 text-link" />
               Próximo pagamento{prox ? ` · ${fmtDate(prox.data)}` : ""}
@@ -1033,14 +1033,14 @@ function DetalheContrato({
 
         <section>
           <h4 className="text-sm font-bold text-text mb-2 flex items-center gap-1.5">
-            <Database className="w-4 h-4 text-[#5d36ff]" /> Origem no SAP (CDS Views)
+            <Database className="w-4 h-4 text-link" /> Origem no SAP (CDS Views)
           </h4>
           <ul className="divide-y divide-line-soft rounded-lg border border-line-soft">
             {mapa.map((m) => (
               <li key={m.id} className="px-3 py-1.5 flex items-center justify-between gap-3 text-[13px]">
                 <div className="min-w-0 flex-1">
                   <div className="text-label text-xs truncate">{m.coluna}</div>
-                  <div className="font-mono text-[11px] text-[#5d36ff] truncate" title={`${m.visao}.${m.campo}`}>
+                  <div className="font-mono text-[11px] text-link truncate" title={`${m.visao}.${m.campo}`}>
                     {m.visao}.{m.campo}
                   </div>
                 </div>

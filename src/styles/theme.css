@@ -1,52 +1,86 @@
 /*
- * SAP Fiori – tema "Morning Horizon" (sap_horizon)
- * Tokens de cor, sombra e raio espelham os parâmetros de tema do SAP (sapBrandColor, sapTextColor…).
+ * Tema Dexterity (escuro) – tokens do Tailwind sobre a folha da marca (dexterity.css).
+ * Os nomes (brand, page, text, label, line…) são os que os componentes já usavam; os valores apontam para os tokens
+ * --dx-* da marca, que continua sendo a fonte única. Os poucos valores próprios do app estão comentados.
  */
 @theme {
-  --font-sans: "72", "72full", Arial, Helvetica, sans-serif;
+  --font-sans: var(--dx-body);
+  --font-display: var(--dx-display);
+  --font-mono: var(--dx-mono);
 
-  --color-brand: #0070f2;
-  --color-brand-hover: #0064d9;
-  --color-brand-active: #0057d2;
-  --color-link: #0064d9;
-  --color-shell: #ffffff;
-  --color-page: #f5f6f7;
-  --color-text: #1d2d3e;
-  --color-label: #556b82;
-  --color-muted: #6a6d70;
-  --color-line: #d9d9d9;
-  --color-line-soft: #e5e5e5;
-  --color-field: #556b82;
-  --color-hover: #eaecee;
-  --color-selected: #ebf8ff;
-  --color-header: #f5f6f7;
+  /* Ação: cerceta cheia em fundo, borda e ícone; como texto, sempre a cerceta clara (a cheia dá 4,42:1) */
+  --color-brand: var(--dx-cerceta);
+  --color-brand-hover: var(--dx-cerceta-texto);
+  --color-brand-active: #007c78;
+  --color-link: var(--dx-cerceta-texto);
 
-  --color-positive: #256f3a;
-  --color-positive-bg: #f5fae5;
-  --color-positive-border: #30914c;
-  --color-critical: #b44f00;
-  --color-critical-strong: #e76500;
-  --color-critical-bg: #fff8d6;
-  --color-negative: #aa0808;
-  --color-negative-bg: #ffeaf4;
-  --color-negative-border: #f53232;
-  --color-info: #0070f2;
-  --color-info-bg: #e1f4ff;
-  --color-neutral: #788fa6;
-  --color-neutral-bg: #eff1f2;
+  /* Superfícies */
+  --color-shell: var(--dx-base);
+  --color-page: var(--dx-base);
+  --color-surface: var(--dx-surface);
+  --color-surface-2: var(--dx-surface-2);
+  --color-surface-3: var(--dx-surface-3);
+  --color-header: var(--dx-surface-2);
+  --color-hover: rgba(247, 243, 231, 0.05);
+  --color-selected: rgba(0, 153, 148, 0.14);
 
-  --shadow-fiori: 0 0 0.125rem 0 rgba(34, 53, 72, 0.2), 0 0.125rem 0.25rem 0 rgba(34, 53, 72, 0.2);
-  --shadow-fiori-lg: 0 0 0.125rem 0 rgba(34, 53, 72, 0.2), 0 0.625rem 1.875rem 0 rgba(34, 53, 72, 0.15);
-  --shadow-shell: 0 0 0.125rem 0 rgba(34, 53, 72, 0.15), 0 0.125rem 0.25rem 0 rgba(34, 53, 72, 0.15);
+  /* Texto */
+  --color-text: var(--dx-off);
+  --color-suave: var(--dx-texto-suave);
+  /* texto secundário: o cinza-areia claro passa no AA também sobre surface-2 e linhas em destaque (o rótulo não) */
+  --color-label: var(--dx-muted);
+  --color-muted: var(--dx-rotulo);
 
-  --radius-tile: 1rem;
-  --radius-card: 0.75rem;
-  --radius-button: 0.5rem;
-  --radius-field: 0.25rem;
+  /* Filetes: o padrão da marca (.13) e um mais forte para totais */
+  --color-line: rgba(247, 243, 231, 0.24);
+  --color-line-soft: var(--dx-line);
+  --color-field: var(--dx-line);
+
+  /* Estados: ok/alta em cerceta, atenção/baixa em âmbar, vermelho só para limite excedido e erro */
+  --color-positive: var(--dx-cerceta-texto);
+  --color-positive-bg: rgba(0, 153, 148, 0.12);
+  --color-positive-border: var(--dx-cerceta);
+  --color-critical: var(--dx-amarelo);
+  --color-critical-strong: var(--dx-amarelo);
+  --color-critical-bg: rgba(255, 164, 54, 0.1);
+  /* vermelho de texto um passo mais claro que --dx-vermelho-texto: as tabelas do relatório têm linhas em destaque,
+     totais em surface-2 e hover, onde o tom da marca cai para 3,9–4,0:1; este fica acima de 4,6:1 em todas */
+  --color-negative: #e4806c;
+  --color-negative-bg: rgba(217, 86, 62, 0.12);
+  --color-negative-border: var(--dx-vermelho);
+  --color-info: var(--dx-texto-suave);
+  --color-info-bg: rgba(152, 86, 154, 0.14);
+  --color-neutral: var(--dx-muted);
+  --color-neutral-bg: rgba(247, 243, 231, 0.06);
+
+  /* Acentos pontuais da marca (filete lateral, categoria) – nunca superfície nem texto corrido */
+  --color-amarelo: var(--dx-amarelo);
+  --color-roxo: var(--dx-roxo);
+  --color-musgo: var(--dx-musgo);
+
+  /* Sem sombra de elevação: a separação é o filete de 1px; só popover e diálogo ganham a sombra do .dx-painel */
+  --shadow-fiori: 0 0 0 1px rgba(247, 243, 231, 0.13);
+  --shadow-fiori-lg: 0 0 0 1px rgba(247, 243, 231, 0.13), 0 30px 70px rgba(0, 0, 0, 0.45);
+  --shadow-shell: 0 1px 0 0 rgba(247, 243, 231, 0.13);
+
+  /* Cantos vivos em tudo (ponto de status e spinner usam rounded-full, que não depende destes tokens) */
+  --radius: 0;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+  --radius-tile: 0;
+  --radius-card: 0;
+  --radius-button: 0;
+  --radius-field: 0;
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 html {
@@ -55,51 +89,98 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Corpo mais compacto que o do site (17px/300): o relatório é denso em números e o peso 300 some nas tabelas */
 body {
   margin: 0;
-  background: var(--color-page);
-  color: var(--color-text);
-  font-family: var(--font-sans);
+  background: var(--dx-base);
+  color: var(--dx-off);
+  font-family: var(--dx-body);
   font-size: 0.875rem;
-  line-height: 1.4;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
-/* Foco acessível no padrão Horizon */
-:where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 0.125rem solid #0032a5;
-  outline-offset: 0.0625rem;
-  border-radius: 0.375rem;
+@layer base {
+  /* Cabeçalho de tabela no padrão .dx-tabela: rótulo mono em caixa alta (cor, fundo e filete ficam nos utilitários) */
+  thead th {
+    font-family: var(--dx-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  /* Número em tabela no padrão .dx-num: IBM Plex Mono com algarismos tabulares */
+  td.tabular,
+  td .tabular {
+    font-family: var(--dx-mono);
+    font-size: 12px;
+  }
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* Scrollbar discreta (Horizon) */
+/*
+ * Gráficos (recharts): tooltip e legenda nos tons de texto do tema – a cor da série fica só na marca (barra, linha,
+ * ícone da legenda), que é o que a identifica. O recharts escreve essas cores inline, daí o !important.
+ */
+.recharts-default-tooltip {
+  background-color: var(--dx-surface-2) !important;
+  border: 1px solid var(--dx-line) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.recharts-tooltip-label {
+  color: var(--dx-off) !important;
+  font-weight: 500;
+}
+.recharts-tooltip-item,
+.recharts-legend-item-text {
+  color: var(--dx-texto-suave) !important;
+}
+/* faixa e linha do cursor do tooltip (o padrão do recharts é cinza-claro, que estoura no fundo escuro) */
+.recharts-rectangle.recharts-tooltip-cursor {
+  fill: rgba(247, 243, 231, 0.06);
+}
+.recharts-curve.recharts-tooltip-cursor {
+  stroke: rgba(247, 243, 231, 0.3);
+}
+@layer base {
+  /* texto de gráfico sem cor definida herdaria o preto do SVG */
+  .recharts-wrapper text:not([fill]) {
+    fill: var(--dx-muted);
+  }
+}
+
+/* Barra de rolagem discreta, sem cantos */
+.fiori-scroll {
+  scrollbar-color: rgba(247, 243, 231, 0.22) transparent;
+}
 .fiori-scroll::-webkit-scrollbar {
   height: 0.5rem;
   width: 0.5rem;
 }
 .fiori-scroll::-webkit-scrollbar-thumb {
-  background: #7b91a8;
-  border-radius: 0.5rem;
+  background: rgba(247, 243, 231, 0.22);
 }
 .fiori-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* Fundo do Launchpad – degradê sutil do Morning Horizon */
-.horizon-backdrop {
-  background:
-    radial-gradient(120% 60% at 0% 0%, rgba(0, 112, 242, 0.08) 0%, rgba(0, 112, 242, 0) 60%),
-    radial-gradient(90% 50% at 100% 0%, rgba(4, 159, 154, 0.07) 0%, rgba(4, 159, 154, 0) 55%),
-    var(--color-page);
-}
-
+/* Impressão / PDF: mantém o tema escuro (sem isto o navegador descarta os fundos e o texto creme some no papel) */
 @media print {
   @page {
     size: A4 landscape;
     margin: 10mm;
+  }
+  html,
+  body,
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .no-print {
     display: none !important;
@@ -123,11 +204,8 @@ body {
   .sticky {
     position: static !important;
   }
-  body {
-    background: #fff;
-  }
   .print-flat {
     box-shadow: none !important;
-    border: 1px solid #d9d9d9 !important;
+    border: 1px solid var(--dx-line) !important;
   }
 }

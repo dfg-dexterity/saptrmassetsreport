@@ -92,15 +92,15 @@ function siglaCovenant(a: ApuracaoCovenant) {
 }
 
 /** Mesmas cores do C02: circulante (12 meses) × não circulante */
-const COR_CP = "#e26300";
-const COR_NC = "#0070f2";
+const COR_CP = "#ffa436";
+const COR_NC = "#009994";
 
 const COR_ESTADO: Record<ValueState, string> = {
-  positive: "#256f3a",
-  critical: "#b44f00",
-  negative: "#aa0808",
-  information: "#0070f2",
-  neutral: "#1d2d3e",
+  positive: "#00b3ac",
+  critical: "#ffa436",
+  negative: "#e4806c",
+  information: "#d8d2c6",
+  neutral: "#f7f3e7",
 };
 
 interface EventoPag {
@@ -317,14 +317,14 @@ export function LaunchpadCaptacoes() {
           <AreaChart data={d.evolucao} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="spark-captacoes" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0070f2" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#0070f2" stopOpacity={0} />
+                <stop offset="0%" stopColor="#009994" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#009994" stopOpacity={0} />
               </linearGradient>
             </defs>
             <Area
               type="monotone"
               dataKey="v"
-              stroke="#0070f2"
+              stroke="#009994"
               strokeWidth={2}
               fill="url(#spark-captacoes)"
               isAnimationActive={false}
@@ -430,7 +430,7 @@ export function LaunchpadCaptacoes() {
   const abrir = (r: RelatorioBase) => navigate(r.rota);
 
   return (
-    <div className="min-h-screen flex flex-col horizon-backdrop">
+    <div className="min-h-screen flex flex-col bg-page">
       <ShellBar search={{ value: busca, onChange: setBusca }} />
 
       <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -443,7 +443,7 @@ export function LaunchpadCaptacoes() {
             <h1 className="text-2xl sm:text-[1.75rem] font-bold text-text leading-tight mt-0.5">{saudacao(agora)}!</h1>
             <p className="text-base text-label mt-1">{produto.descricao}</p>
           </div>
-          <div className="flex items-stretch gap-4 sm:gap-6 bg-white/70 backdrop-blur rounded-2xl shadow-fiori px-5 py-3 self-start lg:self-auto">
+          <div className="flex items-stretch gap-4 sm:gap-6 bg-surface backdrop-blur rounded-2xl shadow-fiori px-5 py-3 self-start lg:self-auto">
             <QuickStat label="Dívida bruta" value={fmtCompact(d.total)} />
             <div className="w-px bg-line-soft" />
             <QuickStat label="Custo médio" value={`${fmtPct(d.custoMedio)} a.a.`} />
@@ -589,7 +589,7 @@ export function LaunchpadCaptacoes() {
               <Card
                 title="Composição da dívida"
                 subtitle="Saldo pelo custo amortizado por modalidade (C00)"
-                icon={<PieChart className="w-5 h-5 text-[#8b47d7]" />}
+                icon={<PieChart className="w-5 h-5 text-link" />}
                 actions={<VerMais onClick={() => navigate("/c00-carteira")} />}
               >
                 <ul className="space-y-2.5">
@@ -597,14 +597,14 @@ export function LaunchpadCaptacoes() {
                     <li key={g.grupo}>
                       <div className="flex items-center justify-between gap-3 text-[13px] mb-1">
                         <span className="inline-flex items-center gap-2 text-text font-semibold truncate">
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_MODALIDADE[g.grupo] ?? "#758ca4" }} />
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_MODALIDADE[g.grupo] ?? "#908c85" }} />
                           {g.grupo}
                         </span>
                         <span className="tabular text-label whitespace-nowrap">
                           {fmtCompact(g.v)} · {fmtPct(g.share, 1)}
                         </span>
                       </div>
-                      <MicroBar value={g.share} max={1} color={COR_MODALIDADE[g.grupo] ?? "#758ca4"} />
+                      <MicroBar value={g.share} max={1} color={COR_MODALIDADE[g.grupo] ?? "#908c85"} />
                     </li>
                   ))}
                 </ul>
@@ -618,7 +618,7 @@ export function LaunchpadCaptacoes() {
               <Card
                 title="Eventos contratuais"
                 subtitle="Vencimentos, início da amortização e CPC 20 nos próximos 12 meses"
-                icon={<CalendarClock className="w-5 h-5 text-[#c87b00]" />}
+                icon={<CalendarClock className="w-5 h-5 text-link" />}
                 actions={<VerMais onClick={() => navigate("/c02-cronograma")} />}
               >
                 {d.eventosContratuais.length === 0 ? (
@@ -646,7 +646,7 @@ export function LaunchpadCaptacoes() {
               <Card
                 title="Covenants"
                 subtitle={`Última apuração até ${fmtDate(db)} (C04)`}
-                icon={<Scale className="w-5 h-5 text-[#df1278]" />}
+                icon={<Scale className="w-5 h-5 text-link" />}
                 actions={<VerMais onClick={() => navigate("/c04-covenants")} />}
               >
                 <ul className="divide-y divide-line-soft -mx-1">
@@ -731,7 +731,7 @@ export function LaunchpadCaptacoes() {
                 texto="A movimentação do C01 fecha com a carteira do C00, que concilia com o FI-GL e com os extratos de BNDES, agentes fiduciários e securitizadoras (C05)."
               />
               <Destaque
-                icon={<ShieldCheck className="w-5 h-5 text-[#8b47d7]" />}
+                icon={<ShieldCheck className="w-5 h-5 text-link" />}
                 titulo="Normas contábeis"
                 texto="Custo amortizado (CPC 48), circulante × não circulante com reclassificação por covenant (CPC 26), juros capitalizados (CPC 20) e nota explicativa (CPC 40)."
               />
@@ -740,9 +740,9 @@ export function LaunchpadCaptacoes() {
         )}
       </main>
 
-      <footer className="border-t border-line-soft bg-white/80 mt-8">
+      <footer className="border-t border-line-soft bg-surface mt-8">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap gap-2 items-center justify-between text-xs text-label">
-          <span>SAP Fiori Launchpad · tema Horizon · Demo Dexterity IT Solutions</span>
+          <span>Launchpad · tema Dexterity · Demo Dexterity IT Solutions</span>
           <span className="tabular">{agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       </footer>
@@ -769,7 +769,7 @@ function KpiCard({
   sub,
   subState,
   hint,
-  color = "#1d2d3e",
+  color = "#f7f3e7",
   className,
 }: {
   label: string;
@@ -782,7 +782,7 @@ function KpiCard({
   className?: string;
 }) {
   return (
-    <div className={clsx("bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 min-w-0", className)}>
+    <div className={clsx("bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 min-w-0", className)}>
       <div className="text-[13px] text-label truncate" title={label}>
         {label}
       </div>
@@ -820,7 +820,7 @@ function Vazio({ texto }: { texto: string }) {
 
 function Destaque({ icon, titulo, texto }: { icon: ReactNode; titulo: string; texto: string }) {
   return (
-    <div className="bg-white/70 rounded-[var(--radius-card)] border border-line-soft px-4 py-3 flex gap-3">
+    <div className="bg-surface rounded-[var(--radius-card)] border border-line-soft px-4 py-3 flex gap-3">
       <div className="mt-0.5 shrink-0">{icon}</div>
       <div>
         <div className="text-sm font-bold text-text">{titulo}</div>

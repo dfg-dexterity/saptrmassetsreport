@@ -65,7 +65,7 @@ import {
 /** Ordem de gravidade do semáforo (para achar o pior status) */
 const NIVEL: Record<Semaforo, number> = { ok: 0, atencao: 1, excedido: 2 };
 
-const COR_SEMAFORO: Record<Semaforo, string> = { ok: "#30914c", atencao: "#e26300", excedido: "#f53232" };
+const COR_SEMAFORO: Record<Semaforo, string> = { ok: "#009994", atencao: "#ffa436", excedido: "#d9563e" };
 
 /** KPIs do Painel de KPIs (/kpis); o tile do Launchpad resume os 6 KPIs-chave */
 const TOTAL_KPIS_PAINEL = 22;
@@ -370,12 +370,12 @@ export function Launchpad() {
           <AreaChart data={d.evol.map((m) => ({ v: m.saldoFinal }))} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#049f9a" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#049f9a" stopOpacity={0} />
+                <stop offset="0%" stopColor="#c97d24" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#c97d24" stopOpacity={0} />
               </linearGradient>
             </defs>
             <YAxis hide domain={["dataMin", "dataMax"]} />
-            <Area type="monotone" dataKey="v" stroke="#049f9a" strokeWidth={2} fill="url(#spark)" isAnimationActive={false} />
+            <Area type="monotone" dataKey="v" stroke="#c97d24" strokeWidth={2} fill="url(#spark)" isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
       ),
@@ -471,7 +471,7 @@ export function Launchpad() {
   const abrir = (r: Relatorio) => navigate(r.rota);
 
   return (
-    <div className="min-h-screen flex flex-col horizon-backdrop">
+    <div className="min-h-screen flex flex-col bg-page">
       <ShellBar search={{ value: busca, onChange: setBusca }} />
 
       <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -486,7 +486,7 @@ export function Launchpad() {
               Reporting Pack de Aplicações Financeiras · SAP S/4HANA Treasury and Risk Management
             </p>
           </div>
-          <div className="flex items-stretch gap-4 sm:gap-6 bg-white/70 backdrop-blur rounded-2xl shadow-fiori px-5 py-3">
+          <div className="flex items-stretch gap-4 sm:gap-6 bg-surface backdrop-blur rounded-2xl shadow-fiori px-5 py-3">
             <QuickStat label="Carteira consolidada" value={fmtCompact(d.total)} />
             <div className="w-px bg-line-soft" />
             <QuickStat
@@ -522,19 +522,19 @@ export function Launchpad() {
                 value={fmtCompact(d.total)}
                 sub={`${d.mestre.length} contratos · saldo bruto`}
               />
-              <KpiCard label="Rendimentos 12m" value={fmtCompact(d.rend12)} sub="Bruto, antes de IR, IOF e taxas" color="#256f3a" />
+              <KpiCard label="Rendimentos 12m" value={fmtCompact(d.rend12)} sub="Bruto, antes de IR, IOF e taxas" color="#00b3ac" />
               <KpiCard
                 label="% CDI bruto 12m"
                 value={`${fmtDec(d.bmk.realizado * 100, 1)}%`}
                 sub={`Benchmark efetivo ${fmtDec(d.bmk.pct * 100, 1)}% (mix das regras) · líquido ${fmtDec(d.rent.pctCDILiquido * 100, 1)}%`}
-                color={d.bmk.situacao === "abaixo" ? "#b44f00" : d.bmk.situacao === "acima" ? "#256f3a" : undefined}
+                color={d.bmk.situacao === "abaixo" ? "#ffa436" : d.bmk.situacao === "acima" ? "#00b3ac" : undefined}
               />
-              <KpiCard label="Rentabilidade real 12m" value={fmtPct(d.rent.rentabReal)} sub={`Líquida · IPCA 12m ${fmtPct(p.ipca12m)}`} color="#049f9a" />
+              <KpiCard label="Rentabilidade real 12m" value={fmtPct(d.rent.rentabReal)} sub={`Líquida · IPCA 12m ${fmtPct(p.ipca12m)}`} color="#c97d24" />
               <KpiCard
                 label="Índice HHI"
                 value={fmtInt(d.indiceHHI)}
                 sub={d.hhiClasse.rotulo}
-                color={d.hhiClasse.status === "ok" ? "#256f3a" : "#b44f00"}
+                color={d.hhiClasse.status === "ok" ? "#00b3ac" : "#ffa436"}
               />
               <KpiCard
                 label="DL / EBITDA"
@@ -622,7 +622,7 @@ export function Launchpad() {
               <Card
                 title="Enquadramento na política"
                 subtitle="Limites por grupo econômico (R07)"
-                icon={<ShieldCheck className="w-5 h-5 text-[#8b47d7]" />}
+                icon={<ShieldCheck className="w-5 h-5 text-link" />}
                 actions={<VerMais onClick={() => navigate("/r07-concentracao")} />}
               >
                 <ul className="space-y-2.5">
@@ -655,7 +655,7 @@ export function Launchpad() {
               <Card
                 title="Janela fiscal"
                 subtitle="Renda fixa bancária · IOF e faixa do IR (R04)"
-                icon={<Hourglass className="w-5 h-5 text-[#c87b00]" />}
+                icon={<Hourglass className="w-5 h-5 text-link" />}
                 actions={<VerMais onClick={() => navigate("/r04-prazo-fiscal")} />}
               >
                 {d.iof.length + d.aguardar.length === 0 ? (
@@ -691,7 +691,7 @@ export function Launchpad() {
               <Card
                 title="Covenants contratuais"
                 subtitle={`Última apuração até ${fmtDate(p.dataBase)} (R06)`}
-                icon={<Scale className="w-5 h-5 text-[#df1278]" />}
+                icon={<Scale className="w-5 h-5 text-link" />}
                 actions={<VerMais onClick={() => navigate("/r06-indicadores")} />}
               >
                 <ul className="divide-y divide-line-soft -mx-1">
@@ -767,7 +767,7 @@ export function Launchpad() {
                 texto="A Carteira-Mestre consolida R01, R08, R09 e R10; o saldo final do R05 e do R02 bate com ela, e o R12 confronta o saldo com o razão (FI-GL) e os extratos no fim do mês."
               />
               <Destaque
-                icon={<ShieldCheck className="w-5 h-5 text-[#8b47d7]" />}
+                icon={<ShieldCheck className="w-5 h-5 text-link" />}
                 titulo="Normas contábeis"
                 texto="CPC 48 (custo amortizado × valor justo), CPC 02 (variação cambial), nota CPC 40 (R1), IRRF (Lei 11.033), IOF (Dec. 6.306; câmbio de 1,10% na remessa para investimento – Decreto 12.499/2025) e come-cotas (Lei 14.754)."
               />
@@ -776,9 +776,9 @@ export function Launchpad() {
         )}
       </main>
 
-      <footer className="border-t border-line-soft bg-white/80 mt-8">
+      <footer className="border-t border-line-soft bg-surface mt-8">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap gap-2 items-center justify-between text-xs text-label">
-          <span>SAP Fiori Launchpad · tema Horizon · Demo Dexterity IT Solutions</span>
+          <span>Launchpad · tema Dexterity · Demo Dexterity IT Solutions</span>
           <span className="tabular">{agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       </footer>
@@ -796,16 +796,16 @@ function QuickStat({ label, value, className, title }: { label: string; value: s
 }
 
 const COR_ESTADO: Record<ValueState, string> = {
-  positive: "#256f3a",
-  critical: "#b44f00",
-  negative: "#aa0808",
-  information: "#0070f2",
-  neutral: "#1d2d3e",
+  positive: "#00b3ac",
+  critical: "#ffa436",
+  negative: "#e4806c",
+  information: "#d8d2c6",
+  neutral: "#f7f3e7",
 };
 
-function KpiCard({ label, value, sub, color = "#1d2d3e" }: { label: string; value: string; sub?: string; color?: string }) {
+function KpiCard({ label, value, sub, color = "#f7f3e7" }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 min-w-0">
+    <div className="bg-surface rounded-[var(--radius-card)] shadow-fiori px-4 py-3 min-w-0">
       <div className="text-[13px] text-label leading-snug">{label}</div>
       <div className="text-xl font-bold tabular truncate mt-0.5" style={{ color }}>
         {value}
@@ -833,7 +833,7 @@ function Vazio({ texto }: { texto: string }) {
 
 function Destaque({ icon, titulo, texto }: { icon: React.ReactNode; titulo: string; texto: string }) {
   return (
-    <div className="bg-white/70 rounded-[var(--radius-card)] border border-line-soft px-4 py-3 flex gap-3">
+    <div className="bg-surface rounded-[var(--radius-card)] border border-line-soft px-4 py-3 flex gap-3">
       <div className="mt-0.5 shrink-0">{icon}</div>
       <div>
         <div className="text-sm font-bold text-text">{titulo}</div>
@@ -870,11 +870,11 @@ function MiniComeCotas({ dados }: { dados: { data: string; ir: number; projetado
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={linhas} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={8}>
-        <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={18} />
+        <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: "#a5a099" }} tickLine={false} axisLine={false} interval={0} height={18} />
         <YAxis hide domain={[0, "dataMax"]} />
         <Bar dataKey="ir" radius={[3, 3, 0, 0]} isAnimationActive={false}>
           {linhas.map((x) => (
-            <Cell key={x.data} fill="#8b47d7" fillOpacity={x.projetado ? 0.35 : 1} stroke={x.projetado ? "#8b47d7" : undefined} strokeDasharray={x.projetado ? "3 2" : undefined} />
+            <Cell key={x.data} fill="#a462a6" fillOpacity={x.projetado ? 0.35 : 1} stroke={x.projetado ? "#a462a6" : undefined} strokeDasharray={x.projetado ? "3 2" : undefined} />
           ))}
         </Bar>
       </BarChart>
@@ -903,18 +903,18 @@ function MiniRollForward({ mov }: { mov: { saldoInicial: number; aplicacoes: num
   const c = b + mov.rendimentos;
   const e = c - mov.resgatesBrutos - mov.comeCotas;
   const dados = [
-    { n: "SI", v: [0, a], cor: "#556b82" },
-    { n: "Apl", v: [a, b], cor: "#0070f2" },
-    { n: "Rend", v: [b, c], cor: "#30914c" },
-    { n: "Resg", v: [e, c], cor: "#e26300" },
-    { n: "SF", v: [0, mov.saldoFinal], cor: "#1d2d3e" },
+    { n: "SI", v: [0, a], cor: "#a5a099" },
+    { n: "Apl", v: [a, b], cor: "#009994" },
+    { n: "Rend", v: [b, c], cor: "#009994" },
+    { n: "Resg", v: [e, c], cor: "#ffa436" },
+    { n: "SF", v: [0, mov.saldoFinal], cor: "#f7f3e7" },
   ];
   // eixo a partir de zero: as barras de saldo ficam proporcionais (sem eixo truncado)
   const hi = Math.max(a, b, c, mov.saldoFinal);
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={dados} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={4}>
-        <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={18} />
+        <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#a5a099" }} tickLine={false} axisLine={false} interval={0} height={18} />
         <YAxis hide domain={[0, hi]} />
         <Bar dataKey="v" radius={2} isAnimationActive={false}>
           {dados.map((x) => (
