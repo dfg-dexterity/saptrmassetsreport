@@ -555,6 +555,11 @@ export function C06NotaExplicativa() {
   const primeiroMesNC = addDays(d.limite, 1);
   const encargosPeriodo = d.movCons.total.juros + d.movCons.total.atualizacaoMonetaria + d.movCons.total.apropriacaoCustos;
   const ultimaFaixa = d.vencimentos[d.vencimentos.length - 1];
+  /** Contratos sujeitos ao covenant e em aberto na data-base */
+  const contratosCov = (a: ApuracaoCovenant) => {
+    const ativos = a.cov.contratos.filter((id) => posicoes.some((x) => x.c.id === id));
+    return ativos.length ? ativos : a.cov.contratos;
+  };
   const totalPrincipalNC = soma(d.principalNC, (v) => v);
   const totalCaracteristicas = GRUPOS_CARACTERISTICAS.reduce((s, g) => s + posicoes.filter((x) => grupoDe(x.c) === g).length, 0);
 
@@ -646,7 +651,7 @@ export function C06NotaExplicativa() {
       if (!a.dataApuracao) continue;
       push(
         "li",
-        `${a.cov.indicador} (${a.cov.tipo === "max" ? "máximo" : "mínimo"} ${fmtLimite(a)} – ${listaPt(a.cov.contratos)}): ${fmtCov(a, a.valor)} em ${fmtDate(a.dataApuracao)} – ${situacaoPorExtenso(a)}.`,
+        `${a.cov.indicador} (${a.cov.tipo === "max" ? "máximo" : "mínimo"} ${fmtLimite(a)} – ${listaPt(contratosCov(a))}): ${fmtCov(a, a.valor)} em ${fmtDate(a.dataApuracao)} – ${situacaoPorExtenso(a)}.`,
       );
     }
     for (const par of d.narrativa.paragrafos) push("p", par);
@@ -856,7 +861,7 @@ export function C06NotaExplicativa() {
             a.dataApuracao,
             fmtFolga(a),
             situacaoCovenant(a).texto,
-            a.cov.contratos.join(", "),
+            contratosCov(a).join(", "),
             a.waiver ? `${a.waiver.credor} em ${fmtDate(a.waiver.obtidoEm)}${a.waiverVigente ? "" : " (após a data-base)"}` : "",
           ]),
           notas: [...d.narrativa.paragrafos, d.narrativa.conclusao],
@@ -1144,7 +1149,7 @@ export function C06NotaExplicativa() {
       minWidth: 170,
       render: (a) => (
         <div className="flex flex-wrap gap-1 max-w-[220px]">
-          {a.cov.contratos.map((c) => (
+          {contratosCov(a).map((c) => (
             <Tag key={c}>{c}</Tag>
           ))}
         </div>
@@ -1181,7 +1186,7 @@ export function C06NotaExplicativa() {
       onExport={exportar}
       kpis={
         <>
-          <HeaderKpi label="Empréstimos e financiamentos" value={fmtCompact(d.total)} sub={`${fmtDate(ab)}: ${fmtCompact(d.totalA)}`} />
+          <HeaderKpi label="Dívida bruta" value={fmtCompact(d.total)} sub={`${fmtDate(ab)}: ${fmtCompact(d.totalA)}`} />
           <HeaderKpi
             label="Circulante"
             value={fmtCompact(d.circ)}
@@ -1223,11 +1228,12 @@ export function C06NotaExplicativa() {
             subtitle={`Consolidado · R$ mil · ${fmtDate(db)} comparado a ${fmtDate(ab)} · clique na modalidade para ver os contratos`}
           >
             <div className="overflow-x-auto fiori-scroll -mx-4 px-4">
-              <table className="w-full text-sm border-separate border-spacing-0 min-w-[1000px] sm:min-w-[1080px]">
+              <table className="w-full text-sm border-separate border-spacing-0 min-w-[860px] sm:min-w-[1080px]">
                 <thead>
                   <tr className="text-[13px]">
                     <th className="sticky left-0 z-[2] bg-white" />
-                    <th colSpan={2} />
+                    <th className="hidden sm:table-cell" />
+                    <th />
                     <th colSpan={3} className="text-center font-bold py-1.5 pl-4 border-b border-line-soft whitespace-nowrap">
                       {fmtDate(db)}
                     </th>
@@ -1237,7 +1243,7 @@ export function C06NotaExplicativa() {
                   </tr>
                   <tr className="text-[13px]">
                     <th className="sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[170px] sm:min-w-[250px]">Modalidade</th>
-                    <th className="text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[210px]">Encargos contratuais (média ponderada)</th>
+                    <th className="hidden sm:table-cell text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[210px]">Encargos contratuais (média ponderada)</th>
                     <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">Taxa efetiva a.a.</th>
                     <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Circulante</th>
                     <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Não circulante</th>
@@ -1271,9 +1277,10 @@ export function C06NotaExplicativa() {
                                 <span className="text-label font-normal">({ids.length})</span>
                               </span>
                             </button>
+                            <div className="sm:hidden text-xs text-label leading-snug mt-0.5 pl-[2.375rem]">{l.encargos}</div>
                           </td>
-                          <td className="py-2.5 pr-3 border-b border-line-soft text-label text-[13px] leading-snug">{l.encargos}</td>
-                          <td className="py-2.5 pl-3 border-b border-line-soft text-right tabular whitespace-nowrap">{l.pos.length ? fmtPct(l.taxa) : "—"}</td>
+                          <td className="hidden sm:table-cell py-2.5 pr-3 border-b border-line-soft text-label text-[13px] leading-snug">{l.encargos}</td>
+                          <td className="py-2.5 pl-3 border-b border-line-soft text-right tabular whitespace-nowrap">{l.pos.length ? fmtPct(l.taxa) : "–"}</td>
                           <Num v={l.circ} />
                           <Num v={l.nc} />
                           <Num v={l.total} forte />
@@ -1295,13 +1302,14 @@ export function C06NotaExplicativa() {
                                     {!x?.reclassificado && xa?.reclassificado && <span className="ml-1.5 text-label font-normal">(reclassificado em {fmtDate(ab)})</span>}
                                   </div>
                                   <div className="text-xs text-label leading-snug max-w-[160px] sm:max-w-[280px]">{c.instrumento}</div>
+                                  <div className="sm:hidden text-xs text-label mt-0.5">{taxaContratadaDivida(c)}</div>
                                 </td>
-                                <td className="py-2 pr-3 border-b border-line-soft text-label">
+                                <td className="hidden sm:table-cell py-2 pr-3 border-b border-line-soft text-label">
                                   {taxaContratadaDivida(c)}
                                   {!x && <div className="text-xs">Liquidado em {fmtDate(c.vencimento)}</div>}
                                   {x && !xa && <div className="text-xs">Captado em {fmtDate(c.dataCaptacao)}</div>}
                                 </td>
-                                <td className="py-2 pl-3 border-b border-line-soft text-right tabular text-label">{x ? fmtPct(x.taxaEfetivaAA) : "—"}</td>
+                                <td className="py-2 pl-3 border-b border-line-soft text-right tabular text-label">{x ? fmtPct(x.taxaEfetivaAA) : "–"}</td>
                                 <Num v={x?.circulante ?? 0} leve />
                                 <Num v={x?.naoCirculante ?? 0} leve />
                                 <Num v={x?.saldoContabil ?? 0} leve />
@@ -1316,7 +1324,7 @@ export function C06NotaExplicativa() {
                   })}
                   <tr className="font-bold">
                     <td className="sticky left-0 z-[1] bg-[#f5f6f7] py-2.5 pl-2 pr-3 border-y border-[#a8b2bd]">Total</td>
-                    <td className="bg-[#f5f6f7] py-2.5 border-y border-[#a8b2bd]" />
+                    <td className="hidden sm:table-cell bg-[#f5f6f7] py-2.5 border-y border-[#a8b2bd]" />
                     <td className="bg-[#f5f6f7] py-2.5 pl-3 border-y border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtPct(d.custoMedio)}</td>
                     <Num v={d.circ} total />
                     <Num v={d.nc} total />
@@ -1695,11 +1703,19 @@ export function C06NotaExplicativa() {
                     </div>
                     <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
                       <PopIn rotulo="Limite" valor={`${a.cov.tipo === "max" ? "≤" : "≥"} ${fmtLimite(a)}`} />
-                      <PopIn rotulo={`Apurado ${fmtDate(a.dataApuracao)}`} valor={a.dataApuracao ? fmtCov(a, a.valor) : "—"} />
+                      <PopIn
+                        rotulo="Apurado"
+                        valor={
+                          <>
+                            {a.dataApuracao ? fmtCov(a, a.valor) : "—"}
+                            <span className="block text-xs text-label font-normal">{fmtDate(a.dataApuracao)}</span>
+                          </>
+                        }
+                      />
                       <PopIn rotulo="Folga" valor={<span className={a.folga >= 0 ? "text-positive" : "text-negative"}>{fmtFolga(a)}</span>} />
                     </dl>
                     <div className="flex flex-wrap items-center gap-1 mt-2">
-                      {a.cov.contratos.map((c) => (
+                      {contratosCov(a).map((c) => (
                         <Tag key={c}>{c}</Tag>
                       ))}
                       {a.waiver && (
