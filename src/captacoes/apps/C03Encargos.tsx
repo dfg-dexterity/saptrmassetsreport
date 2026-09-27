@@ -43,7 +43,6 @@ import {
   custoMedioPonderado,
   encargosDivida,
   movimentacaoContrato,
-  saldoContabil,
   totalDivida,
   type EncargosContrato,
   type PosicaoDivida,
@@ -161,33 +160,15 @@ function anualizar(taxaPeriodo: number, dias: number): number {
   return Math.pow(1 + taxaPeriodo, 365 / Math.max(1, dias)) - 1;
 }
 
-/**
- * Saldo médio diário pelo custo amortizado: média dos saldos contábeis no início de cada dia do período (dias antes
- * da captação ou após a liquidação contam como zero). Mantém a taxa anualizada coerente para contratos captados ou
- * liquidados dentro do período.
- */
-function saldoMedioDiario(c: ContratoDivida, inicio: string, fim: string, p: PremissasMercado): number {
-  const dias = Math.max(1, diffDays(inicio, fim));
-  let soma = 0;
-  for (let i = 0; i < dias; i++) soma += saldoContabil(c, addDays(inicio, i), p);
-  return soma / dias;
-}
-
-/** Encargos por contrato no período (motor `encargosDivida`), com saldo médio diário e taxas recalculadas */
+/** Encargos por contrato no período (motor `encargosDivida`, saldo médio diário) */
 function encargosDoPeriodo(contratos: ContratoDivida[], inicio: string, fim: string, p: PremissasMercado): LinhaEncargos[] {
-  const dias = Math.max(1, diffDays(inicio, fim));
   return encargosDivida(contratos, inicio, fim, p)
     .filter((e) => Math.abs(e.total) >= 0.5)
     .map((e) => {
-      const saldoMedio = saldoMedioDiario(e.c, inicio, fim, p);
-      const taxaPeriodo = saldoMedio > 0 ? e.total / saldoMedio : 0;
       return {
         ...e,
         capitalizados: limpar(e.capitalizados),
         despesaFinanceira: limpar(e.despesaFinanceira),
-        saldoMedio,
-        taxaPeriodo,
-        taxaAnualizada: anualizar(taxaPeriodo, dias),
         captadoNoPeriodo: e.c.dataCaptacao > inicio,
         liquidadoNoPeriodo: e.c.vencimento <= fim,
       };

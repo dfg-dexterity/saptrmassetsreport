@@ -83,8 +83,15 @@ function listaPt(itens: string[]): string {
   return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 }
 
+/** Primeira letra minúscula para uso no meio da frase, preservando siglas ("CDCA", "BNDES") */
 function minuscula(s: string): string {
-  return s ? s[0].toLowerCase() + s.slice(1) : s;
+  if (!s || (s.length > 1 && s[1] === s[1].toUpperCase() && s[1] !== s[1].toLowerCase())) return s;
+  return s[0].toLowerCase() + s.slice(1);
+}
+
+/** Encerra a frase com ponto sem duplicar o de "a.a." */
+function frase(s: string): string {
+  return s.endsWith(".") ? s : `${s}.`;
 }
 
 /** "R$ 12.345 mil" (textos da nota) */
@@ -167,6 +174,15 @@ function situacaoCovenant(a: ApuracaoCovenant): { state: ValueState; texto: stri
   if (a.status === "excedido") return a.reclassifica ? { state: "negative", texto: "Descumprido" } : { state: "critical", texto: "Descumprido · waiver" };
   if (a.status === "atencao") return { state: "critical", texto: "Atenção" };
   return { state: "positive", texto: "Cumprido" };
+}
+
+function situacaoPorExtenso(a: ApuracaoCovenant): string {
+  if (a.status === "excedido") {
+    return a.waiver
+      ? `descumprido, com waiver do ${a.waiver.credor} obtido em ${fmtDate(a.waiver.obtidoEm)}${a.waiverVigente ? "" : " (após a data do balanço)"}`
+      : "descumprido, sem waiver";
+  }
+  return a.status === "atencao" ? "cumprido, próximo do limite" : "cumprido";
 }
 
 function proximaApuracao(a: ApuracaoCovenant): string {
@@ -531,20 +547,22 @@ export function C06NotaExplicativa() {
   const reclassAb = [...d.reclA];
   const primeiroMesNC = addDays(d.limite, 1);
   const encargosPeriodo = d.movCons.total.juros + d.movCons.total.atualizacaoMonetaria + d.movCons.total.apropriacaoCustos;
+  const ultimaFaixa = d.vencimentos[d.vencimentos.length - 1];
+  const totalPrincipalNC = soma(d.principalNC, (v) => v);
   const totalCaracteristicas = GRUPOS_CARACTERISTICAS.reduce((s, g) => s + posicoes.filter((x) => grupoDe(x.c) === g).length, 0);
 
   // Notas de rodapé da composição (reclassificação CPC 26)
   const notaReclass = (ids: string[], data: string, naDataBase: boolean) => {
     const a = apuracoes.find((x) => x.cov.contratos.some((c) => ids.includes(c)) && x.status === "excedido");
     const w = a?.waiver;
-    return `Em ${fmtDate(data)}, o saldo de ${listaPt(ids)} está integralmente no circulante: ${a ? `o ${SIGLA[a.cov.id]} (${fmtCov(a, a.valor)}; ${a.cov.tipo === "min" ? "mínimo" : "máximo"} ${fmtLimite(a)}) foi descumprido` : "houve descumprimento de covenant"} sem waiver obtido até a data do balanço (CPC 26, item 74)${w ? `; o waiver do ${w.credor} foi obtido em ${fmtDate(w.obtidoEm)}${naDataBase ? ", como evento subsequente" : ""}` : ""}.`;
+    return `Em ${fmtDate(data)}, o saldo de ${listaPt(ids)} ${naDataBase ? "está" : "estava"} integralmente no circulante: ${a ? `o ${SIGLA[a.cov.id]} (${fmtCov(a, a.valor)}; ${a.cov.tipo === "min" ? "mínimo" : "máximo"} ${fmtLimite(a)}) foi descumprido` : "houve descumprimento de covenant"} sem waiver obtido até a data do balanço (CPC 26, item 74)${w ? `; o waiver do ${w.credor} foi obtido em ${fmtDate(w.obtidoEm)}${naDataBase ? ", como evento subsequente" : ""}` : ""}.`;
   };
 
   // -------------------------------------------------------------------------
   // Texto da nota
   // -------------------------------------------------------------------------
 
-  const blocos = useMemo<Bloco[]>(() => {
+  const blocos: Bloco[] = (() => {
     const b: Bloco[] = [];
     const push = (t: Bloco["t"], texto: string) => b.push({ t, texto });
     const tm = d.movCons.total;
@@ -567,14 +585,14 @@ export function C06NotaExplicativa() {
       `Em ${fmtDate(db)}, o saldo consolidado de empréstimos, financiamentos e debêntures era de ${rsMil(d.total)} (${rsMil(d.totalA)} em ${fmtDate(ab)}), dos quais ${rsMil(d.circ)} no passivo circulante e ${rsMil(d.nc)} no não circulante; na Controladora, o saldo era de ${rsMil(d.movCtrl.total.saldoFinal)}. O custo médio ponderado da dívida – juros e atualização monetária – era de ${fmtPct(d.custoMedio)} a.a., com prazo médio remanescente do principal de ${fmtDec(d.prazoMedio, 1)} anos.`,
     );
     for (const l of d.composicao.filter((x) => x.total > 0)) {
-      push("li", `${NOME_GRUPO[l.grupo]}: ${rsMil(l.total)} (${fmtPct(d.total > 0 ? l.total / d.total : 0, 1)} do total) – ${l.encargos}.`);
+      push("li", frase(`${NOME_GRUPO[l.grupo]}: ${rsMil(l.total)} (${fmtPct(d.total > 0 ? l.total / d.total : 0, 1)} do total) – ${l.encargos}`));
     }
     if (reclassDb.length) push("p", notaReclass(reclassDb, db, true));
     if (reclassAb.length) push("p", `Informação comparativa: ${minuscula(notaReclass(reclassAb, ab, false))}`);
 
     push("secao", "c) Movimentação");
     const captTxt = d.novas.length
-      ? `a Companhia captou ${rsMil(tm.captacoes)} – ${listaPt(d.novas.map((l) => `${minuscula(l.c.instrumento)} (${l.c.id})`))} –, com custos de transação de ${rsMil(-tm.custosTransacao)}`
+      ? `a Companhia captou ${rsMil(tm.captacoes)} (${listaPt(d.novas.map((l) => `${minuscula(l.c.instrumento)}, ${l.c.id}`))}), com custos de transação de ${rsMil(-tm.custosTransacao)}`
       : "não houve novas captações";
     const capTxt = tm.capitalizados >= 500 ? `, dos quais ${rsMil(tm.capitalizados)} capitalizados no imobilizado em andamento (CPC 20)` : "";
     push(
@@ -583,7 +601,6 @@ export function C06NotaExplicativa() {
     );
 
     push("secao", "d) Cronograma de vencimentos do não circulante");
-    const totalPrincipalNC = soma(d.principalNC, (v) => v);
     const totalCustosNC = soma(d.custosNCGrupo, (v) => v);
     push(
       "p",
@@ -599,7 +616,10 @@ export function C06NotaExplicativa() {
     push("p", "As principais características das captações em aberto na data-base estão resumidas a seguir:");
     for (const x of posicoes) {
       const c = x.c;
-      const forma = c.formaBNDES ? `, na forma ${c.formaBNDES.toLowerCase()}${c.agente ? ` (${c.agente.replace(" (agente financeiro)", "")})` : ""}` : "";
+      const forma =
+        c.formaBNDES && !c.instrumento.toLowerCase().includes(c.formaBNDES.toLowerCase())
+          ? `, na forma ${c.formaBNDES === "Direto" ? "direta" : "indireta"}${c.agente ? ` (${c.agente.replace(" (agente financeiro)", "")})` : ""}`
+          : "";
       push(
         "li",
         `${c.instrumento} (${c.id})${forma}: captação de ${rsMil(c.valorCaptado)} em ${fmtDate(c.dataCaptacao)}, vencimento em ${fmtDate(c.vencimento)}, remuneração de ${taxaContratadaDivida(c)}; garantias: ${minuscula(c.garantias)}${c.lastro ? `; lastro: ${minuscula(c.lastro)}` : ""}; finalidade: ${minuscula(c.finalidade)}.`,
@@ -615,13 +635,13 @@ export function C06NotaExplicativa() {
       if (!a.dataApuracao) continue;
       push(
         "li",
-        `${a.cov.indicador} (${a.cov.tipo === "max" ? "máximo" : "mínimo"} ${fmtLimite(a)} – ${listaPt(a.cov.contratos)}): ${fmtCov(a, a.valor)} em ${fmtDate(a.dataApuracao)} – ${situacaoCovenant(a).texto.toLowerCase()}.`,
+        `${a.cov.indicador} (${a.cov.tipo === "max" ? "máximo" : "mínimo"} ${fmtLimite(a)} – ${listaPt(a.cov.contratos)}): ${fmtCov(a, a.valor)} em ${fmtDate(a.dataApuracao)} – ${situacaoPorExtenso(a)}.`,
       );
     }
     for (const par of d.narrativa.paragrafos) push("p", par);
     push("p", d.narrativa.conclusao);
     return b;
-  }, [d, db, ab, p, posicoes, apuracoes, reclassDb, reclassAb, encargosPeriodo, ultimoDado]); // eslint-disable-line react-hooks/exhaustive-deps
+  })();
 
   const textoNota = textoParaCopiar(blocos);
 
@@ -874,7 +894,7 @@ export function C06NotaExplicativa() {
   const colCaracteristicas = (bndes: boolean): Column<PosicaoDivida>[] => [
     {
       key: "inst",
-      header: "Emissão / contrato",
+      header: bndes ? "Contrato / forma" : "Emissão / contrato",
       minWidth: 250,
       value: (x) => x.c.id,
       render: (x) => (
@@ -882,32 +902,21 @@ export function C06NotaExplicativa() {
           <div className="font-semibold text-text leading-snug">{x.c.instrumento}</div>
           <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-label">
             <Tag>{x.c.id}</Tag>
+            {x.c.formaBNDES && <Tag color={x.c.formaBNDES === "Direto" ? "#0070f2" : "#8b47d7"}>{x.c.formaBNDES}</Tag>}
             <span>{EMPRESAS[x.c.empresa]?.nome ?? x.c.empresa}</span>
           </div>
-          {!bndes && x.c.agente && <div className="text-xs text-label mt-0.5">{x.c.agente}</div>}
+          {bndes ? (
+            <div className="text-xs text-label mt-0.5">
+              {x.c.agente ? `Agente financeiro: ${x.c.agente.replace(" (agente financeiro)", "")}` : "Contratação direta com o BNDES"}
+              {x.c.linhaCredito && ` · linha ${x.c.linhaCredito}`}
+            </div>
+          ) : (
+            x.c.agente && <div className="text-xs text-label mt-0.5">{x.c.agente}</div>
+          )}
         </div>
       ),
       total: () => "Total",
     },
-    ...(bndes
-      ? [
-          {
-            key: "forma",
-            header: "Forma",
-            minWidth: 170,
-            value: (x: PosicaoDivida) => x.c.formaBNDES ?? "",
-            render: (x: PosicaoDivida) => (
-              <div className="max-w-[220px]">
-                <div className="font-semibold text-text">{x.c.formaBNDES}</div>
-                <div className="text-xs text-label leading-snug mt-0.5">
-                  {x.c.agente ? `Agente: ${x.c.agente.replace(" (agente financeiro)", "")}` : "Contratação direta com o BNDES"}
-                </div>
-                {x.c.linhaCredito && <div className="text-xs text-label">Linha {x.c.linhaCredito}</div>}
-              </div>
-            ),
-          } satisfies Column<PosicaoDivida>,
-        ]
-      : []),
     {
       key: "prazo",
       header: "Captação → vencimento",
@@ -977,29 +986,20 @@ export function C06NotaExplicativa() {
     {
       key: "contrato",
       header: "Contrato",
-      minWidth: 230,
+      minWidth: 210,
       value: (l) => l.x.c.id,
       render: (l) => (
-        <div className="py-0.5 max-w-[300px]">
+        <div className="py-0.5">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-text">{l.x.c.id}</span>
             <span className="text-xs text-label">· {grupoDe(l.x.c)}</span>
           </div>
-          <div className="text-xs text-label leading-snug mt-0.5">{l.x.c.instrumento}</div>
+          <div className="text-xs text-label tabular whitespace-nowrap mt-0.5">
+            {fmtDate(l.x.c.dataCaptacao)} → {fmtDate(l.x.c.vencimento)}
+          </div>
         </div>
       ),
       total: () => "Total",
-    },
-    {
-      key: "prazo",
-      header: "Captação → vencimento",
-      minWidth: 170,
-      value: (l) => l.x.c.vencimento,
-      render: (l) => (
-        <span className="tabular whitespace-nowrap text-label">
-          {fmtDate(l.x.c.dataCaptacao)} → {fmtDate(l.x.c.vencimento)}
-        </span>
-      ),
     },
     {
       key: "original",
@@ -1014,25 +1014,27 @@ export function C06NotaExplicativa() {
       key: "apropriado",
       header: "Apropriado acumulado",
       align: "right",
-      minWidth: 150,
+      minWidth: 140,
       value: (l) => l.apropriado,
       render: (l) => fmtMil(l.apropriado),
       total: (rows) => fmtMil(soma(rows, (l) => l.apropriado)),
     },
     {
       key: "circ",
-      header: "A apropriar – circulante",
+      header: "Circulante",
+      headerTitle: "Custos a apropriar nos próximos 12 meses (redutora do passivo circulante)",
       align: "right",
-      minWidth: 160,
+      minWidth: 100,
       value: (l) => l.circ,
       render: (l) => fmtMil(l.circ),
       total: (rows) => fmtMil(soma(rows, (l) => l.circ)),
     },
     {
       key: "nc",
-      header: "A apropriar – não circulante",
+      header: "Não circulante",
+      headerTitle: "Custos a apropriar após 12 meses (redutora do passivo não circulante)",
       align: "right",
-      minWidth: 180,
+      minWidth: 120,
       value: (l) => l.nc,
       render: (l) => fmtMil(l.nc),
       total: (rows) => fmtMil(soma(rows, (l) => l.nc)),
@@ -1041,7 +1043,7 @@ export function C06NotaExplicativa() {
       key: "total",
       header: "Total a apropriar",
       align: "right",
-      minWidth: 130,
+      minWidth: 120,
       value: (l) => l.aApropriar,
       render: (l) => <span className="font-semibold">{fmtMil(l.aApropriar)}</span>,
       total: (rows) => fmtMil(soma(rows, (l) => l.aApropriar)),
@@ -1210,7 +1212,7 @@ export function C06NotaExplicativa() {
             subtitle={`Consolidado · R$ mil · ${fmtDate(db)} comparado a ${fmtDate(ab)} · clique na modalidade para ver os contratos`}
           >
             <div className="overflow-x-auto fiori-scroll -mx-4 px-4">
-              <table className="w-full text-sm border-separate border-spacing-0 min-w-[1080px]">
+              <table className="w-full text-sm border-separate border-spacing-0 min-w-[1000px] sm:min-w-[1080px]">
                 <thead>
                   <tr className="text-[13px]">
                     <th className="sticky left-0 z-[2] bg-white" />
@@ -1223,7 +1225,7 @@ export function C06NotaExplicativa() {
                     </th>
                   </tr>
                   <tr className="text-[13px]">
-                    <th className="sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[250px]">Modalidade</th>
+                    <th className="sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[170px] sm:min-w-[250px]">Modalidade</th>
                     <th className="text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd] min-w-[210px]">Encargos contratuais (média ponderada)</th>
                     <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">Taxa efetiva a.a.</th>
                     <th className="text-right font-semibold py-2 pl-4 border-b border-[#a8b2bd] whitespace-nowrap">Circulante</th>
@@ -1281,7 +1283,7 @@ export function C06NotaExplicativa() {
                                     {x?.reclassificado && <span className="ml-1.5 text-negative font-normal">(reclassificado)</span>}
                                     {!x?.reclassificado && xa?.reclassificado && <span className="ml-1.5 text-label font-normal">(reclassificado em {fmtDate(ab)})</span>}
                                   </div>
-                                  <div className="text-xs text-label leading-snug max-w-[280px]">{c.instrumento}</div>
+                                  <div className="text-xs text-label leading-snug max-w-[160px] sm:max-w-[280px]">{c.instrumento}</div>
                                 </td>
                                 <td className="py-2 pr-3 border-b border-line-soft text-label">
                                   {taxaContratadaDivida(c)}
@@ -1333,7 +1335,7 @@ export function C06NotaExplicativa() {
             <Card className="xl:col-span-2" title="Composição do saldo contábil" subtitle="Consolidado · R$ mil · custo amortizado">
               <NotaTabela
                 cabecalho={[fmtDate(db), fmtDate(ab)]}
-                minWidth={380}
+                minWidth={320}
                 linhas={[
                   { rotulo: "Principal (valor nominal)", valores: [d.saldoDb.principal, d.saldoAb.principal] },
                   { rotulo: "Atualização monetária do principal", valores: [d.saldoDb.am, d.saldoAb.am] },
@@ -1345,8 +1347,13 @@ export function C06NotaExplicativa() {
                 ]}
               />
             </Card>
-            <Card className="xl:col-span-3" title="Saldo por modalidade" subtitle={`R$ milhões · ${fmtDate(ab)} × ${fmtDate(db)}`}>
-              <div className="h-64 -ml-2">
+            <Card
+              className="xl:col-span-3 flex flex-col"
+              bodyClassName="flex-1 flex flex-col"
+              title="Saldo por modalidade"
+              subtitle={`R$ milhões · ${fmtDate(ab)} × ${fmtDate(db)}`}
+            >
+              <div className="h-64 xl:h-auto xl:flex-1 xl:min-h-[256px] -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={graficoComp} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
                     <CartesianGrid vertical={false} stroke="#e5e5e5" />
@@ -1354,7 +1361,7 @@ export function C06NotaExplicativa() {
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 1)} mi`, n]} cursor={{ fill: "#f2f4f6" }} />
                     <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                    <Bar dataKey="abertura" name={fmtDate(ab)} fill="#a8b2bd" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+                    <Bar dataKey="abertura" name={fmtDate(ab)} fill={CHART_SEMANTIC.neutral} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
                     <Bar dataKey="dataBase" name={fmtDate(db)} fill={CHART_COLORS[6]} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -1435,8 +1442,22 @@ export function C06NotaExplicativa() {
                   valor: l.capitalizados,
                 }))}
               />
-              <p className="text-xs text-label mt-4 leading-relaxed">
-                Liquidações: principal + juros pagos no período. Valores em R$ com base nos fluxos do SAP TRM até a data-base.
+              <div className="mt-5 pt-4 border-t border-line-soft">
+                <div className="text-[13px] font-bold text-text mb-1.5">Efeito no caixa do período (DFC)</div>
+                <dl className="text-[13px] divide-y divide-line-soft">
+                  <LinhaCaixa rotulo="Captações líquidas dos custos de transação" v={d.movCons.total.captacoes + d.movCons.total.custosTransacao} />
+                  <LinhaCaixa rotulo="Amortização de principal" v={d.movCons.total.pagamentoPrincipal} />
+                  <LinhaCaixa rotulo="Pagamento de juros" v={d.movCons.total.pagamentoJuros} />
+                  <LinhaCaixa
+                    rotulo="Efeito líquido"
+                    v={d.movCons.total.captacoes + d.movCons.total.custosTransacao + d.movCons.total.pagamentoPrincipal + d.movCons.total.pagamentoJuros}
+                    forte
+                  />
+                </dl>
+              </div>
+              <p className="text-xs text-label mt-3 leading-relaxed">
+                Liquidações: principal + juros pagos no período. Juros pagos apresentados conforme a política de classificação da DFC (CPC
+                03, item 44A); R$ mil.
               </p>
             </Card>
           </div>
@@ -1511,26 +1532,26 @@ export function C06NotaExplicativa() {
                       cursor={{ fill: "#f2f4f6" }}
                     />
                     <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                    {d.gruposVenc.map((g, i) => (
-                      <Bar
-                        key={g}
-                        dataKey={g}
-                        stackId="nc"
-                        name={g}
-                        fill={COR_GRUPO[g]}
-                        radius={i === d.gruposVenc.length - 1 ? [4, 4, 0, 0] : undefined}
-                        maxBarSize={40}
-                        isAnimationActive={false}
-                      />
+                    {d.gruposVenc.map((g) => (
+                      <Bar key={g} dataKey={g} stackId="nc" name={g} fill={COR_GRUPO[g]} maxBarSize={40} isAnimationActive={false} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="text-xs text-label mt-3 leading-relaxed">
-                {d.anoCorte} em diante: R$ {fmtMil(d.vencimentos[d.vencimentos.length - 1].total)} mil (
-                {fmtPct(soma(d.principalNC, (v) => v) > 0 ? d.vencimentos[d.vencimentos.length - 1].total / soma(d.principalNC, (v) => v) : 0, 1)}{" "}
-                do principal não circulante), concentrados na debênture incentivada, no CRI e nos financiamentos BNDES.
-              </p>
+              {ultimaFaixa.total > 0 && (
+                <p className="text-xs text-label mt-3 leading-relaxed">
+                  {d.anoCorte} em diante: R$ {fmtMil(ultimaFaixa.total)} mil ({fmtPct(totalPrincipalNC > 0 ? ultimaFaixa.total / totalPrincipalNC : 0, 1)} do
+                  principal não circulante):{" "}
+                  {listaPt(
+                    d.gruposVenc
+                      .map((g, i) => ({ g, v: ultimaFaixa.valores[i] }))
+                      .filter((x) => x.v >= 500)
+                      .sort((a, b) => b.v - a.v)
+                      .map((x) => `${x.g} R$ ${fmtMil(x.v)} mil`),
+                  )}
+                  .
+                </p>
+              )}
             </Card>
           </div>
         </>
@@ -1597,7 +1618,7 @@ export function C06NotaExplicativa() {
 
           <Card
             title="Custos de transação por contrato"
-            subtitle={`Custo amortizado (CPC 48) · R$ mil · posição em ${fmtDate(db)}`}
+            subtitle={`Custo amortizado (CPC 48) · R$ mil · posição em ${fmtDate(db)} · circulante e não circulante: saldo a apropriar`}
             bodyClassName="px-0 pb-0"
           >
             <DataTable columns={colCustos} rows={d.custos} rowKey={(l) => l.x.c.id} showTotals />
@@ -1631,11 +1652,13 @@ export function C06NotaExplicativa() {
                   </li>
                 ))}
               </ol>
-              <div className="mt-5 pt-4 border-t border-line-soft space-y-2.5 text-[13px] text-text leading-relaxed max-w-4xl">
-                {d.narrativa.paragrafos.slice(1).map((par, i) => (
-                  <p key={i}>{par}</p>
-                ))}
-                <p>{d.narrativa.conclusao}</p>
+              <div className="mt-5 pt-4 border-t border-line-soft">
+                <div className="space-y-2.5 text-[13px] text-text leading-relaxed max-w-4xl">
+                  {d.narrativa.paragrafos.slice(1).map((par, i) => (
+                    <p key={i}>{par}</p>
+                  ))}
+                  <p>{d.narrativa.conclusao}</p>
+                </div>
               </div>
             </Card>
           )}
@@ -1753,6 +1776,15 @@ function NotaTabela({ cabecalho, linhas, minWidth = 520, primeira = "R$ mil" }: 
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function LinhaCaixa({ rotulo, v, forte }: { rotulo: string; v: number; forte?: boolean }) {
+  return (
+    <div className={clsx("flex items-baseline justify-between gap-3 py-1.5", forte && "font-bold")}>
+      <dt className={forte ? "text-text" : "text-label"}>{rotulo}</dt>
+      <dd className="tabular text-text whitespace-nowrap">{fmtMil(v)}</dd>
     </div>
   );
 }

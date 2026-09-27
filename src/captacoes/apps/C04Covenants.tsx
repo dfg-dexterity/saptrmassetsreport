@@ -70,6 +70,11 @@ const SIGLA: Record<CovenantId, string> = {
   dlImoveisPl: "(DL + imóveis)/PL",
 };
 
+/** Nome usado em frases (o ICSD já é a sigla consagrada) */
+function nomeTexto(cov: CovenantDivida): string {
+  return cov.id === "icsd" ? "ICSD" : cov.indicador;
+}
+
 /** Valor apurado: índice de capitalização em %, demais em múltiplos */
 function fmtValor(cov: CovenantDivida, v: number): string {
   return cov.formato === "pct" ? fmtPct(v, 1) : fmtX(v);
@@ -427,7 +432,7 @@ export function C04Covenants() {
     if (c.reclassifica) {
       return (
         <MessageStrip design="negative">
-          <strong>{c.cov.indicador}</strong> {c.cov.periodicidade === "Anual" ? `de ${ano}` : `de ${fmtQuarter(c.dataApuracao)}`} apurado em{" "}
+          <strong>{nomeTexto(c.cov)}</strong> {c.cov.periodicidade === "Anual" ? `de ${ano}` : `de ${fmtQuarter(c.dataApuracao)}`} apurado em{" "}
           <strong>{fmtValor(c.cov, c.valor)}</strong> ({c.cov.tipo === "max" ? "máximo" : "mínimo"} {fmtRef(c.cov, c.cov.limite)}) sem waiver até a data
           do balanço: o não circulante de {listar(d.idsReclassificados)} (<strong>{fmtCompact(d.totalReclassificado)}</strong>) foi reclassificado para o
           circulante (CPC 26, item 74).
@@ -438,7 +443,7 @@ export function C04Covenants() {
     if (c.status === "excedido" && c.waiverVigente && c.waiver) {
       return (
         <MessageStrip design="information">
-          {c.cov.indicador} de {ano} ({fmtValor(c.cov, c.valor)}) abaixo do {c.cov.tipo === "max" ? "máximo" : "mínimo"} de {fmtRef(c.cov, c.cov.limite)}, com{" "}
+          {nomeTexto(c.cov)} de {ano} ({fmtValor(c.cov, c.valor)}) {c.cov.tipo === "max" ? "acima" : "abaixo"} do {c.cov.tipo === "max" ? "máximo" : "mínimo"} de {fmtRef(c.cov, c.cov.limite)}, com{" "}
           <strong>
             waiver do {c.waiver.credor} obtido em {fmtDate(c.waiver.obtidoEm)}
           </strong>
@@ -926,18 +931,18 @@ function textoCaso(
   const w = caso.waiver;
   if (caso.reclassifica) {
     return [
-      `Na data-base de ${fmtDate(dataBase)}, o ${cov.indicador} ${periodo} foi apurado em ${fmtValor(cov, caso.valor)}, ${cov.tipo === "max" ? "acima" : "abaixo"} do ${limite}. Como o waiver não havia sido obtido até a data do balanço, o credor tinha o direito de exigir o vencimento antecipado: o não circulante de ${listar(idsReclassificados)} (${fmtBRL(totalReclassificado)}) foi reclassificado para o circulante (CPC 26, item 74).`,
+      `Na data-base de ${fmtDate(dataBase)}, o ${nomeTexto(cov)} ${periodo} foi apurado em ${fmtValor(cov, caso.valor)}, ${cov.tipo === "max" ? "acima" : "abaixo"} do ${limite}. Como o waiver não havia sido obtido até a data do balanço, o credor tinha o direito de exigir o vencimento antecipado: o não circulante de ${listar(idsReclassificados)} (${fmtBRL(totalReclassificado)}) foi reclassificado para o circulante (CPC 26, item 74).`,
       w
         ? `O waiver do ${w.credor} foi obtido em ${fmtDate(w.obtidoEm)}, após a data do balanço. É evento subsequente que não origina ajuste (CPC 24): a reclassificação é mantida e o waiver é apenas divulgado em nota explicativa (CPC 26, item 76).`
         : "Até a data-base não houve anuência do credor. Se o waiver for obtido após a data do balanço, será evento subsequente sem ajuste (CPC 24), apenas divulgado.",
     ];
   }
   const out = [
-    `O ${cov.indicador} ${periodo} (${fmtValor(cov, caso.valor)}) ficou ${cov.tipo === "max" ? "acima" : "abaixo"} do ${limite}${w ? `, mas o waiver do ${w.credor} foi obtido em ${fmtDate(w.obtidoEm)} e está vigente na data-base de ${fmtDate(dataBase)}` : ""}. Sem direito de vencimento antecipado, a classificação de ${listar(cov.contratos)} volta ao cronograma contratual (circulante = parcelas dos próximos 12 meses).`,
+    `O ${nomeTexto(cov)} ${periodo} (${fmtValor(cov, caso.valor)}) ficou ${cov.tipo === "max" ? "acima" : "abaixo"} do ${limite}${w ? `, mas o waiver do ${w.credor} foi obtido em ${fmtDate(w.obtidoEm)} e está vigente na data-base de ${fmtDate(dataBase)}` : ""}. Sem direito de vencimento antecipado, a classificação de ${listar(cov.contratos)} volta ao cronograma contratual (circulante = parcelas dos próximos 12 meses).`,
   ];
   if (comparativo) {
     out.push(
-      `No balanço de ${fmtDate(comparativo.data)}, apresentado como comparativo, a reclassificação de ${fmtBRL(comparativo.total)} para o circulante é mantida: o waiver obtido após aquela data do balanço não o reapresenta (CPC 24) e foi divulgado em nota (CPC 26, item 76).`,
+      `No balanço de ${fmtDate(comparativo.data)}, apresentado como comparativo, permanece a reclassificação de ${fmtBRL(comparativo.total)} para o circulante: o waiver obtido depois daquela data não altera o balanço já encerrado (evento subsequente sem ajuste – CPC 24) e foi divulgado em nota (CPC 26, item 76).`,
     );
   }
   return out;
@@ -994,8 +999,8 @@ function CardWaiver({
     const ids = caso.reclassifica ? idsReclassificados : (comparativo?.porContrato.map((x) => x.id) ?? cov.contratos);
     eventos.push({
       data: ap,
-      titulo: `Data do balanço – ${cov.indicador.split(" – ")[0]} ${cov.periodicidade === "Anual" ? ap.slice(0, 4) : fmtQuarter(ap)}`,
-      texto: `Apurado em ${fmtValor(cov, caso.valor)} (${fmtLimite(cov)}): descumprido. Sem waiver até essa data → não circulante de ${listar(ids)}${valorBalanco > 0 ? ` (${fmtCompact(valorBalanco)})` : ""} reclassificado para o circulante (CPC 26, item 74).`,
+      titulo: `Data do balanço – ${nomeTexto(cov)} ${cov.periodicidade === "Anual" ? ap.slice(0, 4) : fmtQuarter(ap)}`,
+      texto: `Apurado em ${fmtValor(cov, caso.valor)} (limite ${fmtLimite(cov)}): descumprido. Sem waiver até essa data → não circulante de ${listar(ids)}${valorBalanco > 0 ? ` (${fmtCompact(valorBalanco)})` : ""} reclassificado para o circulante (CPC 26, item 74).`,
       estado: "negative",
       tag: ap === dataBase ? "Data-base" : "Comparativo",
     });
@@ -1035,10 +1040,14 @@ function CardWaiver({
           sub: caso!.waiver ? (caso!.waiverVigente ? "antes da data-base" : "após a data do balanço") : undefined,
         },
         {
-          rotulo: "Reclassificado p/ circulante",
+          rotulo: "Reclassificado",
           valor: fmtCompact(totalReclassificado),
           cor: totalReclassificado > 0 ? COR_ESTADO.negative : undefined,
-          sub: comparativo ? `${fmtDate(comparativo.data)}: ${fmtCompact(comparativo.total)}` : totalReclassificado > 0 ? "na data-base" : undefined,
+          sub: comparativo
+            ? `em ${fmtDate(comparativo.data)}: ${fmtCompact(comparativo.total)}`
+            : totalReclassificado > 0
+              ? "para o circulante"
+              : "classificação contratual",
         },
       ]
     : (() => {
@@ -1047,7 +1056,7 @@ function CardWaiver({
           { rotulo: "Covenants cumpridos", valor: `${apuracoes.filter((a) => a.status !== "excedido").length}/${apuracoes.length}`, cor: COR_ESTADO.positive },
           { rotulo: "Menor folga relativa", valor: menor ? fmtPct(menor.folga / menor.cov.limite, 1) : "—", sub: menor ? SIGLA[menor.cov.id] : undefined },
           { rotulo: "Waivers necessários", valor: "Nenhum" },
-          { rotulo: "Reclassificado p/ circulante", valor: fmtCompact(0) },
+          { rotulo: "Reclassificado", valor: fmtCompact(0), sub: "classificação contratual" },
         ];
       })();
 
@@ -1055,7 +1064,7 @@ function CardWaiver({
     {
       key: "contrato",
       header: "Contrato",
-      minWidth: 250,
+      minWidth: 210,
       value: (x) => x.pos.c.id,
       render: (x) => (
         <div className="py-0.5">
@@ -1141,9 +1150,8 @@ function CardWaiver({
       title="Waiver e classificação (CPC 26, itens 74–76)"
       subtitle={`Efeito dos covenants na classificação circulante × não circulante em ${fmtDate(dataBase)}`}
       status={statusCard}
-      bodyClassName="px-0 pb-0"
     >
-      <div className="px-4 pb-4 grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-8">
         <div className="lg:col-span-3 min-w-0">
           <div className="space-y-2.5 text-sm text-text leading-relaxed">
             {paragrafos.map((t) => (
@@ -1201,7 +1209,7 @@ function CardWaiver({
         </div>
       </div>
 
-      <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
         <Regra item="Item 74" titulo="Descumprimento sem waiver até a data do balanço">
           Todo o passivo do contrato vai para o circulante, ainda que o credor concorde, depois dessa data, em não exigir o pagamento.
         </Regra>
@@ -1213,8 +1221,8 @@ function CardWaiver({
         </Regra>
       </div>
 
-      <div className="border-t border-line-soft">
-        <div className="px-4 pt-3 pb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <div className="mt-5 border-t border-line-soft">
+        <div className="pt-3 pb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h4 className="text-sm font-bold text-text">Contratos sujeitos a covenants</h4>
           <span className="text-xs text-label">Custo amortizado em {fmtDate(dataBase)} · R$</span>
         </div>
@@ -1292,7 +1300,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
         <table className="w-full text-sm border-separate border-spacing-0">
           <thead>
             <tr>
-              <th className="sticky left-0 z-[2] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[250px]">
+              <th className="sticky left-0 z-[2] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[168px] sm:min-w-[250px]">
                 Item
               </th>
               {serie.map((i) => (
@@ -1307,8 +1315,8 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
             {LINHAS_BASE.map((l) => (
               <tr key={l.rotulo} className={l.destaque ? "font-semibold" : undefined}>
                 <td className={tdRot}>
-                  <div className="whitespace-nowrap">{l.rotulo}</div>
-                  {l.sub && <div className="text-xs text-label font-normal whitespace-nowrap">{l.sub}</div>}
+                  <div className="sm:whitespace-nowrap leading-snug">{l.rotulo}</div>
+                  {l.sub && <div className="text-xs text-label font-normal sm:whitespace-nowrap leading-snug">{l.sub}</div>}
                 </td>
                 {serie.map((i) => (
                   <td key={i.data} className={tdNum}>
@@ -1325,8 +1333,8 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
             {COVENANTS_TRIMESTRE.map((c) => (
               <tr key={c.id} className="font-semibold">
                 <td className={tdRot}>
-                  <div className="whitespace-nowrap">{c.indicador}</div>
-                  <div className="text-xs text-label font-normal whitespace-nowrap">
+                  <div className="sm:whitespace-nowrap leading-snug">{c.indicador}</div>
+                  <div className="text-xs text-label font-normal sm:whitespace-nowrap leading-snug">
                     {fmtLimite(c)} · apuração {c.periodicidade.toLowerCase()}
                   </div>
                 </td>
@@ -1352,7 +1360,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
       </div>
 
       <div className="border-t border-line-soft mt-4">
-        <div className="px-4 pt-3 pb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="pt-3 pb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h4 className="text-sm font-bold text-text">ICSD – apuração anual (BNDES)</h4>
           <span className="text-xs text-label">{covIcsd.formula}</span>
         </div>
@@ -1360,7 +1368,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
           <div className="lg:col-span-3 min-w-0">
             <DataTable columns={colIcsd} rows={icsd} rowKey={(x) => String(x.ano)} emptyText="Nenhum exercício encerrado até a data-base" />
           </div>
-          <div className="lg:col-span-2 px-4 py-3 lg:border-l border-line-soft text-xs text-label leading-relaxed space-y-2">
+          <div className="lg:col-span-2 py-3 lg:pl-5 lg:ml-4 lg:border-l border-line-soft text-xs text-label leading-relaxed space-y-2">
             <p>
               Serviço da dívida = principal + juros pagos no exercício por todos os contratos, conforme a movimentação (
               <Link to="/c01-movimentacao" className="text-link hover:underline">
@@ -1397,9 +1405,11 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
 
 function Mini({ rotulo, valor, cor, sub }: { rotulo: string; valor: ReactNode; cor?: string; sub?: string }) {
   return (
-    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0 flex flex-col justify-between">
-      <div className="text-xs text-label leading-tight">{rotulo}</div>
-      <div className="text-base sm:text-lg font-bold tabular text-text whitespace-nowrap mt-0.5" style={cor ? { color: cor } : undefined}>
+    <div className="rounded-lg bg-[#f5f6f7] px-3 py-2 min-w-0">
+      <div className="text-xs text-label leading-tight truncate" title={rotulo}>
+        {rotulo}
+      </div>
+      <div className="text-base sm:text-lg font-bold tabular text-text whitespace-nowrap mt-1" style={cor ? { color: cor } : undefined}>
         {valor}
       </div>
       {sub && <div className="text-[11px] text-label leading-tight mt-0.5">{sub}</div>}

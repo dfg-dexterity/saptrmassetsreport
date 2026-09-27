@@ -218,6 +218,24 @@ export function saldoContabil(c: ContratoDivida, data: string, p: PremissasMerca
   return sim.pa[i] + sim.jap[i] - sim.ca[i];
 }
 
+/**
+ * Saldo médio diário pelo custo amortizado no período: média dos saldos no início de cada dia (dias antes da captação
+ * ou após a liquidação contam como zero). Mantém a taxa do período coerente para contratos captados ou liquidados nele.
+ */
+export function saldoMedioDiario(c: ContratoDivida, inicio: string, fim: string, p: PremissasMercado): number {
+  const dias = Math.max(1, diffDays(inicio, fim));
+  const sim = simular(c, p);
+  const base = toDay(inicio) - sim.d0;
+  let soma = 0;
+  for (let k = 0; k < dias; k++) {
+    const i = base + k;
+    if (i < 0) continue;
+    const j = Math.min(i, sim.n);
+    soma += sim.pa[j] + sim.jap[j] - sim.ca[j];
+  }
+  return soma / dias;
+}
+
 export function eventosFuturos(c: ContratoDivida, data: string, p: PremissasMercado): EventoPagamento[] {
   return simular(c, p).eventos.filter((e) => e.data > data);
 }
@@ -412,7 +430,7 @@ export function encargosDivida(contratos: ContratoDivida[], inicio: string, fim:
   const dias = Math.max(1, diffDays(inicio, fim));
   return movimentacaoDivida(contratos, inicio, fim, p).linhas.map((m) => {
     const total = m.juros + m.atualizacaoMonetaria + m.apropriacaoCustos;
-    const saldoMedio = (m.saldoInicial + m.saldoFinal + (m.captacoes ? m.captacoes + m.custosTransacao : 0)) / 2;
+    const saldoMedio = saldoMedioDiario(m.c, inicio, fim, p);
     const taxaPeriodo = saldoMedio > 0 ? total / saldoMedio : 0;
     return {
       c: m.c,

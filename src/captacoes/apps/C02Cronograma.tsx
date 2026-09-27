@@ -546,7 +546,7 @@ export function C02Cronograma() {
       <div className="min-w-0 py-0.5">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: corDe(x.pos.c) }} />
-          <span className="font-semibold text-text">{x.pos.c.id}</span>
+          <span className="font-semibold text-text whitespace-nowrap">{x.pos.c.id}</span>
           {x.pos.reclassificado && (
             <ObjectStatus state="negative" inverted icon={false}>
               CPC 26.74
