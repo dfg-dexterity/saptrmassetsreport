@@ -58,7 +58,7 @@ export const RELATORIOS: Relatorio[] = [
     titulo: "Premissas – Parâmetros gerais",
     tituloCurto: "Premissas",
     descricao:
-      "Premissas gerais importadas do SAP (CDI, Selic, IPCA e PTAX USD/EUR), data-base escolhida pelo usuário, custo médio da dívida (calculado da carteira de captações), tabelas regressivas de IRRF e IOF, custódia B3, VNA, come-cotas e parâmetros de time deposit. Alimentam todos os relatórios.",
+      "Premissas gerais importadas do SAP (CDI, Selic, IPCA e PTAX USD/EUR), data-base escolhida pelo usuário, custo médio da dívida (calculado da carteira de captações), tabelas regressivas de IRRF e IOF, custódia de títulos, VNA, come-cotas e parâmetros de time deposit. Alimentam todos os relatórios.",
     publico: "Tesouraria / Controladoria",
     periodicidade: "Mensal",
     norma: "Lei 11.033/2004 · Decreto 6.306/2007",

@@ -247,7 +247,7 @@ export interface PosicaoTitulo {
   iof: number;
   /** IR total devido sobre o rendimento (retido nos cupons + provisão sobre o saldo) */
   ir: number;
-  /** custódia B3 + taxa do agente acumuladas desde a compra */
+  /** custódia + taxa do agente acumuladas desde a compra */
   taxas: number;
   rendimentoLiquido: number;
   valorContabil: number;
