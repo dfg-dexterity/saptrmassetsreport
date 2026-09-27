@@ -266,7 +266,7 @@ export const RELATORIOS: Relatorio[] = [
     titulo: "R06 – Endividamento × Aplicações",
     tituloCurto: "Endividamento × Aplicações",
     descricao:
-      "Dívida bruta e líquida na data-base, covenants contratuais da dívida (com efeito CPC 26), limites da política financeira (liquidez CP, DL/PL), série trimestral e carry (rentabilidade das aplicações − custo da dívida).",
+      "Dívida bruta e líquida na data-base, covenants contratuais da dívida (com efeito CPC 26), limites da política financeira (cobertura de curto prazo, DL/PL), série trimestral e carry (rentabilidade das aplicações − custo da dívida).",
     publico: "Diretoria Financeira / Conselho / RI",
     periodicidade: "Mensal / Trimestral",
     norma: "Covenants",

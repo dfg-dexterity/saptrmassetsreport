@@ -231,7 +231,7 @@ export interface LimitePolitica {
 export const LIMITES_POLITICA: LimitePolitica[] = [
   {
     id: "liquidez",
-    indicador: "Liquidez de curto prazo",
+    indicador: "Cobertura de curto prazo",
     formula: "(Caixa + aplicações circulantes) ÷ dívida circulante",
     tipo: "min",
     limite: 1.0,

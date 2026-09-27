@@ -63,7 +63,7 @@ const CRITERIO_TIPO: Record<TipoContrato, { linha: string; nota: string }> = {
   },
   "Tesouro Direto": {
     linha: "Títulos públicos na curva + cupons",
-    nota: `Variação do saldo na curva + cupons e vencimentos pagos no período; IR = variação do IR acumulado (retido nos cupons + provisão regressiva sobre o rendimento ainda não tributado); sem IOF (títulos carregados além de 30 dias); taxas = custódia B3 (${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a.) + agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.).`,
+    nota: `Variação do saldo na curva + cupons e vencimentos pagos no período; IR = variação do IR acumulado (retido nos cupons + provisão regressiva sobre o rendimento ainda não tributado); sem IOF (títulos carregados além de 30 dias); taxas = custódia (${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a.) + agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.).`,
   },
   "Fundo de investimento": {
     linha: "Cota líquida de taxas + come-cotas",
@@ -202,6 +202,8 @@ export function R03Rentabilidade() {
     () =>
       [...tipos.filter((t) => t.contratos > 0), total].map((t) => ({
         nome: t.curto,
+        /** nome completo (tipo de contrato) no tooltip; o eixo usa o nome curto */
+        rotulo: t.rotulo,
         cor: t.cor,
         bruto: t.pctCDIBruto * 100,
         liquido: t.pctCDILiquido * 100,
@@ -263,7 +265,7 @@ export function R03Rentabilidade() {
     { key: "rend", header: "Rend. bruto", align: "right", value: (t) => t.rendimento, render: (t) => semDados(t, fmtNum(t.rendimento)), total: () => fmtNum(total.rendimento) },
     { key: "iof", header: "IOF", headerTitle: "IOF realizado: regressivo nos resgates antes de 30 dias (renda fixa e fundos) e IOF câmbio na remessa (time deposits)", align: "right", value: (t) => t.iof, render: (t) => (t.iof ? <span className="text-critical">{fmtNum(t.iof)}</span> : <span className="text-label">–</span>), total: () => fmtNum(total.iof, { dash: true }) },
     { key: "ir", header: "IR", headerTitle: "IR do período = variação do IR acumulado (retido + provisão), por competência – negativo quando há reversão; inclui o come-cotas dos fundos e o IRPJ/CSLL estimado dos time deposits", align: "right", value: (t) => t.ir, render: (t) => (t.ir ? fmtNum(t.ir) : <span className="text-label">–</span>), total: () => fmtNum(total.ir, { dash: true }) },
-    { key: "taxas", header: "Taxas/tarifas", headerTitle: "Custódia B3 e agente (Tesouro Direto) e tarifa bancária (time deposits); fundos já rendem líquidos das taxas", align: "right", value: (t) => t.taxas, render: (t) => (t.taxas ? fmtNum(t.taxas) : <span className="text-label">–</span>), total: () => fmtNum(total.taxas, { dash: true }) },
+    { key: "taxas", header: "Taxas/tarifas", headerTitle: "Custódia e agente (títulos públicos) e tarifa bancária (time deposits); fundos já rendem líquidos das taxas", align: "right", value: (t) => t.taxas, render: (t) => (t.taxas ? fmtNum(t.taxas) : <span className="text-label">–</span>), total: () => fmtNum(total.taxas, { dash: true }) },
     {
       key: "liq",
       header: "Rend. líquido",
@@ -698,7 +700,11 @@ export function R03Rentabilidade() {
                 <CartesianGrid vertical={false} stroke="#e5e5e5" />
                 <XAxis dataKey="nome" tick={<TickQuebrado />} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} height={40} />
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={44} domain={[escalaTipos.lo, escalaTipos.hi]} ticks={escalaTipos.ticks} tickFormatter={(v: number) => `${fmtDec(v, 0)}%`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v: number, n: string) => [`${fmtDec(v, 1)}% do CDI`, n]}
+                  labelFormatter={(l: string, pl: readonly { payload?: { rotulo?: string } }[]) => pl?.[0]?.payload?.rotulo ?? l}
+                />
                 <ReferenceLine y={0} stroke="#a8b2bd" />
                 <ReferenceLine y={100} stroke="#788fa6" strokeDasharray="4 4" />
                 <Bar dataKey="bruto" name="% CDI bruto" radius={[3, 3, 0, 0]} isAnimationActive={false}>

@@ -441,7 +441,7 @@ export function R06Indicadores() {
                   </td>
                   {d.serie.map((i) => (
                     <td key={i.data} className="px-3 py-2 text-right tabular border-b border-line-soft whitespace-nowrap">
-                      {s.tipo === "x" ? fmtX(s.v(i)) : fmtNum(s.v(i), { parens: s.rotulo.startsWith("(") })}
+                      {s.tipo === "x" ? fmtX(s.v(i)) : fmtNum(s.v(i))}
                     </td>
                   ))}
                 </tr>
