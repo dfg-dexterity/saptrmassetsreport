@@ -367,9 +367,21 @@ export function rentabilidade(ops: Operacao[], inicio: string, fim: string, p: P
       const e = f !== null && f < fim ? f : fim;
       const base = valorBruto(op, s, p);
       const rendimento = valorBruto(op, e, p) - base;
-      const diasTotais = diffDays(op.dataAplicacao, e);
-      const iof = rendimento * aliquotaIOF(diasTotais);
-      const ir = (rendimento - iof) * aliquotaIR(diasTotais, op.regimeIR);
+      // IR do período = variação da provisão acumulada desde a aplicação (competência): a soma dos meses fecha com o
+      // período inteiro e, na mudança de faixa do IR regressivo, a provisão é revertida. IOF: só quando realizado
+      // (liquidação antes de 30 dias), sem provisão – nunca aparece revertido
+      const acumulado = (d: string) => {
+        if (d <= op.dataAplicacao) return { iof: 0, ir: 0 };
+        const r = valorBruto(op, d, p) - op.principal;
+        const dd = diffDays(op.dataAplicacao, d);
+        const liquidada = f !== null && d >= f;
+        const iofD = liquidada ? r * aliquotaIOF(dd) : 0;
+        return { iof: iofD, ir: (r - iofD) * aliquotaIR(dd, op.regimeIR) };
+      };
+      const a0 = acumulado(s);
+      const a1 = acumulado(e);
+      const iof = a1.iof - a0.iof;
+      const ir = a1.ir - a0.ir;
       const rendLiquido = rendimento - iof - ir;
       const cdiPeriodo = fatorCDI(s, e, p) - 1;
       const dias = diffDays(s, e);

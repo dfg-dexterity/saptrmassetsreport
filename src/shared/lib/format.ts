@@ -31,9 +31,10 @@ export function fmtCompact(v: number): string {
   if (!Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
   const sign = v < 0 ? "\u2212" : "";
-  if (abs >= 1e9) return `${sign}R$\u00a0${(abs / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}\u00a0bi`;
-  if (abs >= 1e6) return `${sign}R$\u00a0${(abs / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mi`;
-  if (abs >= 1e3) return `${sign}R$\u00a0${(abs / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mil`;
+  // limiares pelo valor já arredondado (999.975 → "R$ 1 mi", não "R$ 1.000 mil")
+  if (abs >= 1e9 - 5e6) return `${sign}R$\u00a0${(abs / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}\u00a0bi`;
+  if (abs >= 1e6 - 50) return `${sign}R$\u00a0${(abs / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mi`;
+  if (abs >= 1e3 - 0.5) return `${sign}R$\u00a0${(abs / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mil`;
   return `${sign}R$\u00a0${abs.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
 }
 

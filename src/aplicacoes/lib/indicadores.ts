@@ -157,7 +157,7 @@ export function valorRegraPolitica(id: string, c: ContratoMestre): boolean {
     case "pre":
       return c.indexador === "Pré";
     case "exterior":
-      return c.moeda !== "BRL" || c.indexador === "USD";
+      return c.moeda !== "BRL" || c.indexador === "USD" || c.indexador === "EUR";
     case "rv":
       return c.chave.produto === "Fundo de ações" || c.chave.produto === "Fundo multimercado";
     default:

@@ -3,12 +3,11 @@ import { addDays, diffDays } from "../../shared/lib/dates";
 import { chavePremissas } from "../../shared/lib/taxas";
 import { OPERACOES, type ClassificacaoCPC48, type Rating } from "../data/carteira";
 import { FUNDOS, type Fundo } from "../data/fundos";
-import { TIPOS_TITULO, TITULOS, type TituloPublico } from "../data/tesouro";
+import { PARAMETROS_TESOURO, TIPOS_TITULO, TITULOS, type TituloPublico } from "../data/tesouro";
 import { TIME_DEPOSITS, type TimeDeposit } from "../data/timeDeposits";
 import { ALIQUOTA_IRPJ_CSLL } from "../data/tributacao";
 import type { ChaveBenchmark } from "./benchmark";
 import {
-  aliquotaIOF,
   aliquotaIR,
   ativaEm,
   calcularPosicao,
@@ -256,7 +255,8 @@ export function contratosMestre(data: string, p: Premissas, escopo: Escopo = "to
       rendimentoLiquido: x.rendimentoLiquido,
       valorContabil: x.valorContabil,
       cpc48: t.cpc48,
-      circulante: x.prazoRemanescente <= 365,
+      // VJ por resultado (mantido para negociação) é circulante, como na renda fixa (CPC 26, item 66)
+      circulante: t.cpc48 === "VJ por Resultado" || x.prazoRemanescente <= 365,
       liquidezImediata: true,
       prazoRemanescente: x.prazoRemanescente,
       saldoME: x.saldoCurva,
@@ -632,6 +632,34 @@ function linha(
   };
 }
 
+/**
+ * IR acumulado (retido na fonte + provisão) desde a aplicação até a data. O IR de um período é a variação desse
+ * acumulado: em mês de perda (ou de mudança de faixa) a provisão é revertida, e a soma dos meses fecha com o total.
+ */
+function irAcumTitulo(t: TituloPublico, d: string, p: Premissas): number {
+  if (d <= t.dataCompra) return 0;
+  const eventos = eventosTitulo(t, p);
+  const venc = eventos[eventos.length - 1];
+  if (d >= venc.data) return eventos.reduce((a, e) => a + e.ir, 0);
+  return posicaoTitulo(t, d, p).ir;
+}
+
+function irAcumFundo(f: Fundo, d: string, p: Premissas): number {
+  if (d <= f.dataAplicacao) return 0;
+  const h = historicoFundo(f, p);
+  if (h.resgate && d >= h.resgate.data) return h.comeCotas.reduce((a, c) => a + c.ir, 0) + h.resgate.irComplementar;
+  return posicaoFundo(f, d, p).irTotal;
+}
+
+function irAcumTD(td: TimeDeposit, d: string, p: Premissas): number {
+  if (d <= td.dataAplicacao) return 0;
+  if (d >= td.vencimento) {
+    const ap = posicaoTimeDeposit(td, td.dataAplicacao, p);
+    return Math.max(0, resgateTimeDeposit(td, p).bruto - ap.principalBRL - ap.iofCambio - ap.tarifa) * ALIQUOTA_IRPJ_CSLL;
+  }
+  return posicaoTimeDeposit(td, d, p).irpjCsll;
+}
+
 const cacheRent = new Map<string, RentabContrato[]>();
 
 /** Rendimento de cada contrato no período (inicio, fim], inclusive os liquidados no período */
@@ -676,10 +704,10 @@ export function rentabilidadeMestre(inicio: string, fim: string, p: Premissas, e
     const fluxos = eventosTitulo(t, p).filter((x) => x.data > s && x.data <= e);
     const final = posicaoTitulo(t, e, p);
     const rendimento = final.saldoCurva + fluxos.reduce((a, x) => a + x.bruto, 0) - base;
-    const dias = diffDays(t.dataCompra, e);
-    const iof = rendimento > 0 ? rendimento * aliquotaIOF(dias) : 0;
-    const ir = Math.max(0, rendimento - iof) * aliquotaIR(dias, "Regressivo");
-    const taxas = ((base + final.saldoCurva) / 2) * 0.0025 * (diffDays(s, e) / 365);
+    // títulos são carregados além de 30 dias: sem IOF realizado; IR = variação do IR acumulado (retido + provisão)
+    const iof = 0;
+    const ir = irAcumTitulo(t, e, p) - irAcumTitulo(t, s, p);
+    const taxas = ((base + final.saldoCurva) / 2) * (PARAMETROS_TESOURO.custodiaB3 + PARAMETROS_TESOURO.taxaAgente) * (diffDays(s, e) / 365);
     out.push(
       linha(
         {
@@ -715,9 +743,9 @@ export function rentabilidadeMestre(inicio: string, fim: string, p: Premissas, e
     const resg = h.resgate && h.resgate.data > s && h.resgate.data <= e ? h.resgate : null;
     const saldoFinal = posicaoFundo(f, e, p).saldo;
     const rendimento = saldoFinal + cc + (resg?.bruto ?? 0) - base;
-    const dias = diffDays(f.dataAplicacao, e);
-    const iof = f.regimeIR === "Fundo de ações (15%)" ? 0 : Math.max(0, rendimento) * aliquotaIOF(dias);
-    const ir = Math.max(0, rendimento - iof) * aliquotaIR(dias, f.regimeIR);
+    // IOF só no resgate (realizado); IR = variação do IR acumulado (come-cotas + provisão/IR complementar)
+    const iof = resg?.iof ?? 0;
+    const ir = irAcumFundo(f, e, p) - irAcumFundo(f, s, p);
     out.push(
       linha(
         {
@@ -754,7 +782,7 @@ export function rentabilidadeMestre(inicio: string, fim: string, p: Premissas, e
     const pos = posicaoTimeDeposit(d, d.dataAplicacao, p);
     const iof = aplicadoNoPeriodo ? pos.iofCambio : 0;
     const taxas = aplicadoNoPeriodo ? pos.tarifa : 0;
-    const ir = Math.max(0, rendimento - iof - taxas) * ALIQUOTA_IRPJ_CSLL;
+    const ir = irAcumTD(d, e, p) - irAcumTD(d, s, p);
     out.push(
       linha(
         {
