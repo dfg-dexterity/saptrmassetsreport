@@ -3,11 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Demo Fiori (Horizon) do Reporting Pack de Aplicações Financeiras – SAP S/4HANA TRM",
+  "description": "Demos Fiori (Horizon) do Reporting Pack de Aplicações e de Captações Financeiras – SAP S/4HANA TRM",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:single": "tsc --noEmit && vite build --mode single",
+    "build:single": "tsc --noEmit && vite build --mode single-aplicacoes && vite build --mode single-captacoes",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
