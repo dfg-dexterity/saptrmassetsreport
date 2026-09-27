@@ -558,7 +558,7 @@ export function BenchmarkApp() {
           <p className="text-xs text-label mt-4 leading-relaxed">
             Rendimento do benchmark = capital base × (Π (1 + DI diário × % da regra do dia) − 1), com DI diário = (1 + CDI)^(1/252) − 1,
             nos dias úteis em que a aplicação esteve ativa. Benchmark em % do CDI = esse rendimento ÷ (capital base × CDI do
-            período), na mesma base do realizado – por isso uma regra de 90% aparece como {fmtDec(taxaEquivalenteBenchmark(0.9, p.cdi) / p.cdi * 100, 1)}% do CDI em 12 meses.
+            período), na mesma base do realizado – por isso uma regra de 90% aparece como cerca de {fmtDec(taxaEquivalenteBenchmark(0.9, p.cdi) / p.cdi * 100, 1)}% do CDI em 12 meses.
             Excesso = rendimento realizado − rendimento do benchmark; tolerância de ±0,5 p.p. para “em linha”.
           </p>
         </Card>

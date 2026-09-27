@@ -103,7 +103,8 @@ function casasDoPasso(step: number): number {
 
 /**
  * Campo numérico (sap.m.Input type Number): texto livre em estado local, aceita vírgula ou ponto, propaga o número
- * sempre que o texto é válido e reformata ao perder o foco. Setas ↑/↓ somam/subtraem `step` (limitado a min/max).
+ * sempre que o texto é válido e reformata ao perder o foco. Setas ↑/↓ andam `step` na grade a partir de `min`, como o
+ * input nativo (limitado a min/max).
  * Com `allowEmpty`, o campo vazio propaga NaN (a validação do formulário decide); sem ele, volta ao último valor.
  */
 export function NumberInput({
@@ -135,7 +136,7 @@ export function NumberInput({
   useEffect(() => {
     setTexto((t) => {
       const atual = lerNumero(t);
-      if (Object.is(atual, value) || atual === value || (Number.isNaN(atual) && Number.isNaN(value))) return t;
+      if (atual === value || (Number.isNaN(atual) && Number.isNaN(value))) return t;
       return formatarNumero(value);
     });
   }, [value]);
@@ -149,8 +150,12 @@ export function NumberInput({
 
   const passo = (dir: 1 | -1) => {
     const base = Number.isFinite(lerNumero(texto)) ? lerNumero(texto) : Number.isFinite(value) ? value : (min ?? 0);
-    const casas = casasDoPasso(step);
-    let v = Number((base + dir * step).toFixed(casas));
+    // Como no input nativo: valor fora da grade (min + k × step) vai para o próximo ponto da grade na direção da seta
+    const origem = min ?? 0;
+    const casas = Math.max(casasDoPasso(step), casasDoPasso(origem));
+    const k = (base - origem) / step;
+    const n = Math.abs(k - Math.round(k)) < 1e-9 ? Math.round(k) + dir : dir > 0 ? Math.ceil(k) : Math.floor(k);
+    let v = Number((origem + n * step).toFixed(casas));
     if (min !== undefined) v = Math.max(min, v);
     if (max !== undefined) v = Math.min(max, v);
     setTexto(formatarNumero(v));

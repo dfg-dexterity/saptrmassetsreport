@@ -24,12 +24,12 @@ export const ESCOPOS_BENCHMARK: { value: EscopoBenchmark; label: string; priorid
 ];
 
 export const BENCHMARKS_PADRAO: Benchmark[] = [
-  { id: "bmk-carteira", descricao: "Benchmark da carteira", pctCDI: 1.0, escopo: "carteira", valor: "", vigenciaInicio: "2025-01-01" },
-  { id: "bmk-fundos", descricao: "Fundos DI e renda fixa", pctCDI: 1.02, escopo: "produto", valor: "Fundo RF", vigenciaInicio: "2025-01-01" },
-  { id: "bmk-liquidez", descricao: "Caixa de liquidez imediata", pctCDI: 0.95, escopo: "portfolio", valor: "TES-LIQUIDEZ", vigenciaInicio: "2025-01-01" },
-  { id: "bmk-credito", descricao: "Crédito privado indexado ao IPCA", pctCDI: 0.8, escopo: "portfolio", valor: "TES-CREDITO", vigenciaInicio: "2025-01-01" },
-  { id: "bmk-letras", descricao: "Letras de crédito do agronegócio", pctCDI: 0.9, escopo: "produto", valor: "LCA", vigenciaInicio: "2025-01-01" },
-  { id: "bmk-lci", descricao: "Letras de crédito imobiliário", pctCDI: 0.9, escopo: "produto", valor: "LCI", vigenciaInicio: "2025-01-01" },
+  { id: "bmk-carteira", descricao: "Benchmark da carteira", pctCDI: 1.0, escopo: "carteira", valor: "", vigenciaInicio: "2022-01-01" },
+  { id: "bmk-fundos", descricao: "Fundos DI e renda fixa", pctCDI: 1.02, escopo: "produto", valor: "Fundo RF", vigenciaInicio: "2022-01-01" },
+  { id: "bmk-liquidez", descricao: "Caixa de liquidez imediata", pctCDI: 0.95, escopo: "portfolio", valor: "TES-LIQUIDEZ", vigenciaInicio: "2022-01-01" },
+  { id: "bmk-credito", descricao: "Crédito privado indexado ao IPCA", pctCDI: 0.8, escopo: "portfolio", valor: "TES-CREDITO", vigenciaInicio: "2022-01-01" },
+  { id: "bmk-letras", descricao: "Letras de crédito do agronegócio", pctCDI: 0.9, escopo: "produto", valor: "LCA", vigenciaInicio: "2022-01-01" },
+  { id: "bmk-lci", descricao: "Letras de crédito imobiliário", pctCDI: 0.9, escopo: "produto", valor: "LCI", vigenciaInicio: "2022-01-01" },
 ];
 
 export const PCT_MINIMO = 0.5;

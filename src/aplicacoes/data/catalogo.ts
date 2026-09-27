@@ -42,7 +42,7 @@ export const RELATORIOS: Relatorio[] = [
     titulo: "Premissas – Parâmetros gerais",
     tituloCurto: "Premissas",
     descricao:
-      "Premissas gerais importadas do SAP: data-base, CDI, Selic, IPCA e custo médio da dívida (calculado da carteira de captações), com as tabelas regressivas de IRRF e IOF. Alimentam todos os relatórios.",
+      "Premissas gerais importadas do SAP (CDI, Selic e IPCA), data-base escolhida pelo usuário, custo médio da dívida (calculado da carteira de captações) e tabelas regressivas de IRRF e IOF. Alimentam todos os relatórios.",
     publico: "Tesouraria / Controladoria",
     periodicidade: "Mensal",
     norma: "Lei 11.033/2004 · Decreto 6.306/2007",
@@ -154,7 +154,7 @@ export const RELATORIOS: Relatorio[] = [
     titulo: "R06 – Endividamento × Aplicações",
     tituloCurto: "Endividamento × Aplicações",
     descricao:
-      "Dívida bruta e líquida, DL/EBITDA, liquidez CP, cobertura de juros, DL/PL e carry (rentabilidade das aplicações − custo da dívida), com limites de covenant.",
+      "Dívida bruta e líquida na data-base, covenants contratuais da dívida (com efeito CPC 26), limites da política financeira (liquidez CP, DL/PL), série trimestral e carry (rentabilidade das aplicações − custo da dívida).",
     publico: "Diretoria Financeira / Conselho / RI",
     periodicidade: "Mensal / Trimestral",
     norma: "Covenants",
