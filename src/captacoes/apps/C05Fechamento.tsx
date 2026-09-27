@@ -588,7 +588,7 @@ export function C05Fechamento() {
             label="Etapas concluídas"
             value={`${d.etapasConcluidas}/${d.checklist.length}`}
             state={d.etapasConcluidas < d.checklist.length ? "critical" : "positive"}
-            sub={aprovado ? "Aprovado" : qtdPendencias === 0 ? "Pronto para aprovação" : "aprovação pendente"}
+            sub={aprovado ? "Aprovado" : qtdPendencias === 0 ? "Pronto para aprovação" : "Aprovação pendente"}
           />
           <HeaderKpi
             label="Maior diferença"
@@ -626,8 +626,8 @@ export function C05Fechamento() {
         </MessageStrip>
       ) : (
         <Card
-          title={`Pendências do fechamento de ${fmtDate(db)}`}
-          subtitle={`Diferenças acima da tolerância de ${TOLERANCIA} bloqueiam a aprovação da Controladoria`}
+          title="Pendências do fechamento"
+          subtitle={`Data-base ${fmtDate(db)} · diferenças acima da tolerância de ${TOLERANCIA} bloqueiam a aprovação da Controladoria`}
           icon={<AlertTriangle className="w-5 h-5 text-critical-strong" aria-hidden />}
           status={
             <ObjectStatus state="critical" inverted>
@@ -682,8 +682,8 @@ export function C05Fechamento() {
               {[...reclassificados].sort().join(" e ")} {reclassificados.size === 1 ? "está reclassificado" : "estão reclassificados"}{" "}
               integralmente para o circulante nesta data-base (covenant descumprido sem waiver – CPC 26, item 74). As contas de
               principal e custos circulantes do BNDES incluem o saldo reclassificado, tanto no TRM quanto no FI-GL.{" "}
-              <Link to="/c04-covenants" className="text-link font-semibold hover:underline">
-                Ver C04 – Covenants
+              <Link to="/c04-covenants" state={{ aba: "classificacao" }} className="text-link font-semibold hover:underline">
+                Ver C04 – classificação CPC 26
               </Link>
             </MessageStrip>
           )}
@@ -870,9 +870,7 @@ export function C05Fechamento() {
                   <span className="text-text">Fonte:</span> {l.fonte}
                 </div>
                 <PopInValores rotulo="Extrato (R$)" trm={l.saldoTRM} outro={l.saldoExtrato} dif={l.diferenca} />
-                {l.motivo && (
-                  <p className={clsx("text-xs leading-snug mt-2", l.status === "Divergente" ? "text-text" : "text-label")}>{l.motivo}</p>
-                )}
+                {l.status === "Divergente" && l.motivo && <p className="text-xs text-text leading-snug mt-2">{l.motivo}</p>}
               </li>
             ))}
             <li className="px-4 py-3 bg-[#f5f6f7]">

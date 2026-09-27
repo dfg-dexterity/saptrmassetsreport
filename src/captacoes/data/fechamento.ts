@@ -92,7 +92,7 @@ export const CHECKLIST_FECHAMENTO: EtapaChecklist[] = [
   { id: "captacoes", dia: "DU-1", etapa: "Revisar novas captações, custos de transação e cronogramas (C00)", transacao: null, responsavel: "Tesouraria" },
   { id: "tbb1", dia: "DU-1", etapa: "Contabilizar os fluxos do período (pagamentos de principal e juros)", transacao: "TBB1", responsavel: "Tesouraria" },
   { id: "tpm44", dia: "DU+1", etapa: "Apropriação por competência de juros e custos de transação", transacao: "TPM44", responsavel: "Contabilidade" },
-  { id: "tpm1", dia: "DU+1", etapa: "Avaliação: atualização monetária (IPCA/TLP)", transacao: "TPM1", responsavel: "Contabilidade" },
+  { id: "tpm1", dia: "DU+1", etapa: "Avaliação: atualização monetária (IPCA, TLP e TJLP acima de 6% a.a.)", transacao: "TPM1", responsavel: "Contabilidade" },
   { id: "cplp", dia: "DU+1", etapa: "Reclassificação curto × longo prazo (CPC 26)", transacao: null, responsavel: "Contabilidade" },
   { id: "gl", dia: "DU+2", etapa: "Conciliar TRM × FI-GL por conta contábil", transacao: null, responsavel: "Contabilidade" },
   { id: "extratos", dia: "DU+2", etapa: "Conciliar TRM × extratos (BNDES, agente fiduciário, securitizadora, bancos)", transacao: null, responsavel: "Tesouraria" },

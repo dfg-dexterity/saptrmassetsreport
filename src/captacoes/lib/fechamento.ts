@@ -13,6 +13,7 @@ import {
   type EtapaChecklist,
   type StatusEtapa,
 } from "../data/fechamento";
+import { fmtDec } from "../../shared/lib/format";
 import { diferencaRollforward, movimentacaoDivida, saldoContabil, type PosicaoDivida } from "./divida";
 
 /** C05 – Fechamento e conciliação: TRM × FI-GL, TRM × extratos, checagens de integridade e checklist SAP */
@@ -120,19 +121,19 @@ export function checagensIntegridade(
   const cronogramas = CONTRATOS.filter((c) => Math.abs(c.amortizacoes.reduce((s, a) => s + a.pct, 0) - 1) > 1e-9);
   const glDiv = gl.filter((l) => l.status === "Divergente");
   const extDiv = extratos.filter((l) => l.status === "Divergente");
-  const fmt = (v: number) => (Math.round(v * 100) / 100 || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (v: number) => fmtDec(v, 2);
   return [
     {
       id: "cplp",
       descricao: "Circulante + não circulante = saldo pelo custo amortizado",
       ok: Math.abs(total - cpLp) < 0.01,
-      detalhe: `Diferença de R$ ${fmt(total - cpLp)}`,
+      detalhe: `Diferença de R$\u00a0${fmt(total - cpLp)}`,
     },
     {
       id: "rollforward",
       descricao: "Movimentação (C01) fecha com o saldo da carteira",
       ok: Math.abs(difMov) < 0.01,
-      detalhe: `Diferença de R$ ${fmt(difMov)} no roll-forward desde ${previousYearEnd(dataBase).split("-").reverse().join("/")}`,
+      detalhe: `Diferença de R$\u00a0${fmt(difMov)} na movimentação desde ${previousYearEnd(dataBase).split("-").reverse().join("/")}`,
     },
     {
       id: "juros",
@@ -166,13 +167,13 @@ export function checagensIntegridade(
     },
     {
       id: "gl",
-      descricao: `TRM × FI-GL dentro da tolerância (R$ ${fmt(TOLERANCIA_CONCILIACAO)})`,
+      descricao: `TRM × FI-GL dentro da tolerância (R$\u00a0${fmt(TOLERANCIA_CONCILIACAO)})`,
       ok: glDiv.length === 0,
       detalhe: glDiv.length ? `${glDiv.length} ${glDiv.length === 1 ? "conta divergente" : "contas divergentes"}: ${glDiv.map((l) => l.conta.conta).join(", ")}` : `${gl.length} contas conciliadas`,
     },
     {
       id: "extratos",
-      descricao: `TRM × extratos dentro da tolerância (R$ ${fmt(TOLERANCIA_CONCILIACAO)})`,
+      descricao: `TRM × extratos dentro da tolerância (R$\u00a0${fmt(TOLERANCIA_CONCILIACAO)})`,
       ok: extDiv.length === 0,
       detalhe: extDiv.length ? `Divergência em ${extDiv.map((l) => l.pos.c.id).join(", ")}` : `${extratos.length} extratos conciliados`,
     },
