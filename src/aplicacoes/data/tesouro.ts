@@ -6,7 +6,7 @@ import type { ClassificacaoCPC48 } from "./carteira";
  */
 
 export const PARAMETROS_TESOURO = {
-  /** Taxa de custódia B3 a.a. sobre o saldo (cobrada semestralmente) */
+  /** Taxa de custódia a.a. sobre o saldo (cobrada semestralmente) – parâmetro da planilha (tabela B3/Tesouro Direto); para PJ, custódia no SELIC via banco custodiante */
   custodiaB3: 0.002,
   /** Tarifa do agente de custódia a.a. */
   taxaAgente: 0.0005,
@@ -66,7 +66,7 @@ export const TITULOS: TituloPublico[] = [
     taxaCompra: 0.0009,
     cpc48: "Custo Amortizado",
     portfolio: "TES-SOBERANO",
-    custodiante: "B3 · agente Banco Itaú",
+    custodiante: "Banco Itaú · custódia no SELIC",
   },
   {
     id: "TD02",
@@ -81,7 +81,7 @@ export const TITULOS: TituloPublico[] = [
     taxaCompra: 0.132,
     cpc48: "VJ por ORA",
     portfolio: "TES-SOBERANO",
-    custodiante: "B3 · agente Banco Itaú",
+    custodiante: "Banco Itaú · custódia no SELIC",
   },
   {
     id: "TD03",
@@ -96,7 +96,7 @@ export const TITULOS: TituloPublico[] = [
     taxaCompra: 0.1375,
     cpc48: "VJ por ORA",
     portfolio: "TES-SOBERANO",
-    custodiante: "B3 · agente Banco Bradesco",
+    custodiante: "Banco Bradesco · custódia no SELIC",
   },
   {
     id: "TD04",
@@ -111,7 +111,7 @@ export const TITULOS: TituloPublico[] = [
     taxaCompra: 0.0755,
     cpc48: "Custo Amortizado",
     portfolio: "TES-SOBERANO",
-    custodiante: "B3 · agente Banco Bradesco",
+    custodiante: "Banco Bradesco · custódia no SELIC",
   },
   {
     id: "TD05",
@@ -126,7 +126,7 @@ export const TITULOS: TituloPublico[] = [
     taxaCompra: 0.074,
     cpc48: "VJ por Resultado",
     portfolio: "TES-SOBERANO",
-    custodiante: "B3 · agente Banco Itaú",
+    custodiante: "Banco Itaú · custódia no SELIC",
   },
 ];
 

@@ -20,7 +20,7 @@ São **dois produtos separados**, cada um com a sua página, Launchpad, rotas e 
 
 | Seção do Índice | App (rota) | Aba de origem |
 | --- | --- | --- |
-| 1. Parametrização | **Premissas** (`/premissas`) – premissas gerais importadas do SAP (somente leitura): CDI, Selic, IPCA e PTAX USD/EUR, histórico × projeção do CDI, IRRF e IOF, títulos públicos (custódia B3, VNA, cupons), come-cotas e time deposits (IOF câmbio, ACT/360, IRPJ/CSLL) | Premissas |
+| 1. Parametrização | **Premissas** (`/premissas`) – premissas gerais importadas do SAP (somente leitura): CDI, Selic, IPCA e PTAX USD/EUR, histórico × projeção do CDI, IRRF e IOF, títulos públicos (custódia, VNA, cupons), come-cotas e time deposits (IOF câmbio, ACT/360, IRPJ/CSLL) | Premissas |
 | 1. Parametrização | **Benchmark (% do CDI)** (`/benchmark`) – cadastro de taxas de benchmark por carteira, empresa, portfolio ou tipo de produto, para todos os tipos de contrato (incluir, editar, excluir, vigência, validação de 50% a 200% do CDI) | Premissas – benchmark |
 | 1. Parametrização | **Carteira-Mestre** (`/carteira-mestre`) – base consolidada de todos os contratos em R$ | Carteira-Mestre |
 | 2. Posição | **R01 – Composição detalhada** (`/r01-composicao`) – renda fixa bancária por operação, benchmark × realizado, detalhe com origem nas CDS Views | DD-31 |
