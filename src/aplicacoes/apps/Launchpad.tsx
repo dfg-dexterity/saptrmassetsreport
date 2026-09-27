@@ -195,12 +195,12 @@ export function Launchpad() {
     const difCDI = bmk.realizado - bmk.pct;
     const piorGrupo = grupos.reduce<Semaforo>((pior, g) => (NIVEL[g.status] > NIVEL[pior] ? g.status : pior), "ok");
     const kpis: { id: string; rotulo: string; status: Semaforo }[] = [
-      { id: "cdi", rotulo: "% CDI 12m", status: difCDI >= -TOLERANCIA_BENCHMARK ? "ok" : difCDI >= -0.02 ? "atencao" : "excedido" },
+      { id: "cdi", rotulo: "% CDI bruto", status: difCDI >= -TOLERANCIA_BENCHMARK ? "ok" : difCDI >= -0.02 ? "atencao" : "excedido" },
       { id: "liquidez", rotulo: "Liquidez", status: liquidez.status },
       { id: "hhi", rotulo: "HHI", status: hhiClasse.status },
-      { id: "cambio", rotulo: "Câmbio", status: exterior.status },
-      { id: "credito", rotulo: "Crédito", status: credito.status },
-      { id: "grupo", rotulo: "Grupos", status: piorGrupo },
+      { id: "grupo", rotulo: "Limite grupo", status: piorGrupo },
+      { id: "cambio", rotulo: "Cambial", status: exterior.status },
+      { id: "credito", rotulo: "Crédito priv.", status: credito.status },
     ];
 
     // R12 – roll-forward do mês da data-base: SF = SI + aplicações + rendimentos − resgates brutos − come-cotas
@@ -393,9 +393,9 @@ export function Launchpad() {
     },
     kpis: {
       title: "Painel de KPIs",
-      subtitle: "Carteira consolidada · metas da política",
+      subtitle: `${d.kpis.length} KPIs-chave · metas da política`,
       value: `${kpisNaMeta}/${d.kpis.length}`,
-      unit: "KPIs na meta",
+      unit: "KPIs-chave na meta",
       state: kpisFora ? "negative" : kpisAtencao ? "critical" : "positive",
       footer: kpisFora || kpisAtencao ? [kpisAtencao && `${kpisAtencao} em atenção`, kpisFora && `${kpisFora} fora da meta`].filter(Boolean).join(" · ") : "Todos os KPIs na meta",
       footerState: kpisFora ? "negative" : kpisAtencao ? "critical" : "positive",
@@ -415,10 +415,10 @@ export function Launchpad() {
       title: "Conciliação de Fim de Mês",
       subtitle: `R12 · Roll-forward de ${mesBase} · DU−1 a DU+3`,
       value: fmtDec(Math.abs(d.r12.diferenca) < 0.005 ? 0 : d.r12.diferenca, 2),
-      unit: "R$ de diferença no mês",
+      unit: "R$ · diferença do roll-forward",
       state: r12Fechado ? "positive" : "negative",
       footer: r12Fechado
-        ? `Saldo final ${fmtCompact(d.r12.mov.saldoFinal)} = Carteira-Mestre`
+        ? `Fecha: saldo final ${fmtCompact(d.r12.mov.saldoFinal)} = Carteira-Mestre`
         : `Diferença × Carteira-Mestre: ${fmtCompact(d.r12.diferencaMestre)}`,
       footerState: r12Fechado ? "positive" : "negative",
       wide: true,
@@ -735,7 +735,7 @@ export function Launchpad() {
               <Destaque
                 icon={<CheckCircle2 className="w-5 h-5 text-positive" />}
                 titulo="Conciliação automática"
-                texto="A Carteira-Mestre consolida R01, R08, R09 e R10; o saldo final do R05 e do R02 bate com ela, e o R12 fecha o roll-forward e o razão (FI-GL) no fim do mês."
+                texto="A Carteira-Mestre consolida R01, R08, R09 e R10; o saldo final do R05 e do R02 bate com ela, e o R12 confronta o saldo com o razão (FI-GL) e os extratos no fim do mês."
               />
               <Destaque
                 icon={<ShieldCheck className="w-5 h-5 text-[#8b47d7]" />}

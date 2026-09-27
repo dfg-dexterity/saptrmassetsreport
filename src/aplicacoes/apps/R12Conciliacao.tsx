@@ -77,14 +77,14 @@ const PLANO_CONTAS: ContaPlano[] = [
     descricao: "Aplicações financeiras – renda fixa bancária",
     circulante: true,
     componente: "curva",
-    regra: "Renda fixa bancária realizável em até 12 meses · principal + juros (curva)",
+    regra: "Renda fixa bancária realizável em até 12 meses ou VJPR · principal + juros (curva)",
   },
   {
     conta: "1.1.2.02",
     descricao: "Títulos públicos federais",
     circulante: true,
     componente: "curva",
-    regra: "Tesouro Direto com vencimento em até 12 meses · PU na curva × quantidade",
+    regra: "Tesouro Direto com vencimento em até 12 meses ou mantido para negociação (VJPR) · PU na curva × quantidade",
   },
   {
     conta: "1.1.2.03",
@@ -112,7 +112,7 @@ const PLANO_CONTAS: ContaPlano[] = [
     descricao: "Aplicações financeiras – não circulante",
     circulante: false,
     componente: "curva",
-    regra: "Contratos com vencimento acima de 12 meses (qualquer tipo) · curva",
+    regra: "Contratos com vencimento acima de 12 meses, exceto VJPR (qualquer tipo) · curva",
   },
   {
     conta: "1.2.1.09",
@@ -484,7 +484,7 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
         arredondamento,
         itens,
         status: statusDe(itens, diferenca),
-        motivo: motivoDe(itens, arredondamento, "Arredondamento de centavos nos lançamentos por contrato – dentro da tolerância."),
+        motivo: motivoDe(itens, arredondamento, "Arredondamento de centavos nos lançamentos por contrato."),
       });
     }
   }
@@ -504,7 +504,7 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
         const titulo = c.produto === "Debênture" || c.produto === "CRI" || c.produto === "CRA";
         fonte = titulo ? `B3 – extrato de custódia (${c.contraparte})` : `${c.contraparte} – extrato de posição`;
         saldoExtrato = r2(c.principalBRL * truncar(c.saldoCurva / c.principalBRL, 8));
-        textoArred = "Fator acumulado truncado na 8ª casa decimal pelo emissor – centavos, dentro da tolerância.";
+        textoArred = "Fator acumulado truncado na 8ª casa decimal pelo emissor – centavos.";
         if (opExtrato && c.id === opExtrato.id) {
           const taxa = OPERACOES.find((o) => o.transacao === c.id)?.taxa ?? 1;
           const juros = c.saldoCurva - c.principalBRL;
@@ -526,7 +526,7 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
         fonte = `${tit.custodiante} – PU de mercado`;
         saldoTRM = c.saldoMercado;
         saldoExtrato = r2(tit.quantidade * puExtrato);
-        textoArred = "PU truncado na 6ª casa decimal (convenção B3/Tesouro) – centavos, dentro da tolerância.";
+        textoArred = "PU truncado na 6ª casa decimal (convenção B3/Tesouro) – centavos.";
         const dif = saldoExtrato - saldoTRM;
         if (bp && Math.abs(dif) > TOLERANCIA)
           itens.push({
@@ -552,7 +552,7 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
         const quantidadeExtrato = arred(pos.quantidade, 6);
         fonte = `${f.administrador} – posição de cotas`;
         saldoExtrato = r2(quantidadeExtrato * cotaExtrato);
-        textoArred = "Quantidade (6 casas) e cota (8 casas) arredondadas pelo administrador – centavos, dentro da tolerância.";
+        textoArred = "Quantidade (6 casas) e cota (8 casas) arredondadas pelo administrador – centavos.";
         const dif = saldoExtrato - saldoTRM;
         if (d1 && Math.abs(dif) > TOLERANCIA)
           itens.push({
@@ -576,7 +576,7 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
         const saldoExtratoME = r2(saldoME(td, dataExtrato));
         fonte = `${td.banco} – extrato em ${td.moeda}`;
         saldoExtrato = saldoExtratoME * c.ptax;
-        textoArred = `Saldo em ${td.moeda} arredondado a centavos pelo banco – dentro da tolerância.`;
+        textoArred = `Saldo em ${td.moeda} arredondado a centavos pelo banco.`;
         const dias = toDay(db) - toDay(dataExtrato);
         const dif = saldoExtrato - saldoTRM;
         if (dias > 0 && Math.abs(dif) > TOLERANCIA)
@@ -1061,7 +1061,7 @@ export function R12Conciliacao() {
         {
           nome: "Checklist",
           titulo: `R12 – Checklist de fechamento (DU-1 a DU+3) – ${fmtMonthLong(db)}`,
-          subtitulo: `${executadas} de ${d.checklist.length} etapas executadas · DU0 = último dia útil do mês (${fmtDate(d.du0)})`,
+          subtitulo: `${executadas} de ${d.checklist.length} etapas concluídas · DU0 = último dia útil do mês (${fmtDate(d.du0)})`,
           colunas: [
             { titulo: "Dia", largura: 8 },
             { titulo: "Data", tipo: "data", largura: 12 },
@@ -1271,7 +1271,7 @@ export function R12Conciliacao() {
       tipo: t.tipo,
       rotulo: t.curto,
       cor: t.cor,
-      sub: plural(ls.length, "linha contábil", "linhas contábeis"),
+      sub: ls.length ? plural(ls.length, "linha contábil", "linhas contábeis") : "sem contratos",
       valor: ls.reduce((s, l) => s + l.saldoTRM, 0),
       vazio: ls.length === 0,
       pendentes: ls.filter((l) => l.status === "Pendente").length,
@@ -1285,7 +1285,7 @@ export function R12Conciliacao() {
       tipo: t.tipo,
       rotulo: t.curto,
       cor: t.cor,
-      sub: `${FONTE_TIPO[t.tipo]} · ${ls.length}`,
+      sub: ls.length ? `${FONTE_TIPO[t.tipo]} · ${ls.length}` : `${FONTE_TIPO[t.tipo]} · sem contratos`,
       valor: ls.reduce((s, l) => s + l.saldoTRM, 0),
       vazio: ls.length === 0,
       pendentes: ls.filter((l) => l.status === "Pendente").length,
@@ -1337,7 +1337,7 @@ export function R12Conciliacao() {
             label="Etapas concluídas"
             value={`${executadas}/${d.checklist.length}`}
             state={aprovado ? "positive" : "critical"}
-            sub={aprovado ? `aprovado · ${plural(ressalvas, "ressalva", "ressalvas")}` : `aprovação pendente · ${plural(ressalvas, "ressalva", "ressalvas")}`}
+            sub={`${aprovado ? "aprovado" : "aprovação pendente"} · ${ressalvas ? plural(ressalvas, "ressalva", "ressalvas") : "sem ressalvas"}`}
           />
         </div>
       }
@@ -1383,7 +1383,7 @@ export function R12Conciliacao() {
           {extOk} de {plural(d.extratos.length, "extrato", "extratos")} conciliados
           {d.glExp.length + d.extExp.length > 0 &&
             ` (${plural(d.glExp.length + d.extExp.length, "diferença temporária ou de precificação explicada", "diferenças temporárias ou de precificação explicadas")})`}
-          , roll-forward fechado com diferença de R$&nbsp;0,00 e {executadas} de {d.checklist.length} etapas do checklist executadas –{" "}
+          , roll-forward fechado com diferença de R$&nbsp;0,00 e {executadas} de {d.checklist.length} etapas do checklist concluídas –{" "}
           {aprovado ? `período aprovado pela Controladoria em ${fmtDate(aprovacao.data)}` : "período pronto para aprovação"}.
         </MessageStrip>
       ) : (
@@ -1725,7 +1725,7 @@ export function R12Conciliacao() {
           </Card>
 
           {(titulos.length > 0 || fundos.length > 0) && (
-            <div className={clsx("grid grid-cols-1 gap-5", titulos.length > 0 && fundos.length > 0 && "xl:grid-cols-2")}>
+            <div className={clsx("grid grid-cols-1 gap-5", titulos.length > 0 && fundos.length > 0 && "2xl:grid-cols-2")}>
               {titulos.length > 0 && (
                 <Card
                   title="Títulos públicos – PU ANBIMA × PU do custodiante"
@@ -1892,7 +1892,7 @@ function AbaRollforward({
             <table className="w-full text-[13px] min-w-[760px]">
               <thead>
                 <tr className="text-text">
-                  <th className="text-left font-semibold px-4 py-2.5 border-b border-[#a8b2bd]">Movimentação</th>
+                  <th className="text-left font-semibold px-4 py-2.5 border-b border-[#a8b2bd] min-w-[15rem]">Movimentação</th>
                   {d.porTipo.map((t) => (
                     <th key={t.tipo} className="text-right font-semibold px-3 py-2.5 border-b border-[#a8b2bd] whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
@@ -1973,7 +1973,7 @@ function AbaRollforward({
         </Card>
 
         <Card title="Movimentação do mês por tipo" subtitle="R$ milhões · saídas com sinal negativo" className="min-w-0">
-          <div className="h-64 -ml-2">
+          <div className="h-60 -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={grafico} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="#e5e5e5" />
@@ -1995,6 +1995,11 @@ function AbaRollforward({
               </li>
             ))}
           </ul>
+          <dl className="mt-4 border-t border-line-soft pt-3 text-[13px] space-y-1.5">
+            <LinhaPonte rotulo={`Saldo inicial (${fmtDate(d.inicio)})`} valor={d.mov.total.saldoInicial} />
+            <LinhaPonte rotulo="Variação líquida no mês" valor={d.mov.total.saldoFinal - d.mov.total.saldoInicial} sinal />
+            <LinhaPonte rotulo={`Saldo final (${fmtDate(db)})`} valor={d.mov.total.saldoFinal} forte />
+          </dl>
         </Card>
       </div>
 
@@ -2110,6 +2115,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
     };
   });
   const completo = executadas === d.checklist.length;
+  const ressalvas = d.checklist.filter((e) => e.status === "Com ressalva").length;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
@@ -2192,7 +2198,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
             <span className={clsx("text-[2.25rem] leading-none font-light tabular", completo ? "text-positive" : "text-critical")}>
               {executadas}/{d.checklist.length}
             </span>
-            <span className="text-sm text-label">etapas executadas</span>
+            <span className="text-sm text-label">etapas concluídas{ressalvas ? ` · ${plural(ressalvas, "com ressalva", "com ressalva")}` : ""}</span>
           </div>
           <MicroBar className="mt-3 h-2" value={executadas} max={d.checklist.length} color={completo ? "#30914c" : "#e76500"} />
           <div className="text-[13px] font-semibold text-text mt-5 mb-2">Por responsável</div>
@@ -2471,14 +2477,28 @@ function Checado({ ok, valor }: { ok: boolean; valor: number }) {
   );
 }
 
-function LinhaPonte({ rotulo, valor, sub, forte, recuo }: { rotulo: string; valor: number; sub?: string; forte?: boolean; recuo?: boolean }) {
+function LinhaPonte({
+  rotulo,
+  valor,
+  sub,
+  forte,
+  recuo,
+  sinal,
+}: {
+  rotulo: string;
+  valor: number;
+  sub?: string;
+  forte?: boolean;
+  recuo?: boolean;
+  sinal?: boolean;
+}) {
   return (
     <div className={clsx("flex items-baseline justify-between gap-3", recuo && "pl-4 text-label")}>
       <dt className="min-w-0">
         <span className={clsx(forte ? "font-bold text-text" : recuo ? "" : "text-text")}>{rotulo}</span>
         {sub && <span className="block text-xs text-label">{sub}</span>}
       </dt>
-      <dd className={clsx("tabular whitespace-nowrap", forte && "font-bold text-text")}>{fmtValor(valor)}</dd>
+      <dd className={clsx("tabular whitespace-nowrap", forte && "font-bold text-text")}>{sinal ? fmtDif(valor) : fmtValor(valor)}</dd>
     </div>
   );
 }

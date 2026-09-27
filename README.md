@@ -9,32 +9,55 @@ São **dois produtos separados**, cada um com a sua página, Launchpad, rotas e 
 
 | Produto | Página | Conteúdo |
 | --- | --- | --- |
-| **Aplicações Financeiras** | `index.html` | Premissas, benchmark (% do CDI), R01 a R07, catálogo de CDS Views |
-| **Captações Financeiras** (dívida) | `captacoes.html` | Premissas, C00 a C06, catálogo de CDS Views |
+| **Aplicações Financeiras** | `index.html` | Premissas, benchmark (% do CDI), Carteira-Mestre, R01 a R12, Painel de KPIs, catálogo de CDS Views |
+| **Captações Financeiras** (dívida) | `captacoes.html` | Premissas, C00 a C06, Painel de KPIs, catálogo de CDS Views |
 
-> **Os dados são fictícios, do ambiente de teste da Dexterity.** As premissas gerais (CDI, Selic, IPCA, TJLP, TLP) são
+> **Os dados são fictícios, do ambiente de teste da Dexterity.** As premissas gerais (CDI, Selic, IPCA, TJLP, TLP, PTAX) são
 > importadas do SAP e ficam somente leitura; valores posteriores ao último dado disponível são projetados com esse
 > último dado. Os dois produtos exibem esse aviso em todas as telas. Não há backend: o app é 100% estático.
 
 ## Aplicações Financeiras
 
-| Seção do Índice | App | Aba de origem |
+| Seção do Índice | App (rota) | Aba de origem |
 | --- | --- | --- |
-| 1. Parametrização | **Premissas** – premissas gerais importadas do SAP (somente leitura), histórico × projeção do CDI, tabelas de IRRF e IOF | Premissas |
-| 1. Parametrização | **Benchmark (% do CDI)** – cadastro de taxas de benchmark por carteira, empresa, portfolio ou tipo de produto (incluir, editar, excluir, validação de 50% a 200% do CDI) | Premissas – benchmark |
-| 2. Posição | **R01 – Composição detalhada** (filtros, totais, benchmark × realizado, detalhe da operação com origem nas CDS Views) | DD-31 |
-| 2. Posição | **R07 – Concentração da carteira** (limite por grupo econômico, HHI, semáforo da política) | R07-Concentracao |
-| 3. Movimentação | **R05 – Evolução mensal** (12 meses, % do CDI × benchmark, conciliação com R03 e R01) | R05-Evolucao |
-| 4. Rentabilidade | **R03 – Rentabilidade realizada e real** (bruto, IOF, IRRF, líquido, % CDI, benchmark e excesso em R$, real) | R03-Rentab |
-| 4. Rentabilidade | **R04 – Eficiência fiscal por prazo** (faixas do IR, economia ao aguardar, simulador) | R04-Prazo-Fiscal |
-| 5. Indicadores | **R06 – Endividamento × Aplicações** (DL/EBITDA, liquidez, cobertura, carry; dívida e custo vindos da carteira de captações) | R06-Indicadores |
-| 6. Notas explicativas | **R02 – Movimentação** (1A/1B/1C, Controladora × Consolidado, minuta do texto da nota) | DD-32 |
-| 7. Base técnica | **Catálogo de CDS Views** (campos, domínios, dependências DDL, mapeamento do R01) | Lista de CDS · DD27VVT · Domínios · DDLDEPENDENCY |
+| 1. Parametrização | **Premissas** (`/premissas`) – premissas gerais importadas do SAP (somente leitura): CDI, Selic, IPCA e PTAX USD/EUR, histórico × projeção do CDI, IRRF e IOF, títulos públicos (custódia B3, VNA, cupons), come-cotas e time deposits (IOF câmbio, ACT/360, IRPJ/CSLL) | Premissas |
+| 1. Parametrização | **Benchmark (% do CDI)** (`/benchmark`) – cadastro de taxas de benchmark por carteira, empresa, portfolio ou tipo de produto, para todos os tipos de contrato (incluir, editar, excluir, vigência, validação de 50% a 200% do CDI) | Premissas – benchmark |
+| 1. Parametrização | **Carteira-Mestre** (`/carteira-mestre`) – base consolidada de todos os contratos em R$ | Carteira-Mestre |
+| 2. Posição | **R01 – Composição detalhada** (`/r01-composicao`) – renda fixa bancária por operação, benchmark × realizado, detalhe com origem nas CDS Views | DD-31 |
+| 2. Posição | **R08 – Tesouro Direto** (`/r08-tesouro`) – LFT, LTN, NTN-F, NTN-B Principal e NTN-B: curva × mercado, MTM, cupons, custódia | R08-Tesouro |
+| 2. Posição | **R10 – Time deposits** (`/r10-time-deposit`) – USD/EUR, PTAX, variação cambial, IOF câmbio, IRPJ/CSLL | R10-TimeDeposit |
+| 2. Posição | **R11 – Moeda × tipo de contrato** (`/r11-moeda-tipo`) – matriz em R$ e em moeda original, sensibilidade cambial | R11-Moeda-Tipo |
+| 2. Posição | **R07 – Concentração da carteira** (`/r07-concentracao`) – grupo econômico (limite por rating), tipo, indexador, moeda e prazo; HHI e semáforo da política | R07-Concentracao |
+| 3. Movimentação | **R05 – Evolução mensal** (`/r05-evolucao`) – 12 meses da carteira consolidada, % do CDI × benchmark, saldo final conciliado com a Carteira-Mestre | R05-Evolucao |
+| 4. Rentabilidade | **R03 – Rentabilidade realizada e real** (`/r03-rentabilidade`) – por operação de renda fixa e consolidado por tipo de contrato | R03-Rentab |
+| 4. Rentabilidade | **R04 – Eficiência fiscal por prazo** (`/r04-prazo-fiscal`) – faixas do IR, economia ao aguardar, simulador | R04-Prazo-Fiscal |
+| 4. Rentabilidade | **R09 – Fundos e come-cotas** (`/r09-fundos`) – cotas, taxas adm./perf., come-cotas mai/nov, IR complementar | R09-Fundos |
+| 5. Indicadores | **Painel de KPIs** (`/kpis`) – saldo, % do CDI × benchmark, liquidez, duration, concentração, câmbio, tributos, carry, com metas, tendência de 12 meses e semáforo | Painel de KPIs |
+| 5. Indicadores | **R06 – Endividamento × Aplicações** (`/r06-indicadores`) – DL/EBITDA, liquidez, cobertura, carry; dívida e custo vindos da carteira de captações | R06-Indicadores |
+| 6. Fechamento | **R12 – Conciliação de fim de mês** (`/r12-conciliacao`) – TRM × FI-GL × extratos, roll-forward e checklist (TPM1, TPM44, TPM10) | R12-Conciliacao |
+| 7. Notas explicativas | **R02 – Movimentação** (`/r02-movimentacao`) – quadro Controladora × Consolidado por tipo de contrato, minuta do texto da nota | DD-32 |
+| 8. Base técnica | **Catálogo de CDS Views** (`/cds`) – campos, domínios, dependências DDL, mapeamento do R01 | Lista de CDS · DD27VVT · Domínios · DDLDEPENDENCY |
+
+**Carteira-Mestre.** Todos os contratos – renda fixa bancária (R01), Tesouro Direto (R08), fundos (R09) e time deposits
+(R10) – padronizados em R$ (`src/aplicacoes/lib/carteiraMestre.ts`). O **saldo bruto** é a curva na renda fixa e nos
+títulos, o valor da cota nos fundos e o saldo em moeda × PTAX nos time deposits; é a base da movimentação, das
+participações e do total do Launchpad. O **valor contábil** segue o CPC 48: curva no custo amortizado, mercado no valor
+justo. A movimentação fecha pela identidade *saldo final = saldo inicial + aplicações + rendimentos − resgates brutos −
+come-cotas* (o come-cotas reduz cotas, sem saída de caixa). R02, R03 (consolidado), R05, R06, R07, R11, R12, os KPIs e o
+Launchpad usam essa base.
+
+Motores dos novos tipos de contrato: **títulos públicos** (`lib/tesouro.ts`) – PU pelas convenções ANBIMA/Tesouro (252
+dias úteis), VNA da LFT pela Selic e da NTN-B pelo IPCA, curva à taxa de compra × mercado à taxa indicativa mensal, cupons
+com IR regressivo, custódia B3 e taxa do agente; **fundos** (`lib/fundos.ts`) – cota diária (% do CDI, CDI + spread,
+série mensal de multimercado/Ibovespa ou cambial), taxas de administração e performance na cota, come-cotas no último dia
+útil de maio e novembro (15% LP / 20% CP) e IR complementar no resgate; **time deposits** (`lib/timeDeposit.ts`) – juros
+simples ACT/360 em moeda original, conversão pela PTAX venda BCB importada do SAP (após a data-base, a PTAX da
+data-base), variação cambial acumulada e do mês, IOF câmbio de 0,38% e IRPJ/CSLL de 34%.
 
 O benchmark vale pela regra mais específica (tipo de produto › portfolio › empresa › carteira) vigente em cada dia: o
 rendimento de referência é capitalizado dia a dia (DI diário × % do benchmark), como os próprios papéis, e comparado com o
-realizado no R01 (desde a aplicação), R03 (período), R05 (mês a mês), Launchpad e alertas. Nesta demo o cadastro fica
-salvo no navegador de quem acessa.
+realizado de todos os tipos de contrato no R01 (desde a aplicação), R03 (período), R05 (mês a mês), R09, Painel de KPIs,
+Launchpad e alertas. Nesta demo o cadastro fica salvo no navegador de quem acessa.
 
 ## Captações Financeiras
 
@@ -45,6 +68,7 @@ salvo no navegador de quem acessa.
 | 2. Carteira e vencimentos | **C02 – Vencimentos e CP/LP** (perfil de amortização, não circulante por ano, fluxos projetados) | C02-Cronograma |
 | 3. Movimentação e custo | **C01 – Movimentação** (roll-forward e reconciliação com a DFC, CPC 03 item 44A) | C01-Movimentacao |
 | 3. Movimentação e custo | **C03 – Encargos e custo da dívida** (juros, atualização monetária, custos de transação, CPC 20, custo médio ponderado) | C03-Encargos |
+| 4. Covenants | **Painel de KPIs – Captações** (`/kpis`) – dívida bruta e líquida, custo médio × CDI, prazo médio, parcela de curto prazo, concentração por credor e indexador, covenants e folga, com metas, tendência e semáforo | Painel de KPIs |
 | 4. Covenants | **C04 – Covenants** (DL/EBITDA, ICSD, capitalização, EBITDA/despesa financeira, (DL + imóveis)/PL; waiver e reclassificação CPC 26) | C04-Covenants |
 | 5. Fechamento e nota | **C05 – Fechamento e conciliação** (TRM × FI-GL, TRM × extratos, checagens, checklist TBB1/TPM44/TPM1) | C05-Fechamento |
 | 5. Fechamento e nota | **C06 – Nota explicativa de captações** (composição, movimentação, vencimentos, características, custos, covenants, texto) | C06-NE-Captacoes |
@@ -62,7 +86,7 @@ disponível. Detalhes em [docs/GUIA-CAPTACOES.md](docs/GUIA-CAPTACOES.md).
 ## Destaques comuns
 
 - **Data-base selecionável** (topo da página): todos os relatórios são recalculados para o fechamento escolhido.
-- **Conciliações automáticas**: R03 = R05 = R01 = R02 nas aplicações; roll-forward, CP/LP e FI-GL nas captações.
+- **Conciliações automáticas**: R05 = R02 = Carteira-Mestre e roll-forward / FI-GL (R12) nas aplicações; roll-forward, CP/LP e FI-GL nas captações.
 - **Exportar Excel** em todos os relatórios (arquivo `.xlsx` real, com cabeçalho, totais e notas) e **Imprimir/PDF**.
 - **Central de alertas** (sino na shell bar) própria de cada produto.
 - Layout responsivo (desktop, tablet e celular).
@@ -122,7 +146,8 @@ src/
   captacoes/       produto Captações Financeiras (apps, contratos, motor da dívida, covenants, fechamento)
 ```
 
-Para trocar os dados de demonstração, edite `src/aplicacoes/data/carteira.ts` (aplicações), `src/captacoes/data/contratos.ts`
+Para trocar os dados de demonstração, edite `src/aplicacoes/data/carteira.ts` (renda fixa bancária), `tesouro.ts`,
+`fundos.ts` e `timeDeposits.ts` (demais aplicações), `src/captacoes/data/contratos.ts`
 (captações), `src/shared/data/mercado.ts` (premissas SAP) e `src/shared/data/corporativo.ts` (EBITDA, PL, caixa). Em
 produção, essas fontes são as CDS Views `IFINTRAN`, `IFINTRSMANAGE`, `IFINTRANSCNDN` e `CMATPROFILEQ` (ver os mapeamentos
 no app *Catálogo de CDS Views*).

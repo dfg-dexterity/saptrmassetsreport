@@ -327,7 +327,7 @@ export function PremissasApp() {
       mesAnterior,
       linhas: [
         { moeda: "BRL", nome: "Real", papel: "Moeda funcional e de apresentação", atual: 1, anterior: 1, variacao: 0 },
-        linha("USD", "Dólar dos EUA", p.ptaxUSD),
+        linha("USD", "Dólar", p.ptaxUSD),
         linha("EUR", "Euro", p.ptaxEUR),
       ],
     };
@@ -584,27 +584,33 @@ export function PremissasApp() {
             <table className="w-full text-sm min-w-[340px]">
               <thead>
                 <tr className="text-[13px] text-text">
-                  <th className="text-left font-semibold py-2 border-b border-[#a8b2bd]">Moeda</th>
-                  <th className="text-right font-semibold py-2 border-b border-[#a8b2bd]">{fmtDate(p.dataBase)}</th>
-                  <th className="text-right font-semibold py-2 border-b border-[#a8b2bd]">{fmtDate(cambio.mesAnterior)}</th>
-                  <th className="text-right font-semibold py-2 border-b border-[#a8b2bd]">Variação</th>
+                  <th className="text-left font-semibold py-2 border-b border-[#a8b2bd] align-bottom">Moeda</th>
+                  <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">
+                    Data-base
+                    <div className="text-xs font-normal text-label tabular">{fmtDate(p.dataBase)}</div>
+                  </th>
+                  <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] whitespace-nowrap">
+                    Mês anterior
+                    <div className="text-xs font-normal text-label tabular">{fmtDate(cambio.mesAnterior)}</div>
+                  </th>
+                  <th className="text-right font-semibold py-2 pl-3 border-b border-[#a8b2bd] align-bottom">Variação</th>
                 </tr>
               </thead>
               <tbody>
                 {cambio.linhas.map((c) => (
                   <tr key={c.moeda}>
-                    <td className="py-2.5 pr-3 border-b border-line-soft">
+                    <td className="py-2.5 pr-1 border-b border-line-soft align-top">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-text">{c.moeda}</span>
                         <span className="text-text">{c.nome}</span>
                       </div>
                       <div className="text-xs text-label mt-0.5">{c.papel}</div>
                     </td>
-                    <td className="py-2.5 border-b border-line-soft text-right tabular font-bold text-text">{fmtDec(c.atual, 4)}</td>
-                    <td className="py-2.5 border-b border-line-soft text-right tabular text-text">{fmtDec(c.anterior, 4)}</td>
+                    <td className="py-2.5 pl-3 border-b border-line-soft text-right tabular font-bold text-text align-top">{fmtDec(c.atual, 4)}</td>
+                    <td className="py-2.5 pl-3 border-b border-line-soft text-right tabular text-text align-top">{fmtDec(c.anterior, 4)}</td>
                     <td
                       className={clsx(
-                        "py-2.5 border-b border-line-soft text-right tabular font-semibold",
+                        "py-2.5 pl-3 border-b border-line-soft text-right tabular font-semibold align-top whitespace-nowrap",
                         c.variacao > 0.00005 ? "text-positive" : c.variacao < -0.00005 ? "text-critical-strong" : "text-label",
                       )}
                     >
@@ -666,7 +672,7 @@ export function PremissasApp() {
           <ul className="divide-y divide-line-soft">
             {REGIMES_IR.map((r) => (
               <li key={r.regime} className="py-2 flex gap-3">
-                <span className="w-24 shrink-0 font-semibold text-text">{r.regime}</span>
+                <span className="w-28 sm:w-40 shrink-0 font-semibold text-text">{r.regime}</span>
                 <span className="text-label text-[13px]">{r.descricao}</span>
               </li>
             ))}
