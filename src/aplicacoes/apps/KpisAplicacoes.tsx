@@ -748,11 +748,8 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
 
   // Taxas dos fundos (adm./perf.) cobradas na cota no período
   const fundos = FUNDOS.filter((x) => noEscopo(x.empresa));
-  const taxasFundoAte = (fu: Fundo, d: string) => {
-    if (d < fu.dataAplicacao) return 0;
-    const ate = fu.dataResgate && d >= fu.dataResgate ? addDays(fu.dataResgate, -1) : d;
-    return posicaoFundo(fu, ate, p).taxas;
-  };
+  // (o motor acumula as taxas até a data ou, se o fundo já foi resgatado, até o resgate)
+  const taxasFundoAte = (fu: Fundo, d: string) => (d < fu.dataAplicacao ? 0 : posicaoFundo(fu, d, p).taxas);
   const taxasFundos = (ini: string, fim: string) => fundos.reduce((s, fu) => s + taxasFundoAte(fu, fim) - taxasFundoAte(fu, ini), 0);
   const saldoMedio = (ms: { saldoInicial: number; saldoFinal: number }[]) =>
     ms.length ? ms.reduce((s, m) => s + (m.saldoInicial + m.saldoFinal) / 2, 0) / ms.length : 0;
