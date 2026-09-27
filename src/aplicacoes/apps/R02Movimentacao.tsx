@@ -541,7 +541,7 @@ export function R02Movimentacao() {
             </Card>
           </div>
           <Card title="Movimentação por tipo de contrato" subtitle="Consolidado · saldo bruto · R$ mil · as colunas somam a movimentação consolidada">
-            <div className="overflow-x-auto fiori-scroll">
+            <div className="hidden lg:block overflow-x-auto fiori-scroll">
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="text-[13px]">
@@ -583,6 +583,33 @@ export function R02Movimentacao() {
                 </tbody>
               </table>
             </div>
+          <ListaCartoes
+            itens={[
+              ...d.porTipo.map((t) => ({
+                chave: t.tipo,
+                titulo: (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
+                    {t.tipo}
+                    <Link to={t.rota} className="text-link hover:underline text-xs font-normal">
+                      {t.origem}
+                    </Link>
+                  </span>
+                ),
+                rotuloValor: "Saldo bruto final",
+                valor: fmtK(t.valores[6]),
+                campos: colunasMovTipo.slice(0, 6).map((c, i) => ({ rotulo: c, valor: fmtK(t.valores[i]) })),
+              })),
+              {
+                chave: "total",
+                titulo: "Total",
+                total: true,
+                rotuloValor: "Saldo bruto final",
+                valor: fmtK(k.brutoFim),
+                campos: colunasMovTipo.slice(0, 6).map((c, i) => ({ rotulo: c, valor: fmtK([k.brutoIni, k.aplicacoes, k.rendimentos, k.vc, k.resgates, k.comeCotas][i]) })),
+              },
+            ]}
+          />
           </Card>
         </>
       )}
@@ -608,7 +635,7 @@ export function R02Movimentacao() {
       {aba === "cplp" && (
         <>
           <Card title="Aplicações: Circulante vs Não Circulante + Remuneração" subtitle={`Consolidado · ${fmtDate(p.dataBase)} · remuneração média ponderada contratada`}>
-            <div className="overflow-x-auto fiori-scroll">
+            <div className="hidden lg:block overflow-x-auto fiori-scroll">
               <table className="w-full text-sm min-w-[820px]">
                 <thead>
                   <tr className="text-[13px]">
@@ -639,6 +666,30 @@ export function R02Movimentacao() {
                 </tbody>
               </table>
             </div>
+            <ListaCartoes
+              itens={[
+                ...d.cplp.map((l) => ({
+                  chave: l.id,
+                  titulo: l.tipo,
+                  sub: l.remuneracao,
+                  valor: fmtK(l.total),
+                  campos: [
+                    { rotulo: "Circulante", valor: fmtK(l.circulante) },
+                    { rotulo: "Não circulante", valor: fmtK(l.naoCirculante) },
+                  ],
+                })),
+                {
+                  chave: "total",
+                  titulo: "Total",
+                  total: true,
+                  valor: fmtK(circ + naoCirc),
+                  campos: [
+                    { rotulo: "Circulante", valor: fmtK(circ) },
+                    { rotulo: "Não circulante", valor: fmtK(naoCirc) },
+                  ],
+                },
+              ]}
+            />
             <ul className="text-xs text-label mt-4 space-y-1">
               <li>(i) Circulante: vencimento em até 12 meses, cotas de fundos (resgatáveis a qualquer tempo) e renda fixa bancária a VJR; títulos públicos e time deposits classificados pelo vencimento.</li>
               <li>(ii) Time deposits: taxa em moeda estrangeira (ACT/360), sem variação cambial; fundos remunerados pela variação das cotas.</li>
@@ -647,7 +698,7 @@ export function R02Movimentacao() {
           </Card>
 
           <Card title="Classificação e mensuração (CPC 48)" subtitle={`Consolidado · ${fmtDate(p.dataBase)} · valor contábil por categoria`}>
-            <div className="overflow-x-auto fiori-scroll">
+            <div className="hidden lg:block overflow-x-auto fiori-scroll">
               <table className="w-full text-sm min-w-[760px]">
                 <thead>
                   <tr className="text-[13px]">
@@ -684,6 +735,12 @@ export function R02Movimentacao() {
                 </tbody>
               </table>
             </div>
+            <ListaCartoes
+              itens={[
+                ...d.cplp.map((l) => ({ chave: l.id, titulo: l.tipo, valor: fmtK(l.total), campos: CLASSES_CPC48.map((c, i) => ({ rotulo: c.rotulo, valor: fmtK(l.cpc48[i]) })) })),
+                { chave: "total", titulo: "Total", total: true, valor: fmtK(k.contabilFim), campos: CLASSES_CPC48.map((c, i) => ({ rotulo: c.rotulo, valor: fmtK(d.cpcTotais[i]) })) },
+              ]}
+            />
             <ul className="text-xs text-label mt-4 space-y-1">
               <li>(i) Custo amortizado: modelo de negócios de manter para receber fluxos contratuais de principal e juros (teste SPPI).</li>
               <li>(ii) VJORA: manter para receber e vender – ajuste a valor justo em outros resultados abrangentes, reciclado no resultado na baixa.</li>
@@ -755,6 +812,40 @@ const TOL_CHECAGEM = 1;
 /** Item de checagem dentro da MessageStrip (o ícone é o da própria faixa): o texto já diz se confere ou diverge */
 function Checagem({ ok, children }: { ok: boolean; children: ReactNode }) {
   return <li className={ok ? undefined : "text-negative"}>{children}</li>;
+}
+
+/** Lista em cartões para o celular (as tabelas largas ficam em lg+): valores em R$ mil já formatados */
+function ListaCartoes({
+  itens,
+}: {
+  itens: { chave: string; titulo: ReactNode; sub?: string; rotuloValor?: string; valor: string; total?: boolean; campos: { rotulo: string; valor: string }[] }[];
+}) {
+  return (
+    <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft -mx-4">
+      {itens.map((it) => (
+        <li key={it.chave} className={clsx("px-4 py-3", it.total && "bg-[#f5f6f7]")}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className={clsx("text-sm text-text", it.total ? "font-bold" : "font-semibold")}>{it.titulo}</div>
+              {it.sub && <div className="text-xs text-label leading-snug mt-0.5">{it.sub}</div>}
+            </div>
+            <div className="text-right shrink-0">
+              {it.rotuloValor && <div className="text-xs text-label">{it.rotuloValor}</div>}
+              <div className="text-sm font-bold tabular text-text whitespace-nowrap">{it.valor}</div>
+            </div>
+          </div>
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+            {it.campos.map((c) => (
+              <div key={c.rotulo} className="min-w-0">
+                <dt className="text-xs text-label">{c.rotulo}</dt>
+                <dd className="text-text font-semibold tabular">{c.valor}</dd>
+              </div>
+            ))}
+          </dl>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function RotuloOrigem({ tipo, origem, rota }: { tipo: string; origem: string; rota: string }) {
