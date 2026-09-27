@@ -7,7 +7,8 @@ import { ALIQUOTA_IRPJ_CSLL } from "../data/tributacao";
 /**
  * R10 – Motor de time deposits: juros simples ACT/360 na moeda original, conversão pela PTAX (histórico importado do
  * SAP até a data-base; depois, a PTAX da data-base), variação cambial acumulada e do mês, IOF câmbio na remessa,
- * tarifa bancária e IRPJ/CSLL sobre o resultado (rendimento no exterior não tem IRRF – Lei 14.754/2023).
+ * tarifa bancária e IRPJ/CSLL sobre o resultado (rendimento de PJ no exterior não tem IRRF; é computado no lucro real –
+ * Lei 9.249/1995, art. 25).
  */
 
 /** Saldo na moeda original (principal + juros) ao fim do dia */
@@ -65,7 +66,8 @@ export function posicaoTimeDeposit(td: TimeDeposit, iso: string, p: Premissas): 
   const variacaoCambialMes = ativo ? saldoAntME * (ptax - ptaxBaseMes) : 0;
   const rendimentoBruto = ativo ? saldoBRL - principalBRL : 0;
   const iofCambio = ativo ? principalBRL * P.iofCambio : 0;
-  const tarifa = ativo ? P.tarifaUSD * ptaxNaData("USD", td.dataAplicacao, p) : 0;
+  // tarifa em US$ convertida pela taxa da remessa (a do próprio contrato nos TDs em USD)
+  const tarifa = ativo ? P.tarifaUSD * (td.moeda === "USD" ? td.ptaxAplicacao : ptaxNaData("USD", td.dataAplicacao, p)) : 0;
   const irpjCsll = Math.max(0, rendimentoBruto - iofCambio - tarifa) * ALIQUOTA_IRPJ_CSLL;
   return {
     td,

@@ -40,7 +40,7 @@ export const REGIMES_IR: { regime: RegimeIR; descricao: string }[] = [
   { regime: "Fundo LP (come-cotas 15%)", descricao: "Come-cotas 15% em mai/nov; complemento regressivo no resgate" },
   { regime: "Fundo CP (come-cotas 20%)", descricao: "Come-cotas 20% em mai/nov; 22,5% até 180 dias / 20% acima" },
   { regime: "Fundo de ações (15%)", descricao: "15% no resgate; sem come-cotas e sem IOF" },
-  { regime: "Exterior – IRPJ/CSLL", descricao: "Rendimento no exterior: sem IRRF, tributado no IRPJ/CSLL (Lei 14.754/2023)" },
+  { regime: "Exterior – IRPJ/CSLL", descricao: "Rendimento de PJ no exterior: sem IRRF, computado no lucro real – IRPJ/CSLL (Lei 9.249/1995, art. 25)" },
 ];
 
 /** Come-cotas (Lei 14.754/2023): último dia útil de maio e de novembro */

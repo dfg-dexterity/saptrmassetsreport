@@ -241,7 +241,9 @@ export function posicaoFundo(f: Fundo, iso: string, p: Premissas): PosicaoFundo 
     qtd = e.quantidadeDepois;
     de = e.data;
   }
-  if (ativo) taxas += qtd * (s.taxaPorCota[idx(iso)] - s.taxaPorCota[idx(de)]);
+  // até a data (fundo ativo) ou até o resgate (fundo já resgatado)
+  const ateTaxas = ativo ? iso : f.dataResgate && iso >= f.dataResgate ? f.dataResgate : null;
+  if (ateTaxas) taxas += qtd * (s.taxaPorCota[idx(ateTaxas)] - s.taxaPorCota[idx(de)]);
   const custoComeCotas = ativo ? ccAte.reduce((acc, e) => acc + e.ir * (cota / e.cota - 1), 0) : 0;
   const proximo = datasComeCotas(iso, addDays(iso, 200))[0] ?? null;
   return {
@@ -263,7 +265,7 @@ export function posicaoFundo(f: Fundo, iso: string, p: Premissas): PosicaoFundo 
     custoComeCotas,
     rentabBruta: f.valorAplicado > 0 ? rendimentoBruto / f.valorAplicado : 0,
     rentabLiquida: f.valorAplicado > 0 ? (rendimentoBruto - iof - irTotal) / f.valorAplicado : 0,
-    proximoComeCotas: aliquotaComeCotas(f) > 0 ? proximo : null,
+    proximoComeCotas: ativo && aliquotaComeCotas(f) > 0 ? proximo : null,
     liquidezImediata: f.diasResgate <= 1,
   };
 }
