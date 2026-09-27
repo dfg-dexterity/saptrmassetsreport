@@ -1,20 +1,39 @@
 import type { PremissasMercado } from "../../shared/data/mercado";
-import { addDays, diffDays, fromDay, toDay } from "../../shared/lib/dates";
-import { cdiAnual, chavePremissas } from "../../shared/lib/taxas";
+import { addDays, diffDays, fromDay, isBusinessDay, toDay } from "../../shared/lib/dates";
+import { cdiAnual, chavePremissas, ipcaAnual, tjlpAnual, tlpRealContratada } from "../../shared/lib/taxas";
 import type { ContratoDivida } from "../data/contratos";
 
 /**
  * Motor de cálculo das captações (custo amortizado).
  *
- * Cada contrato é simulado dia a dia, da captação ao vencimento (base de 365 dias corridos, conforme Premissas):
- * juros sobre o principal atualizado, atualização monetária (IPCA/TLP), apropriação linear dos custos de
- * transação e pagamentos de principal e juros nas datas contratuais. Até a data-base valem as taxas históricas
- * importadas do SAP; depois dela, o último dado disponível (projeção com taxa constante).
+ * Cada contrato é simulado dia a dia, da captação ao vencimento, com as convenções de mercado:
+ * - CDI (debêntures, CRA, CCB) e spread dos títulos IPCA+ (debêntures, CRA, CRI): juros exponenciais em base de
+ *   252 dias úteis (Fator DI × Fator Spread), apropriados só em dias úteis;
+ * - BNDES (TJLP e TLP): 365 dias corridos; a parcela da TJLP que excede 6% a.a. é capitalizada no saldo devedor
+ *   (Disposições Aplicáveis aos Contratos do BNDES) e os spreads básico e do agente são somados;
+ * - IPCA e TLP: atualização monetária do principal pelo IPCA, pro rata por dia corrido; a taxa real da TLP é a do mês
+ *   da contratação.
+ * Os juros compõem sobre o saldo (principal atualizado + juros apropriados) até cada data de pagamento; os custos de
+ * transação são apropriados linearmente pelo prazo. Até a data-base valem as séries históricas importadas do SAP
+ * (CDI, IPCA, TJLP); depois dela, o último dado disponível (projeção com taxa constante).
  */
 
 // ---------------------------------------------------------------------------
 // Taxas
 // ---------------------------------------------------------------------------
+
+/** Parcela da TJLP paga como juros; o excedente sobre 6% a.a. é capitalizado no principal */
+export const TETO_TJLP_JUROS = 0.06;
+
+/** Spread total a.a. do contrato (básico + agente financeiro, somados como nas escrituras do BNDES) */
+function spreadTotal(c: ContratoDivida): number {
+  return c.spread + (c.spreadAgente ?? 0);
+}
+
+/** Juros em base de 252 dias úteis (instrumentos de mercado) × 365 dias corridos (BNDES) */
+export function base252(c: ContratoDivida): boolean {
+  return c.indexador === "CDI" || c.indexador === "IPCA" || c.indexador === "Pré";
+}
 
 /** Taxa de juros a.a. do contrato no dia (sem a correção monetária) */
 export function taxaJurosAnual(c: ContratoDivida, day: number, p: PremissasMercado): number {
@@ -24,22 +43,30 @@ export function taxaJurosAnual(c: ContratoDivida, day: number, p: PremissasMerca
     case "IPCA":
       return c.spread;
     case "TJLP":
-      return (1 + p.tjlp) * (1 + c.spread) * (1 + (c.spreadAgente ?? 0)) - 1;
+      return (1 + Math.min(tjlpAnual(day, p), TETO_TJLP_JUROS)) * (1 + spreadTotal(c)) - 1;
     case "TLP":
-      return (1 + p.tlpReal) * (1 + c.spread) - 1;
+      return (1 + tlpRealContratada(c.dataCaptacao)) * (1 + spreadTotal(c)) - 1;
     case "Pré":
       return c.spread;
   }
 }
 
-/** Correção monetária a.a. do principal (IPCA para IPCA+ e TLP) */
+/** Atualização monetária a.a. do principal no dia: IPCA (IPCA+ e TLP) ou excedente da TJLP sobre 6% a.a. */
+export function correcaoAnualNoDia(c: ContratoDivida, day: number, p: PremissasMercado): number {
+  if (c.indexador === "IPCA" || c.indexador === "TLP") return ipcaAnual(day, p);
+  if (c.indexador === "TJLP") return Math.max(0, (1 + tjlpAnual(day, p)) / (1 + TETO_TJLP_JUROS) - 1);
+  return 0;
+}
+
+/** Atualização monetária a.a. vigente na data-base (último dado disponível) */
 export function correcaoAnual(c: ContratoDivida, p: PremissasMercado): number {
-  return c.indexador === "IPCA" || c.indexador === "TLP" ? p.ipca12m : 0;
+  return correcaoAnualNoDia(c, toDay(p.dataBase), p);
 }
 
 /** Custo total a.a. (juros + correção monetária) com as taxas vigentes na data */
 export function taxaEfetivaAnual(c: ContratoDivida, data: string, p: PremissasMercado): number {
-  return (1 + taxaJurosAnual(c, toDay(data), p)) * (1 + correcaoAnual(c, p)) - 1;
+  const day = toDay(data);
+  return (1 + taxaJurosAnual(c, day, p)) * (1 + correcaoAnualNoDia(c, day, p)) - 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,8 +126,7 @@ function simular(c: ContratoDivida, p: PremissasMercado): Simulacao {
   const amort = new Map<string, number>();
   for (const a of c.amortizacoes) amort.set(a.data, (amort.get(a.data) ?? 0) + a.pct);
   const datasJuros = new Set(c.datasJuros);
-  const corr = correcaoAnual(c, p);
-  const fCorr = Math.pow(1 + corr, 1 / 365) - 1;
+  const du252 = base252(c);
   const custoDia = c.custosTransacao / n;
   const capAte = c.capitalizacaoCPC20 ? toDay(c.capitalizacaoCPC20.ate) : -Infinity;
 
@@ -131,8 +157,12 @@ function simular(c: ContratoDivida, p: PremissasMercado): Simulacao {
 
   for (let i = 1; i <= n; i++) {
     const dia = d0 + i;
-    const juros = pa * (Math.pow(1 + taxaJurosAnual(c, dia - 1, p), 1 / 365) - 1);
-    const am = pa * fCorr;
+    const acumula = dia - 1; // dia cuja taxa é apropriada
+    const taxa = taxaJurosAnual(c, acumula, p);
+    const fJuros = du252 ? (isBusinessDay(acumula) ? Math.pow(1 + taxa, 1 / 252) - 1 : 0) : Math.pow(1 + taxa, 1 / 365) - 1;
+    // juros compostos sobre o saldo devedor (principal atualizado + juros apropriados desde o último pagamento)
+    const juros = (pa + jap) * fJuros;
+    const am = pa * (Math.pow(1 + correcaoAnualNoDia(c, acumula, p), 1 / 365) - 1);
     pa += am;
     jap += juros;
     ca -= custoDia;

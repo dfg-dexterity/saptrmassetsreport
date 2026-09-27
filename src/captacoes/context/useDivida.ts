@@ -73,7 +73,8 @@ export function calcularAlertasCaptacoes(p: PremissasMercado): Alerta[] {
   const limite30 = addDays(db, 30);
   for (const x of pos) {
     const ev = x.proximoPagamento;
-    if (ev && ev.data <= limite30) {
+    // a liquidação final já é coberta pelo alerta de vencimento
+    if (ev && ev.data <= limite30 && ev.data !== x.c.vencimento) {
       out.push({
         id: `pag-${x.c.id}`,
         severidade: "information",
@@ -102,24 +103,35 @@ export function calcularAlertasCaptacoes(p: PremissasMercado): Alerta[] {
     const jaAmortizou = x.c.amortizacoes.some((a) => a.data <= db);
     // contratos bullet: a primeira amortização é o próprio vencimento (já coberto pelo alerta de vencimento final)
     const bullet = inicioAmort?.data === x.c.vencimento;
-    if (!jaAmortizou && !bullet && inicioAmort && inicioAmort.data <= limite12m && eventosFuturos(x.c, db, p).length > 0) {
+    if (!jaAmortizou && !bullet && !x.reclassificado && inicioAmort && inicioAmort.data <= limite12m && eventosFuturos(x.c, db, p).length > 0) {
       out.push({
         id: `car-${x.c.id}`,
         severidade: "information",
-        titulo: `Fim da carência de ${x.c.id} em ${fmtDate(inicioAmort.data)}`,
-        descricao: `${x.c.descricaoAmortizacao}. A parcela circulante passa a incluir o principal.`,
+        titulo: `Início da amortização de ${x.c.id} em ${fmtDate(inicioAmort.data)}`,
+        descricao: `${x.c.descricaoAmortizacao}. ${fmtCompact(x.principalCirculante)} de principal dos próximos 12 meses já estão no circulante.`,
         rota: "/c02-cronograma",
       });
     }
-    if (x.c.capitalizacaoCPC20 && x.c.capitalizacaoCPC20.ate > db && x.c.capitalizacaoCPC20.ate <= limite12m) {
-      out.push({
-        id: `cpc20-${x.c.id}`,
-        severidade: "information",
-        titulo: `Capitalização de juros (CPC 20) de ${x.c.id} termina em ${fmtDate(x.c.capitalizacaoCPC20.ate)}`,
-        descricao: `Após a entrada em operação do ativo (${x.c.capitalizacaoCPC20.ativo}), os encargos passam à despesa financeira.`,
-        rota: "/c03-encargos",
-      });
-    }
+  }
+
+  // Fim da capitalização de encargos (CPC 20): um alerta por ativo qualificável e data
+  const cpc20 = new Map<string, { ate: string; ativo: string; ids: string[] }>();
+  for (const x of pos) {
+    const cap = x.c.capitalizacaoCPC20;
+    if (!cap || cap.ate <= db || cap.ate > limite12m) continue;
+    const k = `${cap.ate}|${cap.ativo}`;
+    const g = cpc20.get(k) ?? { ate: cap.ate, ativo: cap.ativo, ids: [] };
+    g.ids.push(x.c.id);
+    cpc20.set(k, g);
+  }
+  for (const g of cpc20.values()) {
+    out.push({
+      id: `cpc20-${g.ids.join("-")}`,
+      severidade: "information",
+      titulo: `Capitalização de juros (CPC 20) de ${g.ids.join(" e ")} termina em ${fmtDate(g.ate)}`,
+      descricao: `Após a entrada em operação do ativo qualificável (${g.ativo}), os encargos passam à despesa financeira.`,
+      rota: "/c03-encargos",
+    });
   }
 
   const gl = conciliacaoGL(pos, db);

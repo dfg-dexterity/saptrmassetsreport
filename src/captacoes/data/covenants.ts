@@ -57,8 +57,8 @@ export const COVENANTS_DIVIDA: CovenantDivida[] = [
   },
   {
     id: "ebitdaDespFin",
-    indicador: "EBITDA / despesa financeira",
-    formula: "EBITDA ÷ encargos financeiros da dívida dos últimos 12 meses",
+    indicador: "EBITDA / encargos financeiros",
+    formula: "EBITDA ÷ encargos financeiros da dívida dos últimos 12 meses (inclusive os capitalizados – CPC 20)",
     tipo: "min",
     limite: 2.0,
     alerta: 2.5,

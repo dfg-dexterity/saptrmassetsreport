@@ -879,9 +879,9 @@ export function C01Movimentacao() {
       </div>
 
       <MessageStrip design="information">
-        Movimentação de {periodoTexto} ({escopoLabel.replace(/ \(.*\)$/, "")}) calculada pelo custo amortizado, base de{" "}
-        {p.baseDiasCorridos} dias corridos, com as premissas importadas do SAP: CDI pela série histórica até a data-base; IPCA,
-        TJLP e TLP pelo último dado disponível. O período termina na data-base, portanto não há parcelas projetadas nesta tela
+        Movimentação de {periodoTexto} ({escopoLabel.replace(/ \(.*\)$/, "")}) calculada pelo custo amortizado (CDI e spread de títulos em{" "}
+        {p.baseDiasUteis} dias úteis; BNDES e correção monetária em {p.baseDiasCorridos} dias corridos), com as premissas
+        importadas do SAP: séries históricas de CDI, IPCA e TJLP até a data-base. O período termina na data-base, portanto não há parcelas projetadas nesta tela
         – pagamentos futuros estão em{" "}
         <Link to="/c02-cronograma" className="text-link hover:underline">
           C02

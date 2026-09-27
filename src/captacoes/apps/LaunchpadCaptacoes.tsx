@@ -82,7 +82,7 @@ const NOME_CURTO: Record<CovenantId, string> = {
   dlEbitda: "Dívida líquida / EBITDA",
   icsd: "ICSD (serviço da dívida)",
   capitalizacao: "Índice de capitalização",
-  ebitdaDespFin: "EBITDA / despesa financeira",
+  ebitdaDespFin: "EBITDA / encargos financeiros",
   dlImoveisPl: "(DL + imóveis a pagar) / PL",
 };
 

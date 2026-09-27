@@ -1,4 +1,4 @@
-import { CDI_MENSAL, PRIMEIRO_MES_CDI, type PremissasMercado } from "../data/mercado";
+import { CDI_MENSAL, IPCA_12M_MENSAL, PRIMEIRO_MES_CDI, TJLP_MENSAL, TLP_REAL_MENSAL, valorDoMes, type PremissasMercado } from "../data/mercado";
 import { fromDay } from "./dates";
 
 /**
@@ -17,6 +17,28 @@ export function selicAnual(day: number, p: PremissasMercado): number {
   const key = fromDay(day).slice(0, 7);
   if (key > p.dataBase.slice(0, 7)) return p.selic;
   return cdiAnual(day, p) + 0.001;
+}
+
+/** Valor histórico do mês até a data-base; depois dela, o último dado disponível (valor das premissas) */
+function historicoOuProjecao(serie: Record<string, number>, day: number, p: PremissasMercado, projecao: number): number {
+  const key = fromDay(day).slice(0, 7);
+  if (key > p.dataBase.slice(0, 7)) return projecao;
+  return valorDoMes(serie, key);
+}
+
+/** IPCA 12 meses (taxa anual de correção) vigente no dia */
+export function ipcaAnual(day: number, p: PremissasMercado): number {
+  return historicoOuProjecao(IPCA_12M_MENSAL, day, p, p.ipca12m);
+}
+
+/** TJLP a.a. vigente no dia */
+export function tjlpAnual(day: number, p: PremissasMercado): number {
+  return historicoOuProjecao(TJLP_MENSAL, day, p, p.tjlp);
+}
+
+/** TLP real contratada: taxa do mês da contratação (fixa por toda a vida do contrato) */
+export function tlpRealContratada(dataContratacao: string): number {
+  return valorDoMes(TLP_REAL_MENSAL, dataContratacao.slice(0, 7));
 }
 
 /** Chave de cache das premissas (mudam apenas com a data-base) */

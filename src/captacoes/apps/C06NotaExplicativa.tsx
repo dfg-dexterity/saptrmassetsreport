@@ -149,7 +149,7 @@ const NOME_TEXTO: Record<CovenantId, string> = {
   dlEbitda: "índice dívida líquida/EBITDA",
   icsd: "índice de cobertura do serviço da dívida (ICSD)",
   capitalizacao: "índice de capitalização (patrimônio líquido/ativo total)",
-  ebitdaDespFin: "índice EBITDA/despesa financeira",
+  ebitdaDespFin: "índice EBITDA/encargos financeiros",
   dlImoveisPl: "índice (dívida líquida + imóveis a pagar)/patrimônio líquido",
 };
 
@@ -157,7 +157,7 @@ const SIGLA: Record<CovenantId, string> = {
   dlEbitda: "DL/EBITDA",
   icsd: "ICSD",
   capitalizacao: "índice de capitalização",
-  ebitdaDespFin: "EBITDA/despesa financeira",
+  ebitdaDespFin: "EBITDA/encargos financeiros",
   dlImoveisPl: "(DL + imóveis a pagar)/PL",
 };
 
@@ -1729,7 +1729,7 @@ export function C06NotaExplicativa() {
               })}
             </ul>
             <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft">
-              Índices apurados com base nas demonstrações financeiras consolidadas: trimestrais (DL/EBITDA, EBITDA/despesa financeira e
+              Índices apurados com base nas demonstrações financeiras consolidadas: trimestrais (DL/EBITDA, EBITDA/encargos financeiros e
               (DL + imóveis a pagar)/PL) e anuais (ICSD e índice de capitalização). O descumprimento sem waiver obtido até a data do balanço
               exige a classificação do passivo no circulante (CPC 26, item 74).
             </p>

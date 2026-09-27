@@ -1,4 +1,4 @@
-import { IMPORTACAO_SAP, type PremissasMercado } from "../../shared/data/mercado";
+import { CDI_MENSAL, IMPORTACAO_SAP, ultimoDadoNaDataBase, type PremissasMercado } from "../../shared/data/mercado";
 import { previousYearEnd } from "../../shared/lib/dates";
 import { CONTRATOS } from "../data/contratos";
 import {
@@ -161,8 +161,8 @@ export function checagensIntegridade(
     {
       id: "mercado",
       descricao: "Dados de mercado importados do SAP até a data-base",
-      ok: dataBase <= IMPORTACAO_SAP.ultimoDadoDisponivel,
-      detalhe: `Último dado disponível: ${IMPORTACAO_SAP.ultimoDadoDisponivel.split("-").reverse().join("/")}`,
+      ok: dataBase <= IMPORTACAO_SAP.ultimoDadoDisponivel && CDI_MENSAL[dataBase.slice(0, 7)] !== undefined,
+      detalhe: `Último dado disponível na data-base: ${ultimoDadoNaDataBase(dataBase).split("-").reverse().join("/")}`,
     },
     {
       id: "gl",

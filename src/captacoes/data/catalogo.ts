@@ -100,7 +100,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     titulo: "C04 – Covenants",
     tituloCurto: "Covenants",
     descricao:
-      "DL/EBITDA, ICSD, índice de capitalização, EBITDA/despesa financeira e (DL + imóveis)/PL: folga, status, waiver e reclassificação para o circulante.",
+      "DL/EBITDA, ICSD, índice de capitalização, EBITDA/encargos financeiros e (DL + imóveis)/PL: folga, status, waiver e reclassificação para o circulante.",
     publico: "Tesouraria / RI / Diretoria",
     periodicidade: "Trimestral / Anual",
     norma: "CPC 26 / escrituras",

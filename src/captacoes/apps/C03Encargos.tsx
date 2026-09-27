@@ -538,7 +538,7 @@ export function C03Encargos() {
             tot.taxaAnualizada,
           ],
           notas: [
-            "Encargos pelo custo amortizado: juros exponenciais e correção monetária (base 365 dias corridos) e apropriação linear dos custos de transação.",
+            "Encargos pelo custo amortizado: juros exponenciais compostos (CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos, com o excedente da TJLP sobre 6% a.a. capitalizado), correção monetária pelo IPCA e apropriação linear dos custos de transação.",
             "Saldo médio = média dos saldos contábeis diários do período (dias sem saldo contam como zero).",
             "Taxa do período = total de encargos ÷ saldo médio; taxa anualizada = (1 + taxa do período)^(365 / dias) − 1.",
             "Despesa financeira = total de encargos − encargos capitalizados em ativo qualificável (CPC 20).",

@@ -1,6 +1,6 @@
 import type { PremissasMercado as Premissas } from "../../shared/data/mercado";
 import { addDays, diffDays, isBusinessDay, toDay } from "../../shared/lib/dates";
-import { cdiAnual as cdiDoDia, chavePremissas, selicAnual as selicDoDia } from "../../shared/lib/taxas";
+import { cdiAnual as cdiDoDia, chavePremissas, ipcaAnual as ipcaDoDia, selicAnual as selicDoDia } from "../../shared/lib/taxas";
 import type { Operacao } from "../data/carteira";
 import { TABELA_IOF, TABELA_IRRF, type RegimeIR } from "../data/tributacao";
 
@@ -53,10 +53,16 @@ function fatorOperacao(op: Operacao, ate: string, p: Premissas): number {
       }
       f *= Math.pow(1 + op.taxa, du / 252);
       break;
-    case "IPCA":
-      for (let d = a; d < b; d++) if (isBusinessDay(d)) du++;
-      f = Math.pow(1 + p.ipca12m, (b - a) / 365) * Math.pow(1 + op.taxa, du / 252);
+    case "IPCA": {
+      // IPCA histórico importado do SAP até a data-base (pro rata por dia corrido) × taxa real em dias úteis
+      let fIpca = 1;
+      for (let d = a; d < b; d++) {
+        fIpca *= Math.pow(1 + ipcaDoDia(d, p), 1 / 365);
+        if (isBusinessDay(d)) du++;
+      }
+      f = fIpca * Math.pow(1 + op.taxa, du / 252);
       break;
+    }
     case "Pré":
       for (let d = a; d < b; d++) if (isBusinessDay(d)) du++;
       f = Math.pow(1 + op.taxa, du / 252);

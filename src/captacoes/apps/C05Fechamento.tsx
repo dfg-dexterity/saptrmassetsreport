@@ -9,7 +9,7 @@ import { CHART_COLORS, HeaderKpi, MicroBar } from "../../shared/components/fiori
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
-import { IMPORTACAO_SAP } from "../../shared/data/mercado";
+import { ultimoDadoNaDataBase } from "../../shared/data/mercado";
 import { fmtDate, fromDay, isBusinessDay, toDay } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec } from "../../shared/lib/format";
@@ -316,7 +316,7 @@ export function C05Fechamento() {
           ],
           notas: [
             `Arredondamento: diferença de centavos (PU × quantidade) dentro da tolerância de ${TOLERANCIA}.`,
-            `Saldos TRM calculados com os dados de mercado importados do SAP (último dado disponível: ${fmtDate(IMPORTACAO_SAP.ultimoDadoDisponivel)}).`,
+            `Saldos TRM calculados com os dados de mercado importados do SAP (último dado disponível: ${fmtDate(ultimoDadoNaDataBase(db))}).`,
             "Os custos de transação a apropriar não constam dos extratos e não entram nesta conciliação.",
           ],
         },
@@ -818,7 +818,7 @@ export function C05Fechamento() {
             </li>
             <li>
               (ii) Saldos do TRM calculados com os dados de mercado importados do SAP (último dado disponível:{" "}
-              {fmtDate(IMPORTACAO_SAP.ultimoDadoDisponivel)}); a projeção dos fluxos futuros usa esse mesmo último dado e não entra
+              {fmtDate(ultimoDadoNaDataBase(db))}); a projeção dos fluxos futuros usa esse mesmo último dado e não entra
               na conciliação.
             </li>
             <li>

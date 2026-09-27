@@ -121,6 +121,13 @@ export function isBusinessDay(day: number): boolean {
   return !holidays(year).has(day);
 }
 
+/** A própria data, se for dia útil; senão, o próximo dia útil (convenção de pagamento do calendário BR) */
+export function proximoDiaUtil(iso: string): string {
+  let d = toDay(iso);
+  while (!isBusinessDay(d)) d++;
+  return fromDay(d);
+}
+
 /** Dias úteis no intervalo [from, to) */
 export function businessDays(from: string, to: string): number {
   const a = toDay(from);

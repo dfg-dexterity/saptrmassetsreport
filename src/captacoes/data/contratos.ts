@@ -1,4 +1,4 @@
-import { addMonths } from "../../shared/lib/dates";
+import { addMonths, proximoDiaUtil } from "../../shared/lib/dates";
 
 /**
  * C00 – Carteira de captações (dados fictícios do ambiente de teste).
@@ -77,7 +77,26 @@ function unir(...listas: string[][]): string[] {
   return [...new Set(listas.flat())].sort();
 }
 
-export const CONTRATOS: ContratoDivida[] = [
+/**
+ * Datas contratuais que caem em fim de semana ou feriado são pagas no dia útil seguinte (calendário BR, como o SAP faz
+ * com o calendário de fábrica da transação).
+ */
+function ajustarDiasUteis(c: ContratoDivida): ContratoDivida {
+  const amort = new Map<string, number>();
+  for (const a of c.amortizacoes) {
+    const d = proximoDiaUtil(a.data);
+    amort.set(d, (amort.get(d) ?? 0) + a.pct);
+  }
+  const vencimento = proximoDiaUtil(c.vencimento);
+  return {
+    ...c,
+    vencimento,
+    amortizacoes: [...amort.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([data, pct]) => ({ data, pct })),
+    datasJuros: [...new Set(c.datasJuros.map(proximoDiaUtil))].sort(),
+  };
+}
+
+const CONTRATOS_BASE: ContratoDivida[] = [
   {
     id: "DEB-01",
     transacao: "50000112",
@@ -125,6 +144,7 @@ export const CONTRATOS: ContratoDivida[] = [
     garantias: "Cessão fiduciária dos recebíveis do contrato de energia (PPA) e alienação fiduciária das ações da SPE",
     covenants: ["ebitdaDespFin"],
     finalidade: "Projeto de infraestrutura – parque solar (Lei 12.431)",
+    capitalizacaoCPC20: { ate: "2026-06-30", ativo: "Imobilizado em andamento – parque solar" },
     portfolio: "TES-DIVIDA",
   },
   {
@@ -287,7 +307,8 @@ export const CONTRATOS: ContratoDivida[] = [
     agente: "Banco Bradesco (agente financeiro)",
     formaBNDES: "Indireto",
     indexador: "TLP",
-    spread: 0.014,
+    spread: 0.009,
+    spreadAgente: 0.005,
     dataCaptacao: "2025-02-10",
     vencimento: "2031-02-17",
     valorCaptado: 6_000_000,
@@ -368,10 +389,12 @@ export const CONTRATOS: ContratoDivida[] = [
     descricaoJuros: "No vencimento",
     garantias: "Aval da controladora",
     covenants: [],
-    finalidade: "Capital de giro (ponte até a debênture incentivada)",
+    finalidade: "Reforço de capital de giro",
     portfolio: "TES-DIVIDA",
   },
 ];
+
+export const CONTRATOS: ContratoDivida[] = CONTRATOS_BASE.map(ajustarDiasUteis);
 
 export function contratoPorId(id: string): ContratoDivida {
   const c = CONTRATOS.find((x) => x.id === id);
@@ -389,7 +412,7 @@ export function taxaContratadaDivida(c: ContratoDivida): string {
     case "TJLP":
       return c.spreadAgente ? `TJLP + ${pct(c.spread)}% + ${pct(c.spreadAgente)}% (agente)` : `TJLP + ${pct(c.spread)}% a.a.`;
     case "TLP":
-      return `TLP + ${pct(c.spread)}% a.a.`;
+      return c.spreadAgente ? `TLP + ${pct(c.spread)}% + ${pct(c.spreadAgente)}% (agente)` : `TLP + ${pct(c.spread)}% a.a.`;
     case "Pré":
       return `${pct(c.spread)}% a.a.`;
   }
