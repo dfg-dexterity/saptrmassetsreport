@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BENCHMARKS_PADRAO, type Benchmark } from "../data/benchmark";
 
-const CHAVE = "dxt-aplicacoes-benchmarks-v1";
+// v2: cadastro padrão com regras para títulos públicos, exterior e fundos de crédito (v1 fica obsoleta)
+const CHAVE = "dxt-aplicacoes-benchmarks-v2";
 
 interface Ctx {
   cadastro: Benchmark[];
@@ -32,7 +33,9 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(CHAVE, JSON.stringify(cadastro));
+      // grava só alterações do usuário; o padrão não é persistido (novas versões do padrão chegam a quem não alterou)
+      if (JSON.stringify(cadastro) === JSON.stringify(BENCHMARKS_PADRAO)) window.localStorage.removeItem(CHAVE);
+      else window.localStorage.setItem(CHAVE, JSON.stringify(cadastro));
     } catch {
       /* armazenamento indisponível – segue em memória */
     }
