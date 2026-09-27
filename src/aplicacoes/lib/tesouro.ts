@@ -167,8 +167,26 @@ export interface EventoTitulo {
   tipo: "Cupom" | "Vencimento";
   /** valor bruto recebido (R$) */
   bruto: number;
+  /** base de cálculo do IR retido no evento */
+  base: number;
   ir: number;
   liquido: number;
+}
+
+/**
+ * Juros decorridos (cupom corrido) pagos na compra de NTN-F/NTN-B entre datas de cupom: fração do 1º cupom
+ * proporcional aos dias corridos desde a data do cupom anterior. Não compõem o rendimento tributável do 1º cupom.
+ */
+export function jurosDecorridosCompra(t: TituloPublico, p: Premissas): number {
+  if (t.tipo !== "NTN-F" && t.tipo !== "NTN-B") return 0;
+  const primeiro = fluxosTitulo(t).find((f) => f.tipo === "Cupom" && f.data > t.dataCompra);
+  if (!primeiro) return 0;
+  // data de referência do cupom (antes do ajuste para dia útil) e a anterior, seis meses antes
+  const ref = addMonths(t.vencimento, -6 * Math.round(diffDays(primeiro.data, t.vencimento) / 182.625));
+  const anterior = addMonths(ref, -6);
+  const fracao = Math.min(1, Math.max(0, diffDays(anterior, t.dataCompra) / Math.max(1, diffDays(anterior, ref))));
+  const vna = t.tipo === "NTN-B" ? vnaNTNB(t.dataCompra, p) : 1;
+  return t.quantidade * primeiro.valor * vna * fracao;
 }
 
 const cacheEventos = new Map<string, EventoTitulo[]>();
@@ -178,20 +196,28 @@ export function eventosTitulo(t: TituloPublico, p: Premissas): EventoTitulo[] {
   const k = `${t.id}|${chavePremissas(p)}`;
   const hit = cacheEventos.get(k);
   if (hit) return hit;
-  const puCompra = puTitulo(t, t.dataCompra, t.taxaCompra, p);
+  const valorCompra = t.quantidade * puTitulo(t, t.dataCompra, t.taxaCompra, p);
+  const decorridos = jurosDecorridosCompra(t, p);
   const out: EventoTitulo[] = [];
   let cuponsAcumulados = 0;
+  let tributado = 0;
+  let primeiroCupom = true;
   for (const f of fluxosTitulo(t)) {
     if (f.data <= t.dataCompra) continue;
     const indexado = t.tipo === "LFT" || t.tipo === "NTN-B Principal" || t.tipo === "NTN-B";
     const vna = t.tipo === "LFT" ? vnaLFT(f.data, p) : indexado ? vnaNTNB(f.data, p) : 1;
     const bruto = t.quantidade * f.valor * vna;
     const dias = diffDays(t.dataCompra, f.data);
-    // IR: sobre o cupom integral; no vencimento, sobre o ganho em relação ao valor de compra ainda não tributado
-    const base = f.tipo === "Cupom" ? bruto : Math.max(0, bruto + cuponsAcumulados - t.quantidade * puCompra - cuponsAcumulados);
+    // IR: cupom (o 1º sem os juros decorridos pagos na compra); no vencimento, o ganho total ainda não tributado
+    let base: number;
+    if (f.tipo === "Cupom") {
+      base = Math.max(0, bruto - (primeiroCupom ? decorridos : 0));
+      primeiroCupom = false;
+      cuponsAcumulados += bruto;
+    } else base = Math.max(0, bruto + cuponsAcumulados - valorCompra - tributado);
+    tributado += base;
     const ir = base * aliquotaIR(dias, "Regressivo");
-    if (f.tipo === "Cupom") cuponsAcumulados += bruto;
-    out.push({ data: f.data, tipo: f.tipo === "Cupom" ? "Cupom" : "Vencimento", bruto, ir, liquido: bruto - ir });
+    out.push({ data: f.data, tipo: f.tipo === "Cupom" ? "Cupom" : "Vencimento", bruto, base, ir, liquido: bruto - ir });
   }
   cacheEventos.set(k, out);
   return out;
@@ -242,10 +268,12 @@ export function posicaoTitulo(t: TituloPublico, iso: string, p: Premissas): Posi
   const cupons = eventos.filter((e) => e.tipo === "Cupom");
   const cuponsRecebidos = cupons.reduce((s, e) => s + e.bruto, 0);
   const irCupons = cupons.reduce((s, e) => s + e.ir, 0);
+  const baseCupons = cupons.reduce((s, e) => s + e.base, 0);
   const diasCorridos = Math.max(0, diffDays(t.dataCompra, iso));
   const rendimentoBruto = ativo ? saldoCurva + cuponsRecebidos - valorCompra : 0;
   const iof = rendimentoBruto > 0 ? rendimentoBruto * aliquotaIOF(diasCorridos) : 0;
-  const irProvisao = Math.max(0, saldoCurva - valorCompra - iof) * aliquotaIR(diasCorridos, "Regressivo");
+  // provisão sobre o rendimento ainda não tributado na fonte (cupons já recebidos saem da base)
+  const irProvisao = Math.max(0, rendimentoBruto - iof - baseCupons) * aliquotaIR(diasCorridos, "Regressivo");
   const ir = ativo ? irCupons + irProvisao : 0;
   const taxas = ativo ? ((valorCompra + saldoCurva) / 2) * (P.custodiaB3 + P.taxaAgente) * (diasCorridos / 365) : 0;
   const indexado = t.tipo === "LFT" ? vnaLFT(iso, p) : t.tipo === "NTN-B" || t.tipo === "NTN-B Principal" ? vnaNTNB(iso, p) : null;
