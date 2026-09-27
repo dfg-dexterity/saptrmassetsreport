@@ -3,6 +3,8 @@
 - **Fonte SAP “72”** (`src/assets/fonts/72-*.woff2`) – copiada do pacote
   [`@sap-theming/theming-base-content`](https://www.npmjs.com/package/@sap-theming/theming-base-content)
   (SAP SE), distribuído sob a licença Apache-2.0.
+- **Logotipo da Dexterity IT Solutions** (`src/shared/components/shell/DexterityLogo.tsx`, `public/favicon.svg`) – marca
+  da própria Dexterity, no traçado oficial do site.
 - **Ícones** – [Lucide](https://lucide.dev) (ISC).
 - **Gráficos** – [Recharts](https://recharts.org) (MIT).
 - **Exportação Excel** – [write-excel-file](https://gitlab.com/catamphetamine/write-excel-file) (MIT).
