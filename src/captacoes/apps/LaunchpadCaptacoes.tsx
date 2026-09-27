@@ -201,7 +201,7 @@ export function LaunchpadCaptacoes() {
           c,
           data: primeira.data,
           titulo: `${c.id} · início da amortização`,
-          detalhe: `${fmtDate(primeira.data)} · 1ª parcela + juros ${fmtCompact(primeira.principal + primeira.juros)}`,
+          detalhe: `${fmtDate(primeira.data)} · Principal + juros · ${fmtCompact(primeira.principal + primeira.juros)}`,
           dica: `1ª parcela em ${fmtDate(primeira.data)}: principal ${fmtCompact(primeira.principal)} + juros ${fmtCompact(primeira.juros)} (projeção com o último dado disponível)`,
           critico: false,
         });
@@ -305,7 +305,7 @@ export function LaunchpadCaptacoes() {
       title: "Carteira de Captações",
       subtitle: "C00 · Custo amortizado",
       value: fmtMi(d.total),
-      unit: "R$ milhões",
+      unit: "R$\u00a0milhões",
       footer: `${plural(posicoes.length, "contrato ativo", "contratos ativos")} · ${plural(d.empresas, "empresa", "empresas")}`,
       wide: true,
       chart: (
@@ -358,7 +358,7 @@ export function LaunchpadCaptacoes() {
       subtitle: `C01 · Desde ${fmtDate(abertura)}`,
       value: `${d.variacao > 0.05e6 ? "+" : d.variacao < -0.05e6 ? "\u2212" : ""}${fmtMi(Math.abs(d.variacao))}`,
       indicator: d.variacao >= 0 ? "up" : "down",
-      unit: "R$ milhões no exercício",
+      unit: "R$\u00a0milhões no exercício",
       footer: `Captações: ${fmtCompact(d.mov.captacoes)}`,
     },
     c03: {
@@ -394,7 +394,7 @@ export function LaunchpadCaptacoes() {
       title: "Nota Explicativa de Captações",
       subtitle: "C06 · CPC 40 / CPC 26",
       value: fmtMi(d.total),
-      unit: "R$ milhões (consolidado)",
+      unit: "R$\u00a0milhões (consolidado)",
       footer: (
         <span title={`Circulante ${fmtCompact(d.circulante)} · Não circulante ${fmtCompact(d.naoCirculante)}`}>
           CP {fmtMi(d.circulante)} · NC {fmtMi(d.naoCirculante)}

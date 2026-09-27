@@ -310,28 +310,37 @@ function registroMil(celulas: number[], saldoFinal: number, capitalizados: numbe
 }
 
 /**
- * Movimentação em R$ mil que fecha nas linhas e nas colunas: por modalidade (saldo inicial e saldo final totais
- * iguais aos da carteira arredondada) e por contrato (totais por etapa iguais aos da visão por modalidade).
+ * Movimentação em R$ mil que fecha nas linhas e nas colunas: por modalidade (saldo inicial e saldo final totais iguais
+ * aos da carteira arredondada) e, dentro de cada modalidade, por contrato (os contratos somam a modalidade), de modo
+ * que as visões por modalidade e por contrato mostrem os mesmos números. A parcela capitalizada (CPC 20) é arredondada
+ * junto com a parcela do resultado, para que as duas somem os encargos de cada contrato.
  */
-function movimentacaoMil(grupos: { grupo: string; t: Totais }[], linhas: MovContrato[], t: Totais) {
+function movimentacaoMil(grupos: { grupo: string; linhas: MovContrato[]; t: Totais }[], t: Totais) {
   const k = (v: number) => v / 1000;
-  const capTotal = Math.round(k(t.capitalizados));
-  if (!grupos.length) return { porGrupo: new Map<string, Mil>(), porContrato: new Map<string, Mil>(), total: registroMil([], 0, 0) };
+  const porGrupo = new Map<string, Mil>();
+  const porContrato = new Map<string, Mil>();
+  if (!grupos.length) return { porGrupo, porContrato, total: registroMil([], 0, 0) };
   const g = arredondarTabela(
     grupos.map((x) => CAMPOS_SOMA.map((c) => k(x.t[c]))),
     { colunas: [Math.round(k(t.saldoInicial))], geral: Math.round(k(t.saldoFinal)) },
   );
-  const capG = ratear(grupos.map((x) => k(x.t.capitalizados)), capTotal);
-  const ct = arredondarTabela(
-    linhas.map((l) => CAMPOS_SOMA.map((c) => k(l[c]))),
-    { colunas: g.colunas, geral: g.geral },
-  );
-  const capC = ratear(linhas.map((l) => k(l.capitalizados)), capTotal);
-  return {
-    porGrupo: new Map(grupos.map((x, i) => [x.grupo, registroMil(g.celulas[i], g.linhas[i], capG[i])])),
-    porContrato: new Map(linhas.map((l, i) => [l.c.id, registroMil(ct.celulas[i], ct.linhas[i], capC[i])])),
-    total: registroMil(g.colunas, g.geral, capTotal),
-  };
+  let capTotal = 0;
+  grupos.forEach((x, i) => {
+    const ct = arredondarTabela(
+      x.linhas.map((l) => CAMPOS_SOMA.map((c) => k(l[c]))),
+      { colunas: g.celulas[i], geral: g.linhas[i] },
+    );
+    const regs = x.linhas.map((_, j) => registroMil(ct.celulas[j], ct.linhas[j], 0));
+    // encargos de cada contrato = parcela do resultado + parcela capitalizada
+    const split = arredondarTabela(
+      x.linhas.map((l) => [k(l.juros + l.atualizacaoMonetaria + l.apropriacaoCustos - l.capitalizados), k(l.capitalizados)]),
+      { linhas: regs.map((r) => r.encargos), geral: regs.reduce((s, r) => s + r.encargos, 0) },
+    );
+    x.linhas.forEach((l, j) => porContrato.set(l.c.id, { ...regs[j], capitalizados: split.celulas[j][1] }));
+    porGrupo.set(x.grupo, registroMil(g.celulas[i], g.linhas[i], split.colunas[1]));
+    capTotal += split.colunas[1];
+  });
+  return { porGrupo, porContrato, total: registroMil(g.colunas, g.geral, capTotal) };
 }
 
 // ---------------------------------------------------------------------------
@@ -782,7 +791,7 @@ export function C01Movimentacao() {
     const liquidados = linhas.filter((l) => l.saldoInicial > 0 && Math.abs(l.saldoFinal) < 1);
     const capitalizados = linhas.filter((l) => l.capitalizados > 0);
     const dfc = reconciliar(linhas, t);
-    const mil = movimentacaoMil(grupos, linhas, t);
+    const mil = movimentacaoMil(grupos, t);
     return {
       linhas,
       t,
@@ -800,6 +809,7 @@ export function C01Movimentacao() {
   }, [contratos, inicio, fim, p, posicoes]);
 
   const { t } = d;
+  const milContrato = (l: MovContrato) => d.mil.porContrato.get(l.c.id)!;
   const fechado = Math.abs(d.diferenca) <= TOLERANCIA;
   const bateCarteira = Math.abs(t.saldoFinal - d.carteira) <= TOLERANCIA;
   const variacao = t.saldoFinal - t.saldoInicial;
@@ -941,18 +951,28 @@ export function C01Movimentacao() {
       align: "right",
       minWidth: e.saldo ? 104 : 92,
       value: (l) => l[e.campo],
-      render: (l) => <span className={e.saldo ? "font-semibold" : undefined}>{fmtMil(l[e.campo])}</span>,
-      total: () => fmtMil(t[e.campo]),
+      render: (l) => <span className={e.saldo ? "font-semibold" : undefined}>{fmtK(milContrato(l)[e.campo])}</span>,
+      total: () => fmtK(d.mil.total[e.campo]),
     })),
+    {
+      key: "encargos",
+      header: "Encargos",
+      headerTitle: `${LINHA_ENCARGOS}: ${DESC_ENCARGOS} (informativo – não entra na soma)`,
+      align: "right",
+      minWidth: 96,
+      value: (l) => l.juros + l.atualizacaoMonetaria + l.apropriacaoCustos,
+      render: (l) => <span className="italic text-label">{fmtK(milContrato(l).encargos)}</span>,
+      total: () => <span className="italic">{fmtK(d.mil.total.encargos)}</span>,
+    },
     {
       key: "capitalizados",
       header: "Capitalizados",
-      headerTitle: LINHA_CPC20,
+      headerTitle: `${LINHA_CPC20} (informativo)`,
       align: "right",
       minWidth: 104,
       value: (l) => l.capitalizados,
-      render: (l) => <span className="italic text-label">{fmtMil(l.capitalizados)}</span>,
-      total: () => <span className="italic">{fmtMil(t.capitalizados)}</span>,
+      render: (l) => <span className="italic text-label">{fmtK(milContrato(l).capitalizados)}</span>,
+      total: () => <span className="italic">{fmtK(d.mil.total.capitalizados)}</span>,
     },
   ];
 
@@ -970,7 +990,6 @@ export function C01Movimentacao() {
           <HeaderKpi
             label="Captações líquidas"
             value={fmtCompact(d.dfc.captacoesLiquidas)}
-            state={d.dfc.captacoesLiquidas > 0 ? "information" : "neutral"}
             sub={
               d.novas.length
                 ? `${d.novas.length > 2 ? `${d.novas.length} contratos` : d.novas.map((l) => l.c.id).join(", ")} · custos ${fmtCompact(-t.custosTransacao)}`
@@ -1009,41 +1028,41 @@ export function C01Movimentacao() {
               ]}
             />
           </Campo>
-          <div className="min-w-0 lg:ml-auto lg:text-right">
-            <div className="text-[13px] text-label">Período de apuração</div>
-            <div className="text-sm font-semibold text-text tabular mt-0.5">{periodoTexto}</div>
-            <div className="text-xs text-label">
-              {descricaoPeriodo(periodo, fim)} · {dias} dias
-            </div>
-          </div>
+          <PeriodoInfo per={per} />
         </div>
       </div>
 
-      {/* Roll-forward */}
+      {/* Movimentação */}
       <Card
         title={visao === "modalidade" ? "Movimentação da dívida por modalidade" : "Movimentação da dívida por contrato"}
         subtitle={
           visao === "modalidade"
-            ? `Roll-forward pelo custo amortizado · ${periodoTexto} · R$ mil`
-            : `Roll-forward pelo custo amortizado · ${periodoTexto} · R$ mil · a coluna Capitalizados (CPC 20) é informativa`
+            ? `Movimentação pelo custo amortizado · ${periodoTexto} · R$ mil`
+            : `Movimentação pelo custo amortizado · ${periodoTexto} · R$ mil · as colunas Encargos e Capitalizados (CPC 20) são informativas`
         }
         status={
           <span className="hidden sm:inline-flex">
             <ObjectStatus state={fechado ? "positive" : "negative"} inverted>
-              {fechado ? "Roll-forward fechado" : "Roll-forward não fecha"}
+              {fechado ? "Movimentação conciliada" : "Movimentação não concilia"}
             </ObjectStatus>
           </span>
         }
         bodyClassName="px-0 pb-0"
       >
         {visao === "modalidade" ? (
-          <TabelaModalidade grupos={d.grupos} t={t} inicio={inicio} fim={fim} estreito={estreito} />
+          <TabelaModalidade
+            grupos={d.grupos.map((g) => ({ grupo: g.grupo, n: g.linhas.length, v: d.mil.porGrupo.get(g.grupo)! }))}
+            total={d.mil.total}
+            inicio={inicio}
+            fim={fim}
+            estreito={estreito}
+          />
         ) : (
           <DataTable columns={colunasContrato} rows={d.linhas} rowKey={(l) => l.c.id} showTotals />
         )}
 
         <div className="border-t border-line-soft px-4 py-3 flex flex-col md:flex-row md:flex-wrap md:items-center gap-x-8 gap-y-2 text-[13px]">
-          <Checagem ok={fechado} titulo={fechado ? "Roll-forward fechado" : "Roll-forward não fecha"}>
+          <Checagem ok={fechado} titulo={fechado ? "Movimentação conciliada" : "Movimentação não concilia"}>
             saldo inicial + movimentações − saldo final = {fmtBRL(Math.abs(d.diferenca) < 0.005 ? 0 : d.diferenca, true)}
           </Checagem>
           <Checagem ok={bateCarteira} titulo={bateCarteira ? "Saldo final confere com a carteira" : "Saldo final diverge da carteira"}>
@@ -1053,17 +1072,19 @@ export function C01Movimentacao() {
             em {fmtDate(fim)}: {fmtBRL(d.carteira)}
           </Checagem>
         </div>
-        {d.capitalizados.length > 0 && (
-          <p className="border-t border-line-soft px-4 py-2.5 text-xs text-label leading-relaxed">
-            <span className="italic">{LINHA_CPC20}</span>: parcela dos encargos (juros, atualização monetária e apropriação de custos)
-            capitalizada em ativo qualificável – {ativoCPC20}. É informativa: já está contida nas linhas de encargos e não altera o
-            saldo da dívida; a despesa financeira do período está em{" "}
-            <Link to="/c03-encargos" className="text-link hover:underline">
-              C03
-            </Link>
-            .
-          </p>
-        )}
+        <p className="border-t border-line-soft px-4 py-2.5 text-xs text-label leading-relaxed">
+          Linhas informativas, que não entram na soma do saldo: <span className="italic">{LINHA_ENCARGOS}</span> ({DESC_ENCARGOS})
+          {d.capitalizados.length > 0 ? (
+            <>
+              {" "}e <span className="italic">{LINHA_CPC20}</span> – parcela dos encargos capitalizada em ativo qualificável: {ativoCPC20}
+            </>
+          ) : null}
+          . A despesa financeira do período está em{" "}
+          <Link to="/c03-encargos" className="text-link hover:underline">
+            C03
+          </Link>
+          .
+        </p>
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
@@ -1119,14 +1140,14 @@ export function C01Movimentacao() {
           </div>
           <table className="w-full text-sm">
             <tbody>
-              {linhasDFC.map((l) => (
+              {linhasDFC(d.dfcMil, d.mil.total.saldoInicial).map((l) => (
                 <LinhaDFC key={l.rotulo} {...l} />
               ))}
             </tbody>
           </table>
           <div className="px-4 py-3 border-t border-line-soft space-y-2">
             <Checagem ok={Math.abs(d.dfc.variacao - variacao) <= TOLERANCIA} titulo="Soma = variação do saldo">
-              {fmtBRL(t.saldoFinal)} − {fmtBRL(t.saldoInicial)} = {comSinal(variacao, fmtBRL)}
+              {fmtK(d.mil.total.saldoFinal)} − {fmtK(d.mil.total.saldoInicial)} = {fmtK(d.dfcMil.variacao)} (R$ mil)
             </Checagem>
             <p className="text-xs text-label leading-relaxed">¹ {notaPolitica}</p>
             <p className="text-xs text-label leading-relaxed">² {notaCPC20}</p>
@@ -1135,14 +1156,17 @@ export function C01Movimentacao() {
       </div>
 
       <MessageStrip design="information">
-        Movimentação de {periodoTexto} ({escopoLabel.replace(/ \(.*\)$/, "")}) calculada pelo custo amortizado (CDI e spread de títulos em{" "}
-        {p.baseDiasUteis} dias úteis; BNDES e correção monetária em {p.baseDiasCorridos} dias corridos), com as premissas
-        importadas do SAP: séries históricas de CDI, IPCA e TJLP até a data-base. O período termina na data-base, portanto não há parcelas projetadas nesta tela
-        – pagamentos futuros estão em{" "}
+        Movimentação de {periodoTexto} ({escopoLabel.replace(/ \(.*\)$/, "")}) pelo custo amortizado, com juros compostos: CDI e
+        spread dos títulos em {p.baseDiasUteis} dias úteis; BNDES em {p.baseDiasCorridos} dias corridos, com o excedente da TJLP
+        sobre 6% a.a. capitalizado no principal (apresentado como atualização monetária); correção pelo IPCA pro rata por dia
+        corrido e TLP com a taxa real da contratação. Encargos calculados com as séries históricas de CDI, IPCA, TJLP e TLP
+        importadas do SAP; pagamentos em dia não útil são liquidados no dia útil seguinte. O período termina na data-base,
+        portanto não há parcelas projetadas nesta tela – pagamentos futuros estão em{" "}
         <Link to="/c02-cronograma" className="text-link hover:underline">
           C02
         </Link>
-        . O pagamento de principal de contratos IPCA/TLP inclui a atualização monetária da parcela amortizada.
+        . O pagamento de principal dos contratos IPCA, TLP e TJLP inclui a atualização monetária da parcela amortizada. Valores
+        em R$ mil arredondados de modo que linhas e colunas fechem.
       </MessageStrip>
     </ReportPage>
   );

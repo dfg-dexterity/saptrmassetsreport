@@ -38,7 +38,7 @@ import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 import { ESCOPOS, useDivida, type Escopo } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
-import { EMPRESAS_DIVIDA, taxaContratadaDivida, type ContratoDivida, type IndexadorDivida } from "../data/contratos";
+import { COR_INDEXADOR, EMPRESAS_DIVIDA, taxaContratadaDivida, type ContratoDivida, type IndexadorDivida } from "../data/contratos";
 import {
   custoMedioPonderado,
   encargosDivida,
@@ -52,7 +52,7 @@ const rel = relatorioCaptacao("c03");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 const legendStyle = { fontSize: 12, fontFamily: "72, Arial" };
 
-/** Cores dos componentes dos encargos (a atualização monetária usa a cor do IPCA das Premissas) */
+/** Cores dos componentes dos encargos */
 const COR = {
   juros: CHART_COLORS[0],
   atualizacao: CHART_COLORS[1],
@@ -63,71 +63,73 @@ const COR = {
   custoMedio: CHART_COLORS[4],
 };
 
-/** Mesma ordem e cores dos indexadores da tela de Premissas */
+/** Mesma ordem dos indexadores da tela de Premissas (cores de COR_INDEXADOR, iguais em todas as telas) */
 const INDEXADORES: IndexadorDivida[] = ["CDI", "IPCA", "TJLP", "TLP", "Pré"];
-const COR_INDEXADOR: Record<IndexadorDivida, string> = {
-  CDI: CHART_COLORS[0],
-  IPCA: CHART_COLORS[1],
-  TJLP: CHART_COLORS[2],
-  TLP: CHART_COLORS[3],
-  "Pré": CHART_COLORS[5],
-};
 
 // ---------------------------------------------------------------------------
-// Período
+// Período de apuração (helper idêntico no C01 e no C03)
 // ---------------------------------------------------------------------------
 
-type Periodo = "mes" | "tri" | "ano" | "12m";
+type Periodo = "mes" | "trimestre" | "exercicio" | "12m";
 
 const PERIODOS: { value: Periodo; label: string }[] = [
   { value: "mes", label: "Mês" },
-  { value: "tri", label: "Trimestre" },
-  { value: "ano", label: "Exercício" },
+  { value: "trimestre", label: "Trimestre" },
+  { value: "exercicio", label: "Exercício" },
   { value: "12m", label: "12 meses" },
 ];
 
-/** Data de abertura do período (saldo inicial); os encargos correm do dia seguinte até a data-base */
-function inicioPeriodo(periodo: Periodo, dataBase: string): string {
-  switch (periodo) {
-    case "mes":
-      return lastMonthEnds(dataBase, 2)[0];
-    case "tri":
-      return lastMonthEnds(dataBase, ((monthOf(dataBase) - 1) % 3) + 2)[0];
-    case "ano":
-      return previousYearEnd(dataBase);
-    case "12m":
-      return lastMonthEnds(dataBase, 13)[0];
-  }
+interface PeriodoApuracao {
+  /** data do saldo de abertura (fim do período anterior); os encargos correm do dia seguinte até a data-base */
+  inicio: string;
+  fim: string;
+  dias: number;
+  /** "1º trimestre de 2026", "Exercício de 2026 (jan a mar)" */
+  descricao: string;
+  /** "1T26", "mar/26" – KPIs */
+  curto: string;
+  /** "31/12/2025 a 31/03/2026 · 90 dias" – mesmo formato no C01 e no C03 */
+  rotulo: string;
 }
 
-function rotuloPeriodo(periodo: Periodo, inicio: string, dataBase: string): string {
+/**
+ * Mês = mês da data-base; Trimestre = trimestre civil até a data-base; Exercício = desde 31/12 do ano anterior;
+ * 12 meses = os 12 meses encerrados na data-base.
+ */
+function periodoApuracao(periodo: Periodo, dataBase: string): PeriodoApuracao {
   const mes = monthOf(dataBase);
-  const primeiroMes = fmtMonthShort(addDays(inicio, 1));
-  switch (periodo) {
-    case "mes": {
-      const longo = fmtMonthLong(dataBase);
-      return longo.charAt(0).toUpperCase() + longo.slice(1);
-    }
-    case "tri":
-      return `${Math.ceil(mes / 3)}º trimestre de ${yearOf(dataBase)}${mes % 3 === 0 ? "" : ` (até ${fmtMonthShort(dataBase)})`}`;
-    case "ano":
-      return mes === 1 ? `Exercício de ${yearOf(dataBase)} (jan)` : `Exercício de ${yearOf(dataBase)} (${primeiroMes.slice(0, 3)} a ${fmtMonthShort(dataBase).slice(0, 3)})`;
-    case "12m":
-      return `12 meses (${primeiroMes} a ${fmtMonthShort(dataBase)})`;
-  }
+  const ano = yearOf(dataBase);
+  const mesesNoTrimestre = ((mes - 1) % 3) + 1;
+  const inicio =
+    periodo === "mes"
+      ? lastMonthEnds(dataBase, 2)[0]
+      : periodo === "trimestre"
+        ? lastMonthEnds(dataBase, mesesNoTrimestre + 1)[0]
+        : periodo === "exercicio"
+          ? previousYearEnd(dataBase)
+          : lastMonthEnds(dataBase, 13)[0];
+  const dias = diffDays(inicio, dataBase);
+  const mesAbrev = fmtMonthShort(dataBase).slice(0, 3);
+  const mesLongo = fmtMonthLong(dataBase);
+  const [descricao, curto] =
+    periodo === "mes"
+      ? [mesLongo.charAt(0).toUpperCase() + mesLongo.slice(1), fmtMonthShort(dataBase)]
+      : periodo === "trimestre"
+        ? [`${Math.ceil(mes / 3)}º trimestre de ${ano}${mesesNoTrimestre < 3 ? ` (até ${mesAbrev})` : ""}`, fmtQuarter(dataBase)]
+        : periodo === "exercicio"
+          ? [mes === 12 ? `Exercício de ${ano}` : `Exercício de ${ano} (${mes === 1 ? "jan" : `jan a ${mesAbrev}`})`, `Exercício ${ano}`]
+          : [`12 meses (${fmtMonthShort(addDays(inicio, 1))} a ${fmtMonthShort(dataBase)})`, "12 meses"];
+  return { inicio, fim: dataBase, dias, descricao, curto, rotulo: `${fmtDate(inicio)} a ${fmtDate(dataBase)} · ${dias} dias` };
 }
 
-function rotuloCurto(periodo: Periodo, dataBase: string): string {
-  switch (periodo) {
-    case "mes":
-      return fmtMonthShort(dataBase);
-    case "tri":
-      return fmtQuarter(dataBase);
-    case "ano":
-      return `Exercício ${yearOf(dataBase)}`;
-    case "12m":
-      return "12 meses";
-  }
+function PeriodoInfo({ per }: { per: PeriodoApuracao }) {
+  return (
+    <div className="min-w-0 lg:ml-auto lg:text-right">
+      <div className="text-[13px] text-label">Período de apuração</div>
+      <div className="text-sm font-semibold text-text mt-0.5">{per.descricao}</div>
+      <div className="text-xs text-label tabular">{per.rotulo}</div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +219,10 @@ interface CustoContrato {
 
 interface LinhaIndexador {
   indexador: IndexadorDivida;
-  contratos: string[];
+  /** contratos em aberto na data-base */
+  ativos: string[];
+  /** contratos liquidados no período (só entram nos encargos) */
+  liquidados: string[];
   saldo: number;
   participacao: number;
   custoMedio: number;
@@ -242,14 +247,13 @@ interface ContratoCPC20 {
 
 export function C03Encargos() {
   const [escopo, setEscopo] = useState<Escopo>("todas");
-  const [periodo, setPeriodo] = useState<Periodo>("ano");
+  const [periodo, setPeriodo] = useState<Periodo>("exercicio");
   const { premissas: p, contratos, posicoes } = useDivida(escopo);
   const { posicoes: posicoesConsolidadas } = useDivida("todas");
   const db = p.dataBase;
-  const inicio = inicioPeriodo(periodo, db);
-  const dias = diffDays(inicio, db);
-  const rotulo = rotuloPeriodo(periodo, inicio, db);
-  const curto = rotuloCurto(periodo, db);
+  const per = periodoApuracao(periodo, db);
+  const { inicio, dias, curto } = per;
+  const rotulo = per.descricao;
   const escopoLabel = ESCOPOS.find((e) => e.value === escopo)?.label ?? "";
   const ultimoDado = ultimoDadoNaDataBase(db);
 
@@ -282,16 +286,18 @@ export function C03Encargos() {
       const enc = linhas.filter((x) => x.c.indexador === ix);
       const t = totalizar(enc, dias);
       const saldo = totalDivida(pos);
+      const ativos = pos.map((x) => x.c.id);
       return {
         indexador: ix,
-        contratos: [...new Set([...pos.map((x) => x.c.id), ...enc.map((x) => x.c.id)])],
+        ativos,
+        liquidados: [...new Set(enc.map((x) => x.c.id))].filter((id) => !ativos.includes(id)),
         saldo,
         participacao: saldoTotal > 0 ? saldo / saldoTotal : 0,
         custoMedio: custoMedioPonderado(pos),
         encargos: t.total,
         taxaAnualizada: t.taxaAnualizada,
       };
-    }).filter((x) => x.contratos.length > 0);
+    }).filter((x) => x.ativos.length + x.liquidados.length > 0);
 
     // CPC 20 – contratos que financiam ativo qualificável
     const cpc20: ContratoCPC20[] = contratos
@@ -321,7 +327,6 @@ export function C03Encargos() {
   const xMax = Math.max(5, Math.ceil((maxTaxa + 1) / 5) * 5);
   const xTicks = Array.from({ length: xMax / 5 + 1 }, (_, i) => i * 5);
   const indexadoresNoGrafico = INDEXADORES.filter((ix) => d.custo.some((x) => x.pos.c.indexador === ix));
-  const periodoDatas = `${fmtDate(addDays(inicio, 1))} a ${fmtDate(db)}`;
   const eixoMensal = escalaEixo(Math.max(0, ...d.mensal.map((m) => m.total)));
 
   // -------------------------------------------------------------------------
@@ -377,21 +382,14 @@ export function C03Encargos() {
       headerTitle: "Média dos saldos contábeis diários do período (custo amortizado)",
     }),
     valorCol("juros", "Juros", (x) => x.juros),
-    valorCol("am", "Atualização monetária", (x) => x.atualizacaoMonetaria, { headerTitle: "Correção monetária do principal (IPCA / TLP)" }),
-    valorCol("custos", "Apropriação de custos", (x) => x.apropriacaoCustos, {
-      headerTitle: "Apropriação linear dos custos de transação (CPC 48 – custo amortizado)",
+    valorCol("am", "Atualização monetária", (x) => x.atualizacaoMonetaria, {
+      headerTitle: "Correção monetária do principal (IPCA / TLP) e excedente da TJLP sobre 6% a.a. capitalizado no principal",
+    }),
+    valorCol("custos", "Apropr. custos", (x) => x.apropriacaoCustos, {
+      headerTitle: "Apropriação de custos: apropriação linear dos custos de transação (CPC 48 – custo amortizado)",
     }),
     valorCol("total", "Total de encargos", (x) => x.total, { bold: true }),
-    {
-      key: "cap",
-      header: "Capitalizados",
-      headerTitle: "Encargos capitalizados no ativo qualificável (CPC 20)",
-      align: "right",
-      value: (x) => x.capitalizados,
-      render: (x) =>
-        x.capitalizados > 0 ? <span className="text-info font-semibold">{fmtNum(x.capitalizados)}</span> : <span className="text-label">–</span>,
-      total: () => fmtNum(tot.capitalizados, { dash: true }),
-    },
+    valorCol("cap", "Capitalizados", (x) => x.capitalizados, { headerTitle: "Encargos capitalizados no ativo qualificável (CPC 20)" }),
     valorCol("despesa", "Despesa financeira", (x) => x.despesaFinanceira, { headerTitle: "Encargos − capitalizados (resultado financeiro)" }),
     {
       key: "taxaPeriodo",
@@ -425,9 +423,7 @@ export function C03Encargos() {
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_INDEXADOR[x.indexador] }} />
             {x.indexador}
           </span>
-          <div className="text-xs text-label whitespace-nowrap">
-            {x.contratos.length} contrato{x.contratos.length === 1 ? "" : "s"}
-          </div>
+          <div className="text-xs text-label whitespace-nowrap">{qtdContratos(x)}</div>
         </div>
       ),
       total: () => "Carteira",
@@ -488,7 +484,7 @@ export function C03Encargos() {
         {
           nome: "C03 - Encargos",
           titulo: "C03 – Encargos e custo da dívida",
-          subtitulo: `${escopoLabel} · ${rotulo} (${periodoDatas}, ${dias} dias) · Valores em R$`,
+          subtitulo: `${escopoLabel} · ${rotulo}: ${per.rotulo} · Valores em R$`,
           colunas: [
             { titulo: "Contrato", largura: 10 },
             { titulo: "Empresa", largura: 22 },
@@ -538,7 +534,8 @@ export function C03Encargos() {
             tot.taxaAnualizada,
           ],
           notas: [
-            "Encargos pelo custo amortizado: juros exponenciais compostos (CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos, com o excedente da TJLP sobre 6% a.a. capitalizado), correção monetária pelo IPCA e apropriação linear dos custos de transação.",
+            "Encargos pelo custo amortizado: juros exponenciais compostos (CDI e spread dos títulos em 252 dias úteis; BNDES em 365 dias corridos, com o excedente da TJLP sobre 6% a.a. capitalizado no principal e apresentado como atualização monetária; TLP com a taxa real da contratação), correção monetária pelo IPCA pro rata por dia corrido e apropriação linear dos custos de transação.",
+            "Taxas realizadas: séries históricas de CDI, IPCA, TJLP e TLP importadas do SAP; pagamentos em dia não útil liquidados no dia útil seguinte.",
             "Saldo médio = média dos saldos contábeis diários do período (dias sem saldo contam como zero).",
             "Taxa do período = total de encargos ÷ saldo médio; taxa anualizada = (1 + taxa do período)^(365 / dias) − 1.",
             "Despesa financeira = total de encargos − encargos capitalizados em ativo qualificável (CPC 20).",
@@ -622,7 +619,7 @@ export function C03Encargos() {
           ],
           linhas: d.indexadores.map((x) => [
             x.indexador,
-            x.contratos.join(", "),
+            listaContratos(x),
             x.saldo,
             x.participacao,
             x.saldo > 0 ? x.custoMedio : null,
@@ -666,9 +663,8 @@ export function C03Encargos() {
           <HeaderKpi label="Encargos do período" value={fmtCompact(tot.total)} sub={`${curto} · ${dias} dias`} />
           <HeaderKpi label="Despesa financeira" value={fmtCompact(tot.despesaFinanceira)} sub="Encargos − capitalizados" />
           <HeaderKpi
-            label="Juros capitalizados (CPC 20)"
+            label="Encargos capitalizados (CPC 20)"
             value={fmtCompact(tot.capitalizados)}
-            state={tot.capitalizados > 0 ? "information" : "neutral"}
             sub={tot.capitalizados > 0 ? `${fmtPct(pctCapitalizado, 1)} dos encargos` : "Sem ativo qualificável"}
           />
           <HeaderKpi label="Custo médio ponderado" value={fmtPct(d.custoMedio)} unit="a.a." sub={`Posições em ${fmtDate(db)}`} />
@@ -686,20 +682,14 @@ export function C03Encargos() {
             <span className="text-[13px] text-label">Período</span>
             <SegmentedButton value={periodo} onChange={setPeriodo} items={PERIODOS} className="self-start" />
           </div>
-          <div className="lg:ml-auto text-[13px] text-label lg:text-right">
-            <span className="text-text font-semibold">{rotulo}</span>
-            <span className="block sm:inline">
-              <span className="hidden sm:inline"> · </span>
-              {periodoDatas} · {dias} dias · valores em R$
-            </span>
-          </div>
+          <PeriodoInfo per={per} />
         </div>
       </div>
 
       {/* Encargos por contrato */}
       <Card
         title={`Encargos por contrato (${linhas.length})`}
-        subtitle={`${rotulo} · custo amortizado, encargos realizados com as taxas históricas importadas do SAP`}
+        subtitle={`${rotulo} · R$ · custo amortizado, encargos realizados com as séries históricas importadas do SAP`}
         bodyClassName="px-0 pb-0"
         className="min-w-0 overflow-hidden"
       >
@@ -756,9 +746,13 @@ export function C03Encargos() {
           </li>
         </ul>
         <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft">
-          Saldo médio = média dos saldos contábeis diários do período (dias sem saldo contam como zero). Taxa do período =
-          total de encargos ÷ saldo médio; taxa anualizada = (1 + taxa do período)<sup>365/{dias}</sup> − 1 – inclui a
-          apropriação dos custos de transação. Despesa financeira = encargos − capitalizados (CPC 20).
+          Juros compostos sobre o saldo devedor: CDI e spread dos títulos em {p.baseDiasUteis} dias úteis; BNDES em{" "}
+          {p.baseDiasCorridos} dias corridos, com o excedente da TJLP sobre 6% a.a. capitalizado no principal (coluna
+          Atualização monetária), e TLP com a taxa real da contratação; taxas realizadas pelas séries históricas de CDI, IPCA,
+          TJLP e TLP importadas do SAP. Saldo médio = média dos saldos contábeis diários do período (dias sem saldo contam como
+          zero). Taxa do período = total de encargos ÷ saldo médio; taxa anualizada = (1 + taxa do período)
+          <sup>365/{dias}</sup> − 1 – inclui a apropriação dos custos de transação. Despesa financeira = encargos −
+          capitalizados (CPC 20).
         </p>
       </Card>
 
@@ -787,7 +781,7 @@ export function C03Encargos() {
                   tickFormatter={(v: number) => fmtNum(v / 1000)}
                 />
                 <Tooltip cursor={{ fill: "#f2f4f6" }} content={({ active, payload }) => (active && payload?.length ? <TooltipMes m={payload[0].payload as MesEncargos} /> : null)} />
-                <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
+                <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                 <Bar dataKey="juros" name="Juros" stackId="e" fill={COR.juros} isAnimationActive={false}>
                   {d.mensal.map((m) => (
                     <Cell key={m.fim} fillOpacity={m.noPeriodo ? 1 : 0.35} />
@@ -825,7 +819,7 @@ export function C03Encargos() {
         </Card>
 
         {/* CPC 20 */}
-        <Card title="Juros capitalizados (CPC 20)" subtitle="Encargos atribuíveis a ativo qualificável" className="min-w-0">
+        <Card title="Encargos capitalizados (CPC 20)" subtitle="Encargos atribuíveis a ativo qualificável · R$" className="min-w-0">
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-[13px] text-label">Encargos – {curto}</span>
             <span className="text-base font-bold tabular text-text whitespace-nowrap">{fmtBRL(tot.total)}</span>
@@ -969,7 +963,7 @@ export function C03Encargos() {
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_INDEXADOR[x.indexador] }} />
                       {x.indexador}
                     </span>
-                    <div className="text-xs text-label mt-0.5">{x.contratos.join(", ")}</div>
+                    <div className="text-xs text-label mt-0.5">{listaContratos(x)}</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-sm font-bold text-text tabular">{x.saldo > 0 ? fmtPct(x.custoMedio) : "—"}</div>
@@ -1013,7 +1007,7 @@ export function C03Encargos() {
           </ul>
           <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft">
             Custo médio a.a.: taxas vigentes na data-base (as pós-fixadas projetadas com o último dado disponível importado do
-            SAP, {fmtDate(ultimoDado)}). Encargos e taxa anualizada: realizados no período selecionado ({periodoDatas}).
+            SAP, {fmtDate(ultimoDado)}). Encargos e taxa anualizada: realizados no período selecionado ({per.rotulo}).
           </p>
         </Card>
       </div>
@@ -1039,6 +1033,19 @@ export function C03Encargos() {
       </MessageStrip>
     </ReportPage>
   );
+}
+
+/** "5 contratos" ou, com contratos liquidados no período, "5 ativos + 1 liquidado" (igual à contagem do C00/Premissas) */
+function qtdContratos(x: LinhaIndexador): string {
+  const n = x.ativos.length;
+  const l = x.liquidados.length;
+  if (!l) return `${n} ${n === 1 ? "contrato" : "contratos"}`;
+  const liq = `${l} ${l === 1 ? "liquidado" : "liquidados"}`;
+  return n ? `${n} ${n === 1 ? "ativo" : "ativos"} + ${liq}` : liq;
+}
+
+function listaContratos(x: LinhaIndexador): string {
+  return [...x.ativos, ...x.liquidados.map((id) => `${id} (liquidado)`)].join(", ");
 }
 
 // ---------------------------------------------------------------------------
@@ -1068,7 +1075,7 @@ function PopInValores({ x }: { x: TotaisEncargos }) {
       <PopIn rotulo="Juros" valor={v(x.juros)} />
       <PopIn rotulo="Atualização monetária" valor={v(x.atualizacaoMonetaria)} />
       <PopIn rotulo="Apropriação de custos" valor={v(x.apropriacaoCustos)} />
-      <PopIn rotulo="Capitalizados (CPC 20)" valor={<span className={x.capitalizados > 0 ? "text-info" : undefined}>{v(x.capitalizados)}</span>} />
+      <PopIn rotulo="Capitalizados (CPC 20)" valor={v(x.capitalizados)} />
       <PopIn rotulo="Despesa financeira" valor={v(x.despesaFinanceira)} />
     </dl>
   );
@@ -1093,6 +1100,19 @@ function Item({ rotulo, sub, children, className }: { rotulo: string; sub?: stri
   );
 }
 
+/** Legenda dos gráficos: texto na cor do texto (a cor da série fica só no marcador) */
+function textoLegenda(valor: string) {
+  return <span style={{ color: "#1d2d3e" }}>{valor}</span>;
+}
+
+/** R$ mil com uma casa, negativos entre parênteses (mesma unidade do eixo do gráfico mensal) */
+function fmtMil1(v: number): string {
+  const r = Math.round(v / 100) / 10;
+  if (r === 0) return "–";
+  const t = fmtDec(Math.abs(r), 1);
+  return r < 0 ? `(${t})` : t;
+}
+
 function TooltipMes({ m }: { m: MesEncargos }) {
   const linhas: { rotulo: string; v: number; cor?: string; forte?: boolean }[] = [
     { rotulo: "Juros", v: m.juros, cor: COR.juros },
@@ -1104,7 +1124,9 @@ function TooltipMes({ m }: { m: MesEncargos }) {
   ];
   return (
     <div className="bg-white px-3 py-2 shadow-fiori" style={tooltipStyle}>
-      <div className="font-semibold text-text mb-1">{fmtMonthLong(m.fim)}</div>
+      <div className="font-semibold text-text mb-1">
+        {fmtMonthLong(m.fim)} <span className="font-normal text-label">· R$ mil</span>
+      </div>
       <table className="text-xs">
         <tbody>
           {linhas.map((l) => (
@@ -1115,7 +1137,7 @@ function TooltipMes({ m }: { m: MesEncargos }) {
                   {l.rotulo}
                 </span>
               </td>
-              <td className="text-right tabular text-text whitespace-nowrap">{fmtNum(l.v, { parens: true, dash: true })}</td>
+              <td className="text-right tabular text-text whitespace-nowrap">{fmtMil1(l.v)}</td>
             </tr>
           ))}
         </tbody>

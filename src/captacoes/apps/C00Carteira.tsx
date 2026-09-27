@@ -474,6 +474,7 @@ export function C00Carteira() {
             "(iii) Contratos com covenant descumprido na data-base sem waiver: todo o saldo no circulante (CPC 26, item 74).",
             "(iv) Taxa efetiva a.a. = juros + correção monetária com as taxas vigentes na data-base; totais ponderados pelo saldo contábil (prazo médio: pelo principal atualizado).",
             `(v) ${notasProjecao}`,
+            "(vi) Juros compostos em base de 252 dias úteis (CDI e títulos IPCA+) e de 365 dias corridos (BNDES); o excedente da TJLP sobre 6% a.a. é capitalizado no principal (atualização monetária) e a TLP usa a taxa real da contratação; até a data-base, séries históricas de CDI, IPCA e TJLP importadas do SAP; datas de pagamento no dia útil seguinte.",
           ],
         },
         {
@@ -567,7 +568,7 @@ export function C00Carteira() {
             label="Circulante"
             value={fmtCompact(k.circulante)}
             state={k.reclass.length ? "negative" : "neutral"}
-            sub={k.reclass.length ? `${pctDoSaldo(k.circulante)} · inclui CPC 26.74` : pctDoSaldo(k.circulante)}
+            sub={pctDoSaldo(k.circulante)}
           />
           <HeaderKpi label="Não circulante" value={fmtCompact(k.naoCirculante)} sub={pctDoSaldo(k.naoCirculante)} />
           <HeaderKpi label="Custo médio ponderado" value={vazio ? "—" : fmtPct(k.custoMedio)} unit={vazio ? undefined : "a.a."} sub={vazio ? "—" : `CET médio ${fmtPct(k.cetMedio)}`} />
@@ -855,9 +856,10 @@ function DetalheContrato({
           </button>
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
-          <ObjectStatus inverted icon={false} state="information">
+          <Tag>
+            <span className="w-2 h-2 rounded-full mr-1.5 shrink-0" style={{ backgroundColor: corModalidade(c) }} aria-hidden />
             {c.modalidade}
-          </ObjectStatus>
+          </Tag>
           <Tag>{c.indexador}</Tag>
           <Tag>Empresa {c.empresa}</Tag>
           {pos.reclassificado && (

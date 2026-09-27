@@ -61,20 +61,21 @@ const fmtValor = (v: number) => fmtMil(v);
 const fmtRedutora = (v: number) => fmtMil(-v);
 /** Valor já arredondado em R$ mil */
 const fmtInteiroMil = (v: number) => fmtNum(v, { parens: true, dash: true });
-const NOTA_ARREDONDAMENTO = "Valores em R$ mil; totais podem não conferir por arredondamento.";
+const NOTA_ARREDONDAMENTO = "Valores em R$\u00a0mil; totais podem não conferir por arredondamento.";
 
 /**
- * Arredonda os componentes para R$ mil e ajusta o maior deles para que a soma feche com o total já arredondado
- * (quadros de composição: as linhas somam exatamente o total exibido).
+ * Arredonda os componentes para R$ mil e ajusta o maior deles (fora os índices `fixos`) para que a soma feche com o
+ * total já arredondado (quadros de composição: as linhas somam exatamente o total exibido).
  */
-function fecharEmMil(componentes: number[], alvoMil: number): number[] {
+function fecharEmMil(componentes: number[], alvoMil: number, fixos: number[] = []): number[] {
   const r = componentes.map((v) => Math.round(v / 1000));
   const dif = alvoMil - r.reduce((s, v) => s + v, 0);
-  if (dif !== 0 && r.length) {
-    let i = 0;
-    for (let k = 1; k < componentes.length; k++) if (Math.abs(componentes[k]) > Math.abs(componentes[i])) i = k;
-    r[i] += dif;
+  let i = -1;
+  for (let k = 0; k < componentes.length; k++) {
+    if (fixos.includes(k)) continue;
+    if (i < 0 || Math.abs(componentes[k]) > Math.abs(componentes[i])) i = k;
   }
+  if (dif !== 0 && i >= 0) r[i] += dif;
   return r;
 }
 
@@ -190,6 +191,7 @@ export function C02Cronograma() {
   const { premissas: p, contratos, posicoes } = useDivida(escopo);
   const covenants = useCovenants();
   const [mesEscolhido, setMesEscolhido] = useState<string | null>(null);
+  const [aba, setAba] = useState<Aba>("cplp");
   const db = p.dataBase;
 
   const d = useMemo(() => {
@@ -355,10 +357,15 @@ export function C02Cronograma() {
     // Quadros de composição em R$ mil: circulante + não circulante = saldo e linhas que somam cada total
     const totalMil = Math.round(total / 1000);
     const [circMil, ncMil] = fecharEmMil([circulante, naoCirculante], totalMil);
-    const [pc12Mil, pReclassMil, jurosCpMil, custos12Mil, custosReclassMil] = fecharEmMil(
-      [principalContratual12m, tot("principalReclassificado"), tot("juros"), -tot("custos12m"), -tot("custosReclassificados")],
+    // o reclassificado líquido fica com o próprio arredondamento (o mesmo número do C00, C04 e C06) e é aberto em
+    // principal de longo prazo − custos de longo prazo
+    const reclassLiquido = tot("principalReclassificado") - tot("custosReclassificados");
+    const [pc12Mil, reclassMil, jurosCpMil, custos12Mil] = fecharEmMil(
+      [principalContratual12m, reclassLiquido, tot("juros"), -tot("custos12m")],
       circMil,
+      [1],
     );
+    const [pReclassMil, custosReclassMil] = fecharEmMil([tot("principalReclassificado"), -tot("custosReclassificados")], reclassMil);
     const [pncMil, cncMil] = fecharEmMil([tot("principalNC"), -tot("custosNC")], ncMil);
     const [paMil, jurosSaldoMil, custosSaldoMil] = fecharEmMil([principalAtualizado, tot("juros"), -custosAApropriar], totalMil);
     const mil = {
@@ -390,7 +397,7 @@ export function C02Cronograma() {
       principalReclassificado: tot("principalReclassificado"),
       custosReclassificados: tot("custosReclassificados"),
       /** não circulante levado ao circulante (líquido dos custos) – o mesmo valor do C00 e do C04 */
-      reclassificadoLiquido: tot("principalReclassificado") - tot("custosReclassificados"),
+      reclassificadoLiquido: reclassLiquido,
       custosCirculante: tot("custosCirculante"),
       principalNC: tot("principalNC"),
       custosNC: tot("custosNC"),
@@ -426,7 +433,10 @@ export function C02Cronograma() {
     (a) => a.status === "excedido" && a.waiverVigente && a.cov.contratos.some((id) => idsEscopo.has(id)),
   );
   const ultimoDado = ultimoDadoNaDataBase(db);
-  const textoPremissas = `CDI ${fmtPct(p.cdi)} a.a., IPCA ${fmtPct(p.ipca12m)} em 12 meses, TJLP ${fmtPct(p.tjlp)} a.a. e TLP ${fmtPct(p.tlpReal)} a.a. real`;
+  const textoPremissas = `CDI ${fmtPct(p.cdi)} a.a., IPCA ${fmtPct(p.ipca12m)} em 12 meses e TJLP ${fmtPct(p.tjlp)} a.a.`;
+  /** Convenções de cálculo do motor (mesmas do C00, C01 e C03) */
+  const textoConvencoes =
+    "Juros compostos em base de 252 dias úteis (CDI e títulos IPCA+) e de 365 dias corridos (BNDES); o excedente da TJLP sobre 6% a.a. é capitalizado no principal e a TLP usa a taxa real fixada na contratação; datas de pagamento no dia útil seguinte";
   const escopoLabel = ESCOPOS.find((e) => e.value === escopo)?.label ?? "";
   const difPrincipal12m = d.fluxo12.principal - d.principalContratual12m;
 
@@ -444,7 +454,7 @@ export function C02Cronograma() {
         {
           nome: "CP x LP por contrato",
           titulo: "C02 – Composição circulante × não circulante (CPC 26)",
-          subtitulo: `${escopoLabel} · saldo pelo custo amortizado`,
+          subtitulo: `${escopoLabel} · saldo pelo custo amortizado · valores em R$`,
           colunas: [
             { titulo: "Contrato", largura: 10 },
             { titulo: "Instrumento", largura: 48 },
@@ -492,6 +502,11 @@ export function C02Cronograma() {
           ],
           notas: [
             "Circulante = principal com vencimento em até 12 meses + juros a pagar − custos de transação a apropriar nos próximos 12 meses (CPC 26).",
+            ...(haReclassificacao
+              ? [
+                  `Reclassificação (CPC 26.74): principal de longo prazo ${fmtBRL(d.principalReclassificado)} − custos de longo prazo ${fmtBRL(d.custosReclassificados)} = ${fmtBRL(d.reclassificadoLiquido)} levados do não circulante para o circulante.`,
+                ]
+              : []),
             "Não circulante = demais parcelas do principal − custos de transação restantes.",
             ...(d.excedente > 0.5
               ? [
@@ -508,7 +523,7 @@ export function C02Cronograma() {
         {
           nome: "Perfil de amortização",
           titulo: "C02 – Perfil de amortização do principal",
-          subtitulo: `${escopoLabel} · principal atualizado pelo valor contábil da data-base`,
+          subtitulo: `${escopoLabel} · principal atualizado pelo valor contábil da data-base · valores em R$`,
           colunas: [
             { titulo: "Contrato", largura: 10 },
             { titulo: "Grupo", largura: 12 },
@@ -547,29 +562,29 @@ export function C02Cronograma() {
         {
           nome: "Fluxos 12 meses",
           titulo: "C02 – Fluxos projetados nos próximos 12 meses",
-          subtitulo: `${escopoLabel} · pagamentos de principal e juros por mês`,
+          subtitulo: `${escopoLabel} · pagamentos de principal e juros por mês · valores em R$`,
           colunas: [{ titulo: "Mês", largura: 12 }, moeda("Principal"), moeda("Juros"), moeda("Total"), { titulo: "Contratos", largura: 40 }],
           linhas: d.meses.map((m) => [mesCurto(m.mes), m.principal, m.juros, m.total, [...new Set(m.eventos.map((e) => e.c.id))].join(", ")]),
           total: ["Total 12 meses", d.fluxo12.principal, d.fluxo12.juros, d.fluxo12.total, ""],
           notas: [
-            `Juros e atualização monetária projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): ${textoPremissas}.`,
+            `Juros e atualização monetária projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): ${textoPremissas}. ${textoConvencoes}.`,
           ],
         },
         {
           nome: "Fluxos por ano",
           titulo: "C02 – Fluxos projetados após 12 meses",
-          subtitulo: `${escopoLabel} · pagamentos de principal e juros por ano`,
+          subtitulo: `${escopoLabel} · pagamentos de principal e juros por ano · valores em R$`,
           colunas: [{ titulo: "Período", largura: 16 }, moeda("Principal"), moeda("Juros"), moeda("Total"), { titulo: "Contratos", largura: 40 }],
           linhas: d.anosFluxo.map((a) => [a.rotulo, a.principal, a.juros, a.total, a.contratos.join(", ")]),
           total: ["Total após 12 meses", d.fluxoApos.principal, d.fluxoApos.juros, d.fluxoApos.total, ""],
           notas: [
-            `Juros e atualização monetária projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): ${textoPremissas}.`,
+            `Juros e atualização monetária projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): ${textoPremissas}. ${textoConvencoes}.`,
           ],
         },
         {
           nome: "Fluxos por contrato",
           titulo: "C02 – Cronograma de pagamentos por contrato",
-          subtitulo: `${escopoLabel} · todos os eventos futuros`,
+          subtitulo: `${escopoLabel} · todos os eventos futuros · valores em R$`,
           colunas: [
             { titulo: "Contrato", largura: 10 },
             { titulo: "Instrumento", largura: 48 },
@@ -580,7 +595,7 @@ export function C02Cronograma() {
           ],
           linhas: d.eventos.map((e) => [e.c.id, e.c.instrumento, e.data, e.principal, e.juros, e.principal + e.juros]),
           total: ["Total", "", "", d.fluxo12.principal + d.fluxoApos.principal, d.fluxo12.juros + d.fluxoApos.juros, d.fluxo12.total + d.fluxoApos.total],
-          notas: [`Valores projetados com o último dado disponível importado do SAP (${textoPremissas}).`],
+          notas: [`Valores projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): ${textoPremissas}. ${textoConvencoes}.`],
         },
       ],
       db,
@@ -588,7 +603,7 @@ export function C02Cronograma() {
   };
 
   // -------------------------------------------------------------------------
-  // Colunas
+  // Colunas (tabelas em R$ mil, como as da nota explicativa)
   // -------------------------------------------------------------------------
 
   const colContrato = <T extends { pos: PosicaoDivida }>(sub: (x: T) => ReactNode): Column<T> => ({
@@ -608,32 +623,51 @@ export function C02Cronograma() {
             </ObjectStatus>
           )}
         </div>
-        <div className="hidden sm:block text-xs text-label mt-0.5 pl-[18px] whitespace-nowrap">{sub(x)}</div>
+        <div className="text-xs text-label mt-0.5 pl-[18px] whitespace-nowrap">{sub(x)}</div>
       </div>
     ),
   });
 
-  const num = <T,>(key: string, header: string, fn: (x: T) => number, opts: { redutora?: boolean; bold?: boolean; minWidth?: number; headerTitle?: string } = {}): Column<T> => ({
+  const num = <T,>(
+    key: string,
+    header: string,
+    fn: (x: T) => number,
+    opts: { redutora?: boolean; bold?: boolean; minWidth?: number; headerTitle?: string; total?: (rows: T[]) => ReactNode } = {},
+  ): Column<T> => ({
     key,
     header,
     align: "right",
-    minWidth: opts.minWidth ?? 116,
+    minWidth: opts.minWidth ?? 96,
     headerTitle: opts.headerTitle,
     value: fn,
     render: (x) => <span className={clsx(opts.bold && "font-semibold")}>{opts.redutora ? fmtRedutora(fn(x)) : fmtValor(fn(x))}</span>,
-    total: (rows) => (opts.redutora ? fmtRedutora(soma(rows, fn)) : fmtValor(soma(rows, fn))),
+    total: opts.total ?? ((rows) => (opts.redutora ? fmtRedutora(soma(rows, fn)) : fmtValor(soma(rows, fn)))),
   });
 
+  // Totais da composição = os mesmos números (em R$ mil) dos quadros de circulante e não circulante
+  const m = d.mil;
   const colComposicao: Column<LinhaComposicao>[] = [
     colContrato<LinhaComposicao>((x) => `${x.pos.c.modalidade} · venc. ${fmtDate(x.pos.c.vencimento)}`),
-    num("pc", "Principal circ.", (x) => x.principalCirculante, { headerTitle: "Principal com vencimento em até 12 meses (ou todo o principal, se reclassificado)" }),
-    num("juros", "Juros a pagar", (x) => x.juros),
-    num("cc", "(−) Custos circ.", (x) => x.custosCirculante, { redutora: true, headerTitle: "Custos de transação a apropriar nos próximos 12 meses" }),
-    num("circ", "Circulante", (x) => x.circulante, { bold: true }),
-    num("pnc", "Principal não circ.", (x) => x.principalNC, { minWidth: 130 }),
-    num("cnc", "(−) Custos não circ.", (x) => x.custosNC, { redutora: true, minWidth: 130, headerTitle: "Custos de transação a apropriar após 12 meses" }),
-    num("nc", "Não circulante", (x) => x.naoCirculante, { bold: true, minWidth: 124 }),
-    num("saldo", "Saldo contábil", (x) => x.saldo, { bold: true, minWidth: 124 }),
+    num("pc", "Principal circ.", (x) => x.principalCirculante, {
+      headerTitle: "Principal com vencimento em até 12 meses (ou todo o principal, se reclassificado)",
+      total: () => fmtInteiroMil(m.pc12 + m.pReclass),
+    }),
+    num("juros", "Juros a pagar", (x) => x.juros, { total: () => fmtInteiroMil(m.juros) }),
+    num("cc", "(−) Custos circ.", (x) => x.custosCirculante, {
+      redutora: true,
+      headerTitle: "Custos de transação a apropriar nos próximos 12 meses (todos os custos, se reclassificado)",
+      total: () => fmtInteiroMil(m.custos12 + m.custosReclass),
+    }),
+    num("circ", "Circulante", (x) => x.circulante, { bold: true, total: () => fmtInteiroMil(m.circ) }),
+    num("pnc", "Principal não circ.", (x) => x.principalNC, { minWidth: 120, total: () => fmtInteiroMil(m.pnc) }),
+    num("cnc", "(−) Custos não circ.", (x) => x.custosNC, {
+      redutora: true,
+      minWidth: 130,
+      headerTitle: "Custos de transação a apropriar após 12 meses",
+      total: () => fmtInteiroMil(m.cnc),
+    }),
+    num("nc", "Não circulante", (x) => x.naoCirculante, { bold: true, minWidth: 116, total: () => fmtInteiroMil(m.nc) }),
+    num("saldo", "Saldo contábil", (x) => x.saldo, { bold: true, minWidth: 116, total: () => fmtInteiroMil(m.total) }),
   ];
 
   const colPerfil: Column<LinhaPerfil>[] = [
@@ -641,7 +675,7 @@ export function C02Cronograma() {
     num("circ", "Circulante (12 meses)", (x) => x.circulante, { bold: true, minWidth: 150 }),
     ...d.faixas.map((f) =>
       num<LinhaPerfil>(f.key, f.rotulo, (x) => soma(f.anos, (a) => x.porAno.get(a) ?? 0), {
-        minWidth: f.anos.length > 1 || f.rotulo.length > 6 ? 128 : 104,
+        minWidth: f.anos.length > 1 || f.rotulo.length > 6 ? 120 : 88,
         headerTitle: f.anos.length > 1 ? `${f.anos[0]} a ${f.anos[f.anos.length - 1]}` : undefined,
       }),
     ),
@@ -649,7 +683,7 @@ export function C02Cronograma() {
       key: "total",
       header: "Total",
       align: "right",
-      minWidth: 140,
+      minWidth: 120,
       value: (x) => x.total,
       render: (x) => {
         const ok = Math.abs(x.diferenca) <= TOLERANCIA;
@@ -710,8 +744,14 @@ export function C02Cronograma() {
   // Render
   // -------------------------------------------------------------------------
 
-  const graficoMeses = d.meses.map((m) => ({ mes: m.mes, principal: mi(m.principal), juros: mi(m.juros) }));
-  const graficoAnos = d.anosFluxo.map((a) => ({ ano: String(a.ano), rotulo: a.rotulo, principal: mi(a.principal), juros: mi(a.juros) }));
+  const graficoMeses = d.meses.map((mes) => ({ mes: mes.mes, principal: miOuNulo(mes.principal), juros: miOuNulo(mes.juros) }));
+  const graficoAnos = d.anosFluxo.map((a) => ({ ano: String(a.ano), rotulo: a.rotulo, principal: miOuNulo(a.principal), juros: miOuNulo(a.juros) }));
+  const perfilOrdenado = d.perfil;
+  const totaisPerfil = {
+    circulante: soma(d.perfil, (l) => l.circulante),
+    faixas: d.faixas.map((f) => soma(d.perfil, (l) => soma(f.anos, (a) => l.porAno.get(a) ?? 0))),
+    total: soma(d.perfil, (l) => l.total),
+  };
 
   return (
     <ReportPage
@@ -732,19 +772,27 @@ export function C02Cronograma() {
             state={haReclassificacao ? "negative" : pctCirculante > 0.25 ? "critical" : "neutral"}
             sub={`de ${fmtCompact(d.total)}`}
           />
-          <HeaderKpi
-            label="Principal a vencer 12m"
-            value={fmtCompact(d.principalContratual12m)}
-            sub="cronograma contratual"
-          />
+          <HeaderKpi label="Principal a vencer 12m" value={fmtCompact(d.principalContratual12m)} sub="cronograma contratual" />
           <HeaderKpi
             label="Próximo pagamento"
             value={d.proximo ? fmtCompact(d.proximo.principal + d.proximo.juros) : "—"}
-            state="information"
             sub={d.proximo ? `${fmtDate(d.proximo.data)} · ${d.proximo.ids.join(", ")}` : "Sem pagamentos futuros"}
           />
           <HeaderKpi label="Prazo médio" value={fmtDec(d.prazoMedio, 1)} unit="anos" sub="amortização do principal" />
         </>
+      }
+      headerExtra={
+        <div className="border-b border-line-soft -mb-5">
+          <TabBar
+            value={aba}
+            onChange={setAba}
+            items={[
+              { value: "cplp", label: "CP × LP" },
+              { value: "perfil", label: "Perfil de amortização" },
+              { value: "fluxos", label: "Fluxos projetados", count: d.eventos.length },
+            ]}
+          />
+        </div>
       }
     >
       <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
@@ -753,7 +801,7 @@ export function C02Cronograma() {
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
           </FilterField>
           <div className="sm:col-span-2 text-[13px] text-label sm:text-right">
-            {plural(posicoes.length, "contrato ativo", "contratos ativos")} · circulante: vencimentos até {fmtDate(d.limite)} · valores em R$
+            {plural(posicoes.length, "contrato ativo", "contratos ativos")} · circulante: vencimentos até {fmtDate(d.limite)}
           </div>
         </div>
       </div>
@@ -788,364 +836,495 @@ export function C02Cronograma() {
           </MessageStrip>
         ))}
 
-      {/* Composição CP × LP */}
-      <Card
-        title="Composição circulante × não circulante"
-        subtitle="CPC 26 – saldo pelo custo amortizado na data-base, classificado pelo cronograma contratual de amortização"
-        status={<Tag>CPC 26</Tag>}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <BlocoComposicao
-            titulo="Passivo circulante"
-            cor={COR_CP}
-            share={pctCirculante}
-            linhas={[
-              { rotulo: "Principal com vencimento em até 12 meses", valor: d.principalContratual12m },
-              ...(haReclassificacao
-                ? [{ rotulo: "Principal de longo prazo reclassificado (CPC 26.74)", valor: d.principalReclassificado, negativo: true }]
-                : []),
-              { rotulo: "(+) Juros a pagar", valor: d.jurosAPagar },
-              { rotulo: `(−) Custos de transação a apropriar em 12 meses${d.excedente > 0.5 ? " ¹" : ""}`, valor: -d.custosCirculante },
-            ]}
-            total={{ rotulo: "Circulante", valor: d.circulante }}
-          />
-          <BlocoComposicao
-            titulo="Passivo não circulante"
-            cor={COR_NC}
-            share={1 - pctCirculante}
-            linhas={[
-              { rotulo: "Principal com vencimento após 12 meses", valor: d.principalNC },
-              { rotulo: `(−) Custos de transação a apropriar após 12 meses${d.excedente > 0.5 ? " ¹" : ""}`, valor: -d.custosNC },
-            ]}
-            total={{ rotulo: "Não circulante", valor: d.naoCirculante }}
-          />
-          <div className="rounded-lg border border-line-soft p-3.5 flex flex-col">
-            <div className="text-[13px] font-semibold text-text">Saldo pelo custo amortizado</div>
-            <div className="text-[1.625rem] leading-tight font-light tabular text-text mt-1">{fmtBRL(d.total)}</div>
-            <div className="flex h-3 rounded-full overflow-hidden bg-[#eff1f2] mt-3" aria-hidden>
-              <div style={{ width: `${pctCirculante * 100}%`, backgroundColor: COR_CP }} />
-              <div style={{ width: `${(1 - pctCirculante) * 100}%`, backgroundColor: COR_NC }} />
+      {/* ------------------------------------------------------------------ CP × LP */}
+      {aba === "cplp" && (
+        <Card
+          title="Composição circulante × não circulante"
+          subtitle={"R$\u00a0mil · CPC 26 – saldo pelo custo amortizado na data-base, classificado pelo cronograma contratual de amortização"}
+          status={<Tag>CPC 26</Tag>}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <BlocoComposicao
+              titulo="Passivo circulante"
+              cor={COR_CP}
+              share={pctCirculante}
+              linhas={[
+                { rotulo: "Principal com vencimento em até 12 meses", valor: m.pc12 },
+                ...(haReclassificacao
+                  ? [
+                      { rotulo: "Principal de longo prazo reclassificado (CPC 26.74)", valor: m.pReclass, negativo: true },
+                      { rotulo: "(−) Custos de longo prazo reclassificados", valor: m.custosReclass, negativo: true },
+                    ]
+                  : []),
+                { rotulo: "(+) Juros a pagar", valor: m.juros },
+                { rotulo: `(−) Custos de transação a apropriar em 12 meses${d.excedente > 0.5 ? " ¹" : ""}`, valor: m.custos12 },
+              ]}
+              total={{ rotulo: "Circulante", valor: m.circ }}
+            />
+            <BlocoComposicao
+              titulo="Passivo não circulante"
+              cor={COR_NC}
+              share={1 - pctCirculante}
+              linhas={[
+                { rotulo: "Principal com vencimento após 12 meses", valor: m.pnc },
+                { rotulo: `(−) Custos de transação a apropriar após 12 meses${d.excedente > 0.5 ? " ¹" : ""}`, valor: m.cnc },
+              ]}
+              total={{ rotulo: "Não circulante", valor: m.nc }}
+            />
+            <div className="rounded-lg border border-line-soft p-3.5 flex flex-col">
+              <div className="text-[13px] font-semibold text-text">Saldo pelo custo amortizado</div>
+              <div className="text-[1.625rem] leading-tight font-light tabular text-text mt-1">
+                {fmtInteiroMil(m.total)}
+                <span className="text-sm text-label ml-1.5">R$&nbsp;mil</span>
+              </div>
+              <div className="flex h-3 rounded-full overflow-hidden bg-[#eff1f2] mt-3" aria-hidden>
+                <div style={{ width: `${pctCirculante * 100}%`, backgroundColor: COR_CP }} />
+                <div style={{ width: `${(1 - pctCirculante) * 100}%`, backgroundColor: COR_NC }} />
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs text-label mt-1.5">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COR_CP }} />
+                  Circulante {fmtPct(pctCirculante, 1)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COR_NC }} />
+                  Não circulante {fmtPct(1 - pctCirculante, 1)}
+                </span>
+              </div>
+              <dl className="mt-3 space-y-1 text-[13px]">
+                <LinhaValor rotulo="Principal atualizado" valor={m.pa} />
+                <LinhaValor rotulo="(+) Juros a pagar" valor={m.jurosSaldo} />
+                <LinhaValor rotulo="(−) Custos de transação a apropriar" valor={m.custosSaldo} />
+              </dl>
+              <div className="mt-auto pt-3">
+                {Math.abs(d.difComposicao) <= TOLERANCIA ? (
+                  <Conferencia ok>
+                    Circulante + não circulante = saldo da carteira (<Link to="/c00-carteira" className="text-link hover:underline">C00</Link>)
+                  </Conferencia>
+                ) : (
+                  <Conferencia ok={false}>Diferença de {fmtBRL(d.difComposicao, true)} em relação ao saldo da carteira (C00)</Conferencia>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-3 text-xs text-label mt-1.5">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COR_CP }} />
-                Circulante {fmtPct(pctCirculante, 1)}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COR_NC }} />
-                Não circulante {fmtPct(1 - pctCirculante, 1)}
-              </span>
-            </div>
-            <dl className="mt-3 space-y-1 text-[13px]">
-              <LinhaValor rotulo="Principal atualizado" valor={d.principalAtualizado} />
-              <LinhaValor rotulo="(+) Juros a pagar" valor={d.jurosAPagar} />
-              <LinhaValor rotulo="(−) Custos de transação a apropriar" valor={-d.custosAApropriar} />
-            </dl>
-            <div className="mt-auto pt-3">
-              {Math.abs(d.difComposicao) <= TOLERANCIA ? (
-                <Conferencia ok>
-                  Circulante + não circulante = saldo da carteira (<Link to="/c00-carteira" className="text-link hover:underline">C00</Link>)
-                </Conferencia>
-              ) : (
-                <Conferencia ok={false}>Diferença de {fmtBRL(d.difComposicao, true)} em relação ao saldo da carteira (C00)</Conferencia>
+          </div>
+          {(haReclassificacao || d.excedente > 0.5) && (
+            <div className="text-xs text-label mt-3 leading-relaxed space-y-1">
+              {haReclassificacao && (
+                <p>
+                  Não circulante reclassificado para o circulante (líquido dos custos de longo prazo):{" "}
+                  <strong className="text-negative tabular">{fmtBRL(d.reclassificadoLiquido)}</strong> – o mesmo valor do C00 e do{" "}
+                  <Link to="/c04-covenants" className="text-link hover:underline">
+                    C04
+                  </Link>
+                  .
+                </p>
+              )}
+              {d.excedente > 0.5 && (
+                <p>
+                  ¹ Em {listaIds(d.comExcedente.map((l) => l.pos.c.id))}, não há principal no curto prazo e os custos de transação dos
+                  próximos 12 meses superam os juros a pagar; o excedente ({fmtBRL(d.excedente)}) permanece no não circulante para
+                  que o circulante do contrato não fique negativo.
+                </p>
               )}
             </div>
-          </div>
-        </div>
-        {d.excedente > 0.5 && (
-          <p className="text-xs text-label mt-3 leading-relaxed">
-            ¹ Em {listaIds(d.comExcedente.map((l) => l.pos.c.id))}, não há principal no curto prazo e os custos de transação dos
-            próximos 12 meses superam os juros a pagar; o excedente ({fmtBRL(d.excedente)}) permanece no não circulante para
-            que o circulante do contrato não fique negativo.
-          </p>
-        )}
-        <div className="mt-4 -mx-4 border-t border-line-soft">
-          <DataTable columns={colComposicao} rows={d.composicao} rowKey={(x) => x.pos.c.id} showTotals />
-        </div>
-      </Card>
-
-      {/* Perfil por ano × grupo */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <Card
-          className="xl:col-span-2 flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-          title="Vencimentos do principal por ano"
-          subtitle={`R$ milhões por grupo de modalidade · 12 meses (circulante) e anos do não circulante${d.anos.length && monthOf(d.inicioNC) !== 1 ? ` (${d.anos[0]}: ${nomeMes(d.inicioNC)}–dez)` : ""}`}
-        >
-          <div className="h-72 sm:h-80 xl:h-auto xl:flex-1 xl:min-h-[320px] -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={d.grafico} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                <XAxis dataKey="rotulo" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
-                <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
-                  labelFormatter={(_: unknown, pl: ReadonlyArray<{ payload?: { rotuloLongo?: string } }>) => pl?.[0]?.payload?.rotuloLongo ?? ""}
-                  formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]}
-                />
-                <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                {d.gruposPresentes.map((g) => (
-                  <Bar key={g.id} dataKey={g.id} name={g.id} stackId="p" fill={g.cor} maxBarSize={56} isAnimationActive={false} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        <Card title="Por grupo de modalidade" subtitle="Principal atualizado: 12 meses × não circulante e prazo médio">
-          <ul className="divide-y divide-line-soft -mt-1">
-            {d.grupos.map((g) => (
-              <li key={g.id} className="py-2.5">
-                <div className="flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="inline-flex items-center gap-2 font-semibold text-text">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: g.cor }} />
-                    {g.id}
-                    <span className="text-label font-normal">({g.contratos})</span>
-                  </span>
-                  <span className="tabular font-semibold text-text whitespace-nowrap">{fmtCompact(g.total)}</span>
-                </div>
-                <MicroBar className="mt-1.5" value={g.share} color={g.cor} />
-                <div className="flex items-center justify-between gap-3 text-xs text-label mt-1.5 tabular">
-                  <span className="whitespace-nowrap">
-                    12 meses <span className="text-text font-semibold">{fmtCompact(g.circulante)}</span>
-                  </span>
-                  <span className="whitespace-nowrap">
-                    Não circ. <span className="text-text font-semibold">{fmtCompact(g.naoCirculante)}</span>
-                  </span>
-                  <span className="whitespace-nowrap" title="Prazo médio do principal">
-                    <span className="text-text font-semibold">{fmtDec(g.prazo, 1)}</span> anos
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-1 pt-2 border-t border-line-soft flex items-center justify-between gap-3 text-xs">
-            <span className="text-label">Principal atualizado ({plural(posicoes.length, "contrato", "contratos")})</span>
-            <span className="font-semibold text-text tabular whitespace-nowrap">{fmtCompact(d.principalAtualizado)}</span>
-          </div>
-        </Card>
-      </div>
-
-      <Card
-        title="Perfil de amortização do principal"
-        subtitle={`Principal atualizado pelo valor contábil da data-base, por contrato · circulante = vencimentos até ${fmtDate(d.limite)} · valores em R$`}
-        bodyClassName="px-0 pb-0"
-      >
-        <div className="px-4 pb-3">
-          {d.divergentes.length === 0 ? (
-            <MessageStrip design="positive">
-              Perfil conferido: a soma das parcelas fecha com o principal atualizado de todos os{" "}
-              {plural(d.perfil.length, "contrato", "contratos")} ({fmtBRL(d.principalAtualizado)}).
-            </MessageStrip>
-          ) : (
-            <MessageStrip design="negative">
-              O perfil não fecha com o principal atualizado em {listaIds(d.divergentes.map((l) => l.pos.c.id))}: diferença de{" "}
-              {fmtBRL(soma(d.divergentes, (l) => l.diferenca), true)}.
-            </MessageStrip>
           )}
-        </div>
-        <div className="border-t border-line-soft">
-          <DataTable columns={colPerfil} rows={d.perfil} rowKey={(x) => x.pos.c.id} showTotals />
-        </div>
-        {haReclassificacao && (
-          <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft">
-            Contratos marcados com <strong className="text-negative">CPC 26.74</strong> têm todo o principal no circulante por
-            descumprimento de covenant sem waiver na data do balanço; o cronograma contratual segue nos fluxos projetados abaixo.
-          </p>
-        )}
-      </Card>
-
-      {/* Fluxos projetados */}
-      <Card
-        title="Fluxos projetados"
-        subtitle="Pagamentos futuros de principal e juros pelo cronograma contratual · clique em um mês para ver os pagamentos"
-      >
-        <MessageStrip design="information" className="mb-4">
-          Juros projetados com o último dado disponível importado do SAP ({fmtDate(ultimoDado)}): <strong>{textoPremissas}</strong>,
-          mantidos constantes após a data-base. O principal dos contratos IPCA e TLP inclui a atualização monetária projetada
-          até cada pagamento.{" "}
-          <Link to="/premissas" className="text-link hover:underline whitespace-nowrap">
-            Ver premissas
-          </Link>
-        </MessageStrip>
-
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-          <div className="xl:col-span-3 min-w-0">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
-              <h4 className="text-sm font-bold text-text">Próximos 12 meses</h4>
-              <span className="text-xs text-label">R$ milhões por mês</span>
+          <div className="mt-4 -mx-4 border-t border-line-soft">
+            <div className="hidden lg:block">
+              <DataTable columns={colComposicao} rows={d.composicao} rowKey={(x) => x.pos.c.id} showTotals />
             </div>
-            <div className="h-72 -ml-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={graficoMeses}
-                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                  barCategoryGap="22%"
-                  onClick={(s: { activeLabel?: string | number } | null) => s?.activeLabel && setMesEscolhido(String(s.activeLabel))}
-                  className="cursor-pointer"
-                >
-                  <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                  <XAxis dataKey="mes" tickFormatter={mesCurto} tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
-                  <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
-                    labelFormatter={(m: string) => mesLongo(m)}
-                    formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]}
-                  />
-                  <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                  <ReferenceArea x1={mesSel.mes} x2={mesSel.mes} fill="#0070f2" fillOpacity={0.08} stroke="#0070f2" strokeOpacity={0.35} strokeDasharray="3 3" />
-                  <Bar dataKey="principal" name="Principal" stackId="f" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false} />
-                  <Bar dataKey="juros" name="Juros" stackId="f" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="grid grid-cols-3 gap-3 mt-3">
-              <Mini rotulo="Principal" valor={fmtCompact(d.fluxo12.principal)} />
-              <Mini rotulo="Juros" valor={fmtCompact(d.fluxo12.juros)} />
-              <Mini rotulo="Total" valor={fmtCompact(d.fluxo12.total)} />
-            </div>
-            <p className="text-xs text-label mt-2 leading-relaxed">
-              Principal projetado em 12 meses ({fmtBRL(d.fluxo12.principal)}) × principal a vencer pelo valor contábil da
-              data-base ({fmtBRL(d.principalContratual12m)}): diferença de {fmtBRL(difPrincipal12m)}
-              {Math.abs(difPrincipal12m) > TOLERANCIA ? ", correspondente à atualização monetária futura (IPCA/TLP) até as datas de pagamento" : ""}.
-            </p>
+            {/* Pop-in (sap.m.Table responsiva): em telas estreitas os valores descem para baixo do contrato */}
+            <ul className="lg:hidden divide-y divide-line-soft">
+              {d.composicao.map((l) => (
+                <li key={l.pos.c.id} className="px-4 py-3">
+                  <CabecalhoPopIn c={l.pos.c} reclassificado={l.pos.reclassificado} sub={`${l.pos.c.modalidade} · venc. ${fmtDate(l.pos.c.vencimento)}`}>
+                    <div className="text-sm font-bold text-text tabular">{fmtValor(l.saldo)}</div>
+                    <div className="text-xs text-label">saldo contábil</div>
+                  </CabecalhoPopIn>
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+                    <PopIn rotulo="Principal circ." valor={fmtValor(l.principalCirculante)} />
+                    <PopIn rotulo="Juros a pagar" valor={fmtValor(l.juros)} />
+                    <PopIn rotulo="Circulante" valor={<span className={clsx(l.pos.reclassificado && "text-negative")}>{fmtValor(l.circulante)}</span>} />
+                    <PopIn rotulo="Não circulante" valor={fmtValor(l.naoCirculante)} />
+                  </dl>
+                </li>
+              ))}
+              <li className="px-4 py-3 bg-[#f5f6f7]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-sm font-bold text-text">Total ({d.composicao.length})</div>
+                  <div className="text-sm font-bold text-text tabular">{fmtInteiroMil(m.total)}</div>
+                </div>
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+                  <PopIn rotulo="Principal circ." valor={fmtInteiroMil(m.pc12 + m.pReclass)} />
+                  <PopIn rotulo="Juros a pagar" valor={fmtInteiroMil(m.juros)} />
+                  <PopIn rotulo="Circulante" valor={fmtInteiroMil(m.circ)} />
+                  <PopIn rotulo="Não circulante" valor={fmtInteiroMil(m.nc)} />
+                </dl>
+              </li>
+            </ul>
+            <p className="text-xs text-label px-4 pt-3 border-t border-line-soft">{NOTA_ARREDONDAMENTO}</p>
           </div>
+        </Card>
+      )}
 
-          <div className="xl:col-span-2 xl:row-span-2 min-w-0">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
-              <h4 className="text-sm font-bold text-text">Quadro mensal</h4>
-              <span className="text-xs text-label">valores em R$</span>
-            </div>
-            <div className="overflow-x-auto fiori-scroll -mx-4 xl:mx-0">
-              <table className="w-full text-sm border-separate border-spacing-0">
-                <thead>
-                  <tr>
-                    <th className="text-left pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Mês</th>
-                    <th className="text-right px-2 sm:px-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Principal</th>
-                    <th className="text-right px-2 sm:px-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Juros</th>
-                    <th className="text-right pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.meses.map((m) => {
-                    const sel = m.mes === mesSel.mes;
-                    return (
-                      <tr
-                        key={m.mes}
-                        onClick={() => setMesEscolhido(m.mes)}
-                        className={clsx("cursor-pointer", sel ? "bg-selected" : "hover:bg-[#f2f4f6]")}
-                      >
-                        <td
-                          className={clsx(
-                            "pl-4 xl:pl-3 pr-2 sm:pr-3 py-2 text-[13px] border-b border-line-soft whitespace-nowrap",
-                            sel && "shadow-[inset_3px_0_0_#0064d9] font-semibold",
-                          )}
-                        >
-                          {mesCurto(m.mes)}
-                          <span className="text-label font-normal ml-1.5">({m.eventos.length})</span>
-                        </td>
-                        <td className="px-2 sm:px-3 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap">{fmtValor(m.principal)}</td>
-                        <td className="px-2 sm:px-3 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap">{fmtValor(m.juros)}</td>
-                        <td className="pl-2 sm:pl-3 pr-4 xl:pr-3 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap font-semibold">
-                          {fmtValor(m.total)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-[#f5f6f7] font-bold">
-                    <td className="pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">Total 12 meses</td>
-                    <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.principal)}</td>
-                    <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.juros)}</td>
-                    <td className="pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.total)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
+      {/* ------------------------------------------------------------------ Perfil de amortização */}
+      {aba === "perfil" && (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <Card
+              className="xl:col-span-2 flex flex-col"
+              bodyClassName="flex-1 flex flex-col"
+              title="Vencimentos do principal por ano"
+              subtitle={`R$\u00a0milhões por grupo de modalidade · 12 meses (circulante) e anos do não circulante${d.anos.length && monthOf(d.inicioNC) !== 1 ? ` (${d.anos[0]}: ${nomeMes(d.inicioNC)}–dez)` : ""}`}
+            >
+              <div className="h-72 sm:h-80 xl:h-auto xl:flex-1 xl:min-h-[320px] -ml-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={d.grafico} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
+                    <XAxis dataKey="rotulo" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                    <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
+                      labelFormatter={(_: unknown, pl: ReadonlyArray<{ payload?: { rotuloLongo?: string } }>) => pl?.[0]?.payload?.rotuloLongo ?? ""}
+                      formatter={tooltipMi}
+                    />
+                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={legendaTexto} />
+                    {d.gruposPresentes.map((g) => (
+                      <Bar key={g.id} dataKey={g.id} name={g.id} stackId="p" fill={g.cor} maxBarSize={56} isAnimationActive={false} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
 
-          <div className="xl:col-span-3 min-w-0">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
-              <h4 className="text-sm font-bold text-text">Pagamentos em {mesLongo(mesSel.mes)}</h4>
-              <span className="text-xs text-label tabular">{fmtBRL(mesSel.total)}</span>
-            </div>
-            {mesSel.eventos.length === 0 ? (
-              <p className="text-sm text-label py-3">Sem pagamentos no mês.</p>
-            ) : (
-              <ul className="divide-y divide-line-soft">
-                {mesSel.eventos.map((e) => (
-                  <li key={`${e.c.id}-${e.data}`} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-text">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDe(e.c) }} />
-                        <span className="truncate">
-                          {e.c.id} · {e.c.credor}
-                        </span>
-                      </div>
-                      <div className="text-xs text-label pl-4 truncate">
-                        {fmtDate(e.data)} · {e.principal > 0 && e.juros > 0 ? "principal e juros" : e.principal > 0 ? "principal" : "juros"}
-                        {e.data === e.c.vencimento ? " · vencimento final" : ""}
-                      </div>
+            <Card title="Por grupo de modalidade" subtitle="Principal atualizado: 12 meses × não circulante e prazo médio">
+              <ul className="divide-y divide-line-soft -mt-1">
+                {d.grupos.map((g) => (
+                  <li key={g.id} className="py-2.5">
+                    <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                      <span className="inline-flex items-center gap-2 font-semibold text-text">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: g.cor }} />
+                        {g.id}
+                        <span className="text-label font-normal">({g.contratos})</span>
+                      </span>
+                      <span className="tabular font-semibold text-text whitespace-nowrap">{fmtCompact(g.total)}</span>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="tabular font-semibold text-text whitespace-nowrap">{fmtBRL(e.principal + e.juros)}</div>
-                      {e.principal > 0 && e.juros > 0 && (
-                        <div className="text-xs text-label tabular whitespace-nowrap">
-                          {fmtCompact(e.principal)} + {fmtCompact(e.juros)}
-                        </div>
-                      )}
+                    <MicroBar className="mt-1.5" value={g.share} color={g.cor} />
+                    <div className="flex items-center justify-between gap-3 text-xs text-label mt-1.5 tabular">
+                      <span className="whitespace-nowrap">
+                        12 meses <span className="text-text font-semibold">{fmtCompact(g.circulante)}</span>
+                      </span>
+                      <span className="whitespace-nowrap">
+                        Não circ. <span className="text-text font-semibold">{fmtCompact(g.naoCirculante)}</span>
+                      </span>
+                      <span className="whitespace-nowrap" title="Prazo médio do principal">
+                        <span className="text-text font-semibold">{fmtDec(g.prazo, 1)}</span> anos
+                      </span>
                     </div>
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 mt-6">
-          <div className="xl:col-span-2 min-w-0 flex flex-col">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
-              <h4 className="text-sm font-bold text-text">Anos seguintes</h4>
-              <span className="text-xs text-label">R$ milhões por ano</span>
-            </div>
-            <div className="h-72 xl:h-auto xl:flex-1 xl:min-h-[300px] -ml-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoAnos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                  <CartesianGrid vertical={false} stroke="#e5e5e5" />
-                  <XAxis dataKey="ano" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
-                  <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
-                    labelFormatter={(_: unknown, pl: ReadonlyArray<{ payload?: { rotulo?: string } }>) => pl?.[0]?.payload?.rotulo ?? ""}
-                    formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]}
-                  />
-                  <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                  <Bar dataKey="principal" name="Principal" stackId="a" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false} />
-                  <Bar dataKey="juros" name="Juros" stackId="a" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+              <div className="mt-1 pt-2 border-t border-line-soft flex items-center justify-between gap-3 text-xs">
+                <span className="text-label">Principal atualizado ({plural(posicoes.length, "contrato", "contratos")})</span>
+                <span className="font-semibold text-text tabular whitespace-nowrap">{fmtCompact(d.principalAtualizado)}</span>
+              </div>
+            </Card>
           </div>
 
-          <div className="xl:col-span-3 min-w-0">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
-              <h4 className="text-sm font-bold text-text">Pagamentos após {fmtDate(d.limite)}</h4>
-              <span className="text-xs text-label">valores em R$</span>
+          <Card
+            title="Perfil de amortização do principal"
+            subtitle={`R$\u00a0mil · principal atualizado pelo valor contábil da data-base, por contrato · circulante = vencimentos até ${fmtDate(d.limite)}`}
+            bodyClassName="px-0 pb-0"
+          >
+            <div className="px-4 pb-3">
+              {d.divergentes.length === 0 ? (
+                <MessageStrip design="positive">
+                  Perfil conferido: a soma das parcelas fecha com o principal atualizado de todos os{" "}
+                  {plural(d.perfil.length, "contrato", "contratos")} ({fmtBRL(d.principalAtualizado)}).
+                </MessageStrip>
+              ) : (
+                <MessageStrip design="negative">
+                  O perfil não fecha com o principal atualizado em {listaIds(d.divergentes.map((l) => l.pos.c.id))}: diferença de{" "}
+                  {fmtBRL(soma(d.divergentes, (l) => l.diferenca), true)}.
+                </MessageStrip>
+              )}
             </div>
-            <div className="-mx-4 xl:mx-0">
-              <DataTable columns={colAnos} rows={d.anosFluxo} rowKey={(x) => String(x.ano)} showTotals totalLabel="Total após 12 meses" emptyText="Sem pagamentos após 12 meses" />
+            <div className="border-t border-line-soft">
+              <div className="hidden lg:block">
+                <DataTable columns={colPerfil} rows={d.perfil} rowKey={(x) => x.pos.c.id} showTotals />
+              </div>
+              <ul className="lg:hidden divide-y divide-line-soft">
+                {perfilOrdenado.map((l) => {
+                  const ok = Math.abs(l.diferenca) <= TOLERANCIA;
+                  return (
+                    <li key={l.pos.c.id} className="px-4 py-3">
+                      <CabecalhoPopIn c={l.pos.c} reclassificado={l.pos.reclassificado} sub={l.pos.c.descricaoAmortizacao}>
+                        <div className="inline-flex items-center gap-1.5 text-sm font-bold text-text tabular">
+                          {ok ? <CheckCircle2 className="w-3.5 h-3.5 text-positive shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-negative shrink-0" />}
+                          {fmtValor(l.total)}
+                        </div>
+                        <div className="text-xs text-label">principal</div>
+                      </CabecalhoPopIn>
+                      <dl className="grid grid-cols-3 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+                        <PopIn rotulo="12 meses" valor={fmtValor(l.circulante)} />
+                        {d.faixas.map((f) => {
+                          const v = soma(f.anos, (a) => l.porAno.get(a) ?? 0);
+                          return v > 0.5 ? <PopIn key={f.key} rotulo={f.rotulo} valor={fmtValor(v)} /> : null;
+                        })}
+                      </dl>
+                    </li>
+                  );
+                })}
+                <li className="px-4 py-3 bg-[#f5f6f7]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-bold text-text">Total ({d.perfil.length})</div>
+                    <div className="text-sm font-bold text-text tabular">{fmtValor(totaisPerfil.total)}</div>
+                  </div>
+                  <dl className="grid grid-cols-3 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+                    <PopIn rotulo="12 meses" valor={fmtValor(totaisPerfil.circulante)} />
+                    {d.faixas.map((f, i) => (
+                      <PopIn key={f.key} rotulo={f.rotulo} valor={fmtValor(totaisPerfil.faixas[i])} />
+                    ))}
+                  </dl>
+                </li>
+              </ul>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[13px] mt-3 px-0.5">
-              <span className="text-label">Total dos fluxos futuros ({plural(d.eventos.length, "pagamento", "pagamentos")})</span>
-              <span className="tabular font-bold text-text whitespace-nowrap">{fmtBRL(d.fluxo12.total + d.fluxoApos.total)}</span>
+            <div className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft space-y-1">
+              <p>{NOTA_ARREDONDAMENTO}</p>
+              {haReclassificacao && (
+                <p>
+                  Contratos marcados com <strong className="text-negative">CPC 26.74</strong> têm todo o principal no circulante por
+                  descumprimento de covenant sem waiver na data do balanço; o cronograma contratual segue na aba Fluxos projetados.
+                </p>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ------------------------------------------------------------------ Fluxos projetados */}
+      {aba === "fluxos" && (
+        <Card
+          title="Fluxos projetados"
+          subtitle="Pagamentos futuros de principal e juros pelo cronograma contratual · clique em um mês para ver os pagamentos"
+        >
+          <MessageStrip design="information" className="mb-4">
+            Juros projetados com o último dado disponível importado do SAP ({fmtDate(ultimoDado)}): <strong>{textoPremissas}</strong>,
+            mantidos constantes após a data-base. {textoConvencoes}; o principal dos contratos IPCA+ e TLP inclui a atualização
+            monetária projetada até cada pagamento.{" "}
+            <Link to="/premissas" className="text-link hover:underline whitespace-nowrap">
+              Ver premissas
+            </Link>
+          </MessageStrip>
+
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
+            <div className="xl:col-span-3 min-w-0">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
+                <h4 className="text-sm font-bold text-text">Próximos 12 meses</h4>
+                <span className="text-xs text-label">R$&nbsp;milhões por mês</span>
+              </div>
+              <div className="h-72 -ml-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={graficoMeses}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    barCategoryGap="22%"
+                    onClick={(s: { activeLabel?: string | number } | null) => s?.activeLabel && setMesEscolhido(String(s.activeLabel))}
+                    className="cursor-pointer"
+                  >
+                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
+                    <XAxis dataKey="mes" tickFormatter={mesCurto} tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                    <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#eaecee", fillOpacity: 0.6 }} labelFormatter={(mes: string) => mesLongo(mes)} formatter={tooltipMi} />
+                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={legendaTexto} />
+                    <ReferenceArea x1={mesSel.mes} x2={mesSel.mes} fill="#0070f2" fillOpacity={0.08} stroke="#0070f2" strokeOpacity={0.35} strokeDasharray="3 3" />
+                    <Bar dataKey="principal" name="Principal" stackId="f" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false} />
+                    <Bar dataKey="juros" name="Juros" stackId="f" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-3">
+                <Mini rotulo="Principal" valor={fmtCompact(d.fluxo12.principal)} />
+                <Mini rotulo="Juros" valor={fmtCompact(d.fluxo12.juros)} />
+                <Mini rotulo="Total" valor={fmtCompact(d.fluxo12.total)} />
+              </div>
+              <p className="text-xs text-label mt-2 leading-relaxed">
+                Principal projetado em 12 meses ({fmtBRL(d.fluxo12.principal)}) × principal a vencer pelo valor contábil da
+                data-base ({fmtBRL(d.principalContratual12m)}): diferença de {fmtBRL(difPrincipal12m)}
+                {Math.abs(difPrincipal12m) > TOLERANCIA
+                  ? ", correspondente à atualização monetária futura até as datas de pagamento (IPCA nos contratos IPCA+ e TLP; excedente da TJLP sobre 6% a.a.)"
+                  : ""}
+                .
+              </p>
+            </div>
+
+            <div className="xl:col-span-2 xl:row-span-2 min-w-0">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
+                <h4 className="text-sm font-bold text-text">Quadro mensal</h4>
+                <span className="text-xs text-label">R$&nbsp;mil</span>
+              </div>
+              <div className="overflow-x-auto fiori-scroll -mx-4 xl:mx-0">
+                <table className="w-full text-sm border-separate border-spacing-0">
+                  <thead>
+                    <tr>
+                      <th className="text-left pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Mês</th>
+                      <th className="text-right px-2 sm:px-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Principal</th>
+                      <th className="text-right px-2 sm:px-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Juros</th>
+                      <th className="text-right pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.meses.map((mes) => {
+                      const sel = mes.mes === mesSel.mes;
+                      return (
+                        <tr key={mes.mes} onClick={() => setMesEscolhido(mes.mes)} className={clsx("cursor-pointer", sel ? "bg-selected" : "hover:bg-[#f2f4f6]")}>
+                          <td
+                            className={clsx(
+                              "pl-4 xl:pl-3 pr-2 sm:pr-3 py-2 text-[13px] border-b border-line-soft whitespace-nowrap",
+                              sel && "shadow-[inset_3px_0_0_#0064d9] font-semibold",
+                            )}
+                          >
+                            {mesCurto(mes.mes)}
+                            <span className="text-label font-normal ml-1.5">({mes.eventos.length})</span>
+                          </td>
+                          <td className="px-2 sm:px-3 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap">{fmtValor(mes.principal)}</td>
+                          <td className="px-2 sm:px-3 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap">{fmtValor(mes.juros)}</td>
+                          <td className="pl-2 sm:pl-3 pr-4 xl:pr-3 py-2 text-right tabular text-[13px] border-b border-line-soft whitespace-nowrap font-semibold">
+                            {fmtValor(mes.total)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-[#f5f6f7] font-bold">
+                      <td className="pl-4 xl:pl-3 pr-2 sm:pr-3 py-2.5 text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">Total 12 meses</td>
+                      <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.principal)}</td>
+                      <td className="px-2 sm:px-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.juros)}</td>
+                      <td className="pl-2 sm:pl-3 pr-4 xl:pr-3 py-2.5 text-right tabular text-[13px] border-t border-[#a8b2bd] whitespace-nowrap">{fmtValor(d.fluxo12.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="text-xs text-label mt-2">{NOTA_ARREDONDAMENTO}</p>
+            </div>
+
+            <div className="xl:col-span-3 min-w-0">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
+                <h4 className="text-sm font-bold text-text">Pagamentos em {mesLongo(mesSel.mes)}</h4>
+                <span className="text-xs text-label tabular">{fmtCompact(mesSel.total)}</span>
+              </div>
+              {mesSel.eventos.length === 0 ? (
+                <p className="text-sm text-label py-3">Sem pagamentos no mês.</p>
+              ) : (
+                <ul className="divide-y divide-line-soft">
+                  {mesSel.eventos.map((e) => (
+                    <li key={`${e.c.id}-${e.data}`} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-text">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDe(e.c) }} />
+                          <span className="truncate">
+                            {e.c.id} · {e.c.credor}
+                          </span>
+                        </div>
+                        <div className="text-xs text-label pl-4 truncate">
+                          {fmtDate(e.data)} · {e.principal > 0 && e.juros > 0 ? "principal e juros" : e.principal > 0 ? "principal" : "juros"}
+                          {e.data === e.c.vencimento ? " · vencimento final" : ""}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="tabular font-semibold text-text whitespace-nowrap">{fmtCompact(e.principal + e.juros)}</div>
+                        {e.principal > 0 && e.juros > 0 && (
+                          <div className="text-xs text-label tabular whitespace-nowrap">
+                            {fmtCompact(e.principal)} + {fmtCompact(e.juros)}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
-        </div>
-      </Card>
+
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 mt-6">
+            <div className="xl:col-span-2 min-w-0 flex flex-col">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
+                <h4 className="text-sm font-bold text-text">Anos seguintes</h4>
+                <span className="text-xs text-label">R$&nbsp;milhões por ano</span>
+              </div>
+              <div className="h-72 xl:h-auto xl:flex-1 xl:min-h-[300px] -ml-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={graficoAnos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                    <CartesianGrid vertical={false} stroke="#e5e5e5" />
+                    <XAxis dataKey="ano" tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
+                    <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      cursor={{ fill: "#eaecee", fillOpacity: 0.6 }}
+                      labelFormatter={(_: unknown, pl: ReadonlyArray<{ payload?: { rotulo?: string } }>) => pl?.[0]?.payload?.rotulo ?? ""}
+                      formatter={tooltipMi}
+                    />
+                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={legendaTexto} />
+                    <Bar dataKey="principal" name="Principal" stackId="a" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false} />
+                    <Bar dataKey="juros" name="Juros" stackId="a" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="xl:col-span-3 min-w-0">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
+                <h4 className="text-sm font-bold text-text">Pagamentos após {fmtDate(d.limite)}</h4>
+                <span className="text-xs text-label">R$&nbsp;mil</span>
+              </div>
+              <div className="-mx-4 xl:mx-0">
+                <div className="hidden md:block">
+                  <DataTable columns={colAnos} rows={d.anosFluxo} rowKey={(x) => String(x.ano)} showTotals totalLabel="Total após 12 meses" emptyText="Sem pagamentos após 12 meses" />
+                </div>
+                <ul className="md:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+                  {d.anosFluxo.length === 0 && <li className="py-8 text-center text-label text-sm">Sem pagamentos após 12 meses</li>}
+                  {d.anosFluxo.map((a) => (
+                    <li key={a.ano} className="px-4 py-2.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm font-semibold text-text whitespace-nowrap">
+                          {a.rotulo}
+                          <span className="text-xs text-label font-normal ml-1.5">{plural(a.contratos.length, "contrato", "contratos")}</span>
+                        </span>
+                        <span className="text-sm font-bold text-text tabular">{fmtValor(a.total)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 text-xs text-label tabular mt-0.5">
+                        <span>
+                          Principal <span className="text-text font-semibold">{fmtValor(a.principal)}</span> · Juros{" "}
+                          <span className="text-text font-semibold">{fmtValor(a.juros)}</span>
+                        </span>
+                        <span>{fmtPct(d.fluxoApos.total > 0 ? a.total / d.fluxoApos.total : 0, 1)}</span>
+                      </div>
+                    </li>
+                  ))}
+                  {d.anosFluxo.length > 0 && (
+                    <li className="px-4 py-2.5 bg-[#f5f6f7]">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm font-bold text-text">Total após 12 meses</span>
+                        <span className="text-sm font-bold text-text tabular">{fmtValor(d.fluxoApos.total)}</span>
+                      </div>
+                      <div className="text-xs text-label tabular mt-0.5">
+                        Principal <span className="text-text font-semibold">{fmtValor(d.fluxoApos.principal)}</span> · Juros{" "}
+                        <span className="text-text font-semibold">{fmtValor(d.fluxoApos.juros)}</span>
+                      </div>
+                    </li>
+                  )}
+                </ul>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[13px] mt-3 px-0.5">
+                <span className="text-label">Total dos fluxos futuros ({plural(d.eventos.length, "pagamento", "pagamentos")})</span>
+                <span className="tabular font-bold text-text whitespace-nowrap">{fmtCompact(d.fluxo12.total + d.fluxoApos.total)}</span>
+              </div>
+              <p className="text-xs text-label mt-1 px-0.5">{NOTA_ARREDONDAMENTO}</p>
+            </div>
+          </div>
+        </Card>
+      )}
     </ReportPage>
   );
 }
@@ -1164,6 +1343,7 @@ function BlocoComposicao({
   titulo: string;
   cor: string;
   share: number;
+  /** valores já arredondados em R$ mil */
   linhas: { rotulo: string; valor: number; negativo?: boolean }[];
   total: { rotulo: string; valor: number };
 }) {
@@ -1183,19 +1363,48 @@ function BlocoComposicao({
       </dl>
       <div className="flex items-baseline justify-between gap-3 border-t border-[#a8b2bd] mt-2.5 pt-2">
         <span className="text-sm font-bold text-text">= {total.rotulo}</span>
-        <span className="text-base font-bold tabular text-text whitespace-nowrap">{fmtBRL(total.valor)}</span>
+        <span className="text-base font-bold tabular text-text whitespace-nowrap">{fmtInteiroMil(total.valor)}</span>
       </div>
     </div>
   );
 }
 
+/** Linha de quadro de composição com valor já arredondado em R$ mil (negativos entre parênteses) */
 function LinhaValor({ rotulo, valor, negativo }: { rotulo: string; valor: number; negativo?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className={clsx("min-w-0", negativo ? "text-negative font-semibold" : "text-label")}>{rotulo}</dt>
-      <dd className={clsx("tabular whitespace-nowrap", negativo ? "text-negative font-semibold" : "text-text")}>
-        {valor < 0 ? `(${fmtBRL(-valor)})` : fmtBRL(valor)}
-      </dd>
+      <dd className={clsx("tabular whitespace-nowrap", negativo ? "text-negative font-semibold" : "text-text")}>{fmtInteiroMil(valor)}</dd>
+    </div>
+  );
+}
+
+/** Cabeçalho de um item da lista pop-in (telas estreitas): contrato à esquerda, valor principal à direita */
+function CabecalhoPopIn({ c, reclassificado, sub, children }: { c: ContratoDivida; reclassificado: boolean; sub: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: corDe(c) }} aria-hidden />
+          <span className="font-semibold text-text whitespace-nowrap">{c.id}</span>
+          {reclassificado && (
+            <ObjectStatus state="negative" inverted icon={false}>
+              CPC 26.74
+            </ObjectStatus>
+          )}
+        </div>
+        <div className="text-xs text-label leading-snug pl-[18px] mt-0.5">{sub}</div>
+      </div>
+      <div className="text-right shrink-0">{children}</div>
+    </div>
+  );
+}
+
+function PopIn({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-label truncate">{rotulo}</dt>
+      <dd className="text-text font-semibold tabular">{valor}</dd>
     </div>
   );
 }
