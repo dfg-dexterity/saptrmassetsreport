@@ -1,5 +1,5 @@
-import { useMemo, type ReactNode } from "react";
-import { Link } from "react-router";
+import { useMemo, useState, type ReactNode } from "react";
+import { Link, useLocation } from "react-router";
 import {
   Bar,
   BarChart,
@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { Card } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
+import { TabBar } from "../../shared/components/fiori/Inputs";
 import { AXIS_STYLE, CHART_SEMANTIC, HeaderKpi } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, semaforoState, Tag, type ValueState } from "../../shared/components/fiori/ObjectStatus";
@@ -28,7 +29,7 @@ import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, fmtX } from "../../shared/l
 import type { Semaforo } from "../../shared/lib/semaforo";
 import { useCovenants, useDivida } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
-import type { ContratoDivida } from "../data/contratos";
+import { CONTRATOS, type ContratoDivida } from "../data/contratos";
 import { COVENANTS_DIVIDA, type CovenantDivida, type CovenantId } from "../data/covenants";
 import {
   icsdDoAno,
@@ -43,6 +44,16 @@ import {
 import { posicoesDivida, type PosicaoDivida } from "../lib/divida";
 
 const rel = relatorioCaptacao("c04");
+
+type Aba = "apuracao" | "historico" | "classificacao" | "base";
+const ABAS: Aba[] = ["apuracao", "historico", "classificacao", "base"];
+
+/** Aba inicial: outras telas podem abrir direto numa aba com `<Link to="/c04-covenants" state={{ aba: "classificacao" }}>` */
+function abaInicial(state: unknown): Aba {
+  const aba = (state as { aba?: unknown } | null)?.aba;
+  return ABAS.includes(aba as Aba) ? (aba as Aba) : "apuracao";
+}
+
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
 // ---------------------------------------------------------------------------
@@ -60,6 +71,8 @@ const COR_ESTADO: Record<ValueState, string> = {
   information: "#0070f2",
   neutral: "#1d2d3e",
 };
+/** Azul das tags informativas: mais escuro que o de gráficos para contraste ≥ 4,5:1 no fundo claro da tag */
+const AZUL_TAG = "#0057d2";
 
 /** Nomes curtos (tags e listas compactas) */
 const SIGLA: Record<CovenantId, string> = {
@@ -161,7 +174,12 @@ interface LinhaBase {
   sub?: string;
   v: (i: IndicadoresCorporativos) => number;
   destaque?: boolean;
+  /** Linha "dos quais" (recuada, em cinza) */
+  detalhe?: boolean;
 }
+
+/** Contratos cujos encargos são capitalizados no ativo qualificável (CPC 20) */
+const CAPITALIZAM = CONTRATOS.filter((c) => c.capitalizacaoCPC20).map((c) => c.id);
 
 const LINHAS_BASE: LinhaBase[] = [
   { rotulo: "Dívida bruta", sub: "custo amortizado (C00)", v: (i) => i.dividaBruta },
@@ -169,7 +187,8 @@ const LINHAS_BASE: LinhaBase[] = [
   { rotulo: "(−) Aplicações financeiras", sub: "carteira de aplicações na data", v: (i) => i.aplicacoes },
   { rotulo: "Dívida líquida", v: (i) => i.dividaLiquida, destaque: true },
   { rotulo: "EBITDA (últimos 12 meses)", v: (i) => i.ebitdaLTM },
-  { rotulo: "Encargos da dívida (últimos 12 meses)", sub: "juros + correção + custos (C03)", v: (i) => i.encargosLTM },
+  { rotulo: "Encargos da dívida (últimos 12 meses)", sub: "juros + atualização monetária + custos (C03)", v: (i) => i.encargosLTM },
+  { rotulo: "dos quais capitalizados (CPC 20)", sub: `${listar(CAPITALIZAM)} · custo do ativo qualificável`, v: (i) => i.capitalizadosLTM, detalhe: true },
   { rotulo: "Patrimônio líquido", v: (i) => i.patrimonioLiquido },
   { rotulo: "Ativo total", v: (i) => i.ativoTotal },
   { rotulo: "Imóveis a pagar", sub: "obrigações por aquisição de imóveis", v: (i) => i.imoveisAPagar },
@@ -212,6 +231,8 @@ export function C04Covenants() {
   const { premissas: p, contratos, posicoes } = useDivida();
   const apuracoes = useCovenants();
   const db = p.dataBase;
+  const location = useLocation();
+  const [aba, setAba] = useState<Aba>(() => abaInicial(location.state));
 
   const d = useMemo(() => {
     const ativos = new Set(posicoes.map((x) => x.c.id));
@@ -388,14 +409,15 @@ export function C04Covenants() {
           subtitulo: "Valores em R$; indicadores em múltiplos (x) e capitalização em %",
           colunas: [{ titulo: "Item", largura: 44 }, ...d.serie.map((i) => ({ titulo: `${fmtQuarter(i.data)} (${fmtDate(i.data)})`, tipo: "decimal" as const, largura: 20 }))],
           linhas: [
-            ...LINHAS_BASE.map((l) => [l.rotulo, ...d.serie.map((i) => l.v(i))]),
+            ...LINHAS_BASE.map((l) => [l.detalhe ? `  ${l.rotulo}` : l.rotulo, ...d.serie.map((i) => l.v(i))]),
             ...COVENANTS_TRIMESTRE.map((c) => [
               `${c.indicador} (${c.formato === "pct" ? "%" : "x"})`,
               ...d.serie.map((i) => valorIndicador(c.id, i) * (c.formato === "pct" ? 100 : 1)),
             ]),
           ],
           notas: [
-            "Dívida bruta pelo custo amortizado (C00) e encargos dos últimos 12 meses (C03), calculados com as premissas importadas do SAP em cada data.",
+            "Dívida bruta pelo custo amortizado (C00) e encargos dos últimos 12 meses (C03), calculados com as séries históricas de CDI, IPCA, TJLP e TLP importadas do SAP até cada data: CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos, com a TJLP acima de 6% a.a. capitalizada no principal (atualização monetária).",
+            `Encargos inclusive os capitalizados no ativo qualificável (CPC 20 – ${listar(CAPITALIZAM)}), como exige o covenant EBITDA/encargos financeiros.`,
             "Caixa, EBITDA, patrimônio líquido, ativo total e imóveis a pagar: dados corporativos fictícios do ambiente de teste.",
           ],
         },
@@ -415,7 +437,7 @@ export function C04Covenants() {
             return [x.ano, x.geracaoCaixa, x.servicoDivida, x.icsd, cov.limite, STATUS_TEXTO[statusCovenant(cov, x.icsd)]];
           }),
           notas: [
-            "Serviço da dívida = principal + juros pagos no exercício por todos os contratos (movimentação C01).",
+            "Serviço da dívida = principal + juros pagos no exercício por todos os contratos (movimentação C01); vencimentos em dia não útil são pagos no dia útil seguinte.",
             "Geração de caixa do exercício: dado corporativo fictício do ambiente de teste.",
           ],
         },
@@ -436,7 +458,8 @@ export function C04Covenants() {
           <strong>{fmtValor(c.cov, c.valor)}</strong> ({c.cov.tipo === "max" ? "máximo" : "mínimo"} {fmtRef(c.cov, c.cov.limite)}) sem waiver até a data
           do balanço: o não circulante de {listar(d.idsReclassificados)} (<strong>{fmtCompact(d.totalReclassificado)}</strong>) foi reclassificado para o
           circulante (CPC 26, item 74).
-          {c.waiver && ` O waiver do ${c.waiver.credor}, obtido em ${fmtDate(c.waiver.obtidoEm)}, é evento subsequente que não origina ajuste (CPC 24).`}
+          {c.waiver && ` O waiver do ${c.waiver.credor}, obtido em ${fmtDate(c.waiver.obtidoEm)}, é evento subsequente que não origina ajuste (CPC 24).`}{" "}
+          {aba !== "classificacao" && <LinkAba onClick={() => setAba("classificacao")}>Ver classificação CPC 26</LinkAba>}
         </MessageStrip>
       );
     }
@@ -447,14 +470,16 @@ export function C04Covenants() {
           <strong>
             waiver do {c.waiver.credor} obtido em {fmtDate(c.waiver.obtidoEm)}
           </strong>
-          : sem vencimento antecipado, {listar(c.cov.contratos)} seguem o cronograma contratual na data-base.
+          : sem vencimento antecipado, {listar(c.cov.contratos)} seguem o cronograma contratual na data-base.{" "}
+          {aba !== "classificacao" && <LinkAba onClick={() => setAba("classificacao")}>Ver classificação CPC 26</LinkAba>}
         </MessageStrip>
       );
     }
     if (emAtencao.length) {
       return (
         <MessageStrip design="critical">
-          {listar(emAtencao.map((a) => a.cov.indicador))} na faixa de atenção: folga reduzida em relação ao limite contratual.
+          {listar(emAtencao.map((a) => a.cov.indicador))} na faixa de atenção: folga reduzida em relação ao limite contratual.{" "}
+          {aba !== "historico" && <LinkAba onClick={() => setAba("historico")}>Ver histórico</LinkAba>}
         </MessageStrip>
       );
     }
@@ -509,29 +534,50 @@ export function C04Covenants() {
           />
         </>
       }
+      headerExtra={
+        <div className="border-b border-line-soft -mb-5">
+          <TabBar
+            value={aba}
+            onChange={setAba}
+            items={[
+              { value: "apuracao", label: "Apuração", count: n },
+              { value: "historico", label: "Histórico" },
+              { value: "classificacao", label: "Classificação CPC 26", count: d.classificacao.length },
+              { value: "base", label: "Base de cálculo" },
+            ]}
+          />
+        </div>
+      }
     >
+      {/* Situação na data-base: visível em todas as abas */}
       {faixa}
 
-      <TabelaCovenants apuracoes={apuracoes} dataBase={db} ativos={d.ativos} />
+      {aba === "apuracao" && (
+        <TabelaCovenants apuracoes={apuracoes} dataBase={db} ativos={d.ativos} onClassificacao={() => setAba("classificacao")} />
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {apuracoes.map((a) => (
-          <CardGrafico key={a.cov.id} a={a} />
-        ))}
-        <CardLeitura proximaTri={proximaTri} proximaAnual={proximaAnual} />
-      </div>
+      {aba === "historico" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {apuracoes.map((a) => (
+            <CardGrafico key={a.cov.id} a={a} />
+          ))}
+          <CardLeitura proximaTri={proximaTri} proximaAnual={proximaAnual} />
+        </div>
+      )}
 
-      <CardWaiver
-        caso={d.caso}
-        dataBase={db}
-        apuracoes={apuracoes}
-        classificacao={d.classificacao}
-        idsReclassificados={d.idsReclassificados}
-        totalReclassificado={d.totalReclassificado}
-        comparativo={d.comparativo}
-      />
+      {aba === "classificacao" && (
+        <CardWaiver
+          caso={d.caso}
+          dataBase={db}
+          apuracoes={apuracoes}
+          classificacao={d.classificacao}
+          idsReclassificados={d.idsReclassificados}
+          totalReclassificado={d.totalReclassificado}
+          comparativo={d.comparativo}
+        />
+      )}
 
-      <CardBaseCalculo serie={d.serie} icsd={d.icsd} />
+      {aba === "base" && <CardBaseCalculo serie={d.serie} icsd={d.icsd} />}
     </ReportPage>
   );
 }
@@ -551,18 +597,27 @@ function CelulaWaiver({ a }: { a: ApuracaoCovenant }) {
   );
 }
 
-function CelulaCPC26({ a }: { a: ApuracaoCovenant }) {
+function CelulaCPC26({ a, onVer }: { a: ApuracaoCovenant; onVer: () => void }) {
+  const link = a.status === "excedido" && (
+    <div className="mt-0.5">
+      <LinkAba onClick={onVer} pequeno>
+        Ver classificação
+      </LinkAba>
+    </div>
+  );
   if (a.reclassifica)
     return (
       <div className="leading-snug">
         <ObjectStatus state="negative">Reclassifica</ObjectStatus>
         <div className="text-xs text-label">NC → circulante</div>
+        {link}
       </div>
     );
   return (
     <div className="leading-snug">
       <div className="text-[13px] text-text">Não reclassifica</div>
       {a.status === "excedido" && a.waiverVigente && <div className="text-xs text-label">waiver vigente</div>}
+      {link}
     </div>
   );
 }
@@ -583,7 +638,17 @@ function TagsContratos({ ids, ativos }: { ids: string[]; ativos: Set<string> }) 
   );
 }
 
-function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoCovenant[]; dataBase: string; ativos: Set<string> }) {
+function TabelaCovenants({
+  apuracoes,
+  dataBase,
+  ativos,
+  onClassificacao,
+}: {
+  apuracoes: ApuracaoCovenant[];
+  dataBase: string;
+  ativos: Set<string>;
+  onClassificacao: () => void;
+}) {
   const colunas: Column<ApuracaoCovenant>[] = [
     {
       key: "indicador",
@@ -662,14 +727,14 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
       header: "Efeito CPC 26",
       headerTitle: "Efeito CPC 26: descumprimento sem waiver até a data do balanço reclassifica o não circulante para o circulante",
       value: (a) => (a.reclassifica ? 1 : 0),
-      render: (a) => <CelulaCPC26 a={a} />,
+      render: (a) => <CelulaCPC26 a={a} onVer={onClassificacao} />,
     },
   ];
 
   return (
     <Card
       title="Apuração dos covenants"
-      subtitle={`Última apuração de cada covenant até a data-base ${fmtDate(dataBase)} · folga positiva = dentro do limite`}
+      subtitle={`Última apuração de cada covenant até a data-base ${fmtDate(dataBase)} · índices em múltiplos (x) e capitalização em % · folga positiva = dentro do limite`}
       bodyClassName="px-0 pb-0"
     >
       <div className="hidden min-[1420px]:block">
@@ -703,6 +768,14 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
               {" · "}
               <span className="text-text">Reclassifica (CPC 26):</span>{" "}
               <span className={a.reclassifica ? "text-negative font-semibold" : undefined}>{a.reclassifica ? "sim – circulante" : "não"}</span>
+              {a.status === "excedido" && (
+                <>
+                  {" · "}
+                  <LinkAba onClick={onClassificacao} pequeno>
+                    Ver classificação
+                  </LinkAba>
+                </>
+              )}
             </div>
             <div className="mt-2">
               <TagsContratos ids={a.cov.contratos} ativos={ativos} />
@@ -1182,7 +1255,7 @@ function CardWaiver({
                     </span>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-[13px] font-bold tabular text-text">{fmtDate(e.data)}</span>
-                      {e.tag && <Tag color={e.tag === "Data-base" ? "#0070f2" : undefined}>{e.tag}</Tag>}
+                      {e.tag && <Tag color={e.tag === "Data-base" ? AZUL_TAG : undefined}>{e.tag}</Tag>}
                     </div>
                     <div className="text-[13px] font-semibold text-text mt-0.5">{e.titulo}</div>
                     <div className="text-xs text-label leading-snug mt-0.5">{e.texto}</div>
@@ -1224,7 +1297,7 @@ function CardWaiver({
       <div className="mt-5 border-t border-line-soft">
         <div className="pt-3 pb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h4 className="text-sm font-bold text-text">Contratos sujeitos a covenants</h4>
-          <span className="text-xs text-label">Custo amortizado em {fmtDate(dataBase)} · R$</span>
+          <span className="text-xs text-label">Custo amortizado em {fmtDate(dataBase)} · valores em R$</span>
         </div>
         <DataTable columns={colunas} rows={classificacao} rowKey={(x) => x.pos.c.id} showTotals />
       </div>
@@ -1314,13 +1387,13 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
           <tbody>
             {LINHAS_BASE.map((l) => (
               <tr key={l.rotulo} className={l.destaque ? "font-semibold" : undefined}>
-                <td className={tdRot}>
-                  <div className="sm:whitespace-nowrap leading-snug">{l.rotulo}</div>
+                <td className={`${tdRot} ${l.detalhe ? "pl-8!" : ""}`}>
+                  <div className={`sm:whitespace-nowrap leading-snug ${l.detalhe ? "text-[13px] text-label" : ""}`}>{l.rotulo}</div>
                   {l.sub && <div className="text-xs text-label font-normal sm:whitespace-nowrap leading-snug">{l.sub}</div>}
                 </td>
                 {serie.map((i) => (
-                  <td key={i.data} className={tdNum}>
-                    {fmtNum(l.v(i))}
+                  <td key={i.data} className={`${tdNum} ${l.detalhe ? "text-[13px] text-label" : ""}`}>
+                    {fmtNum(l.v(i), { dash: l.detalhe })}
                   </td>
                 ))}
               </tr>
@@ -1362,7 +1435,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
       <div className="border-t border-line-soft mt-4">
         <div className="pt-3 pb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h4 className="text-sm font-bold text-text">ICSD – apuração anual (BNDES)</h4>
-          <span className="text-xs text-label">{covIcsd.formula}</span>
+          <span className="text-xs text-label">{covIcsd.formula} · valores em R$</span>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-5">
           <div className="lg:col-span-3 min-w-0">
@@ -1374,7 +1447,7 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
               <Link to="/c01-movimentacao" className="text-link hover:underline">
                 C01
               </Link>
-              ). A geração de caixa do exercício vem da controladoria.
+              ); vencimentos em dia não útil são pagos no dia útil seguinte. A geração de caixa do exercício vem da controladoria.
             </p>
             <p>
               Dívida bruta pelo custo amortizado (
@@ -1385,8 +1458,9 @@ function CardBaseCalculo({ serie, icsd }: { serie: IndicadoresCorporativos[]; ic
               <Link to="/c03-encargos" className="text-link hover:underline">
                 C03
               </Link>
-              ) calculados com as premissas importadas do SAP em cada data; aplicações financeiras pela carteira de aplicações na respectiva
-              data.
+              ), inclusive os capitalizados (CPC 20), calculados com as séries históricas de CDI, IPCA, TJLP e TLP importadas do SAP até cada
+              data – CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos, com a TJLP acima de 6% a.a. capitalizada no principal.
+              Aplicações financeiras pela carteira de aplicações na respectiva data.
             </p>
             <p>
               <strong className="text-text font-semibold">Nota:</strong> caixa, EBITDA, patrimônio líquido, ativo total, imóveis a pagar e geração
@@ -1414,6 +1488,19 @@ function Mini({ rotulo, valor, cor, sub }: { rotulo: string; valor: ReactNode; c
       </div>
       {sub && <div className="text-[11px] text-label leading-tight mt-0.5">{sub}</div>}
     </div>
+  );
+}
+
+/** Link de navegação entre as abas da tela */
+function LinkAba({ onClick, children, pequeno }: { onClick: () => void; children: ReactNode; pequeno?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-link font-semibold hover:underline whitespace-nowrap no-print ${pequeno ? "text-xs" : ""}`}
+    >
+      {children}
+    </button>
   );
 }
 

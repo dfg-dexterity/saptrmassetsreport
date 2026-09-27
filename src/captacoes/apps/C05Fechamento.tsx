@@ -1,11 +1,11 @@
 import clsx from "clsx";
-import { ArrowRight, CheckCircle2, UserRound, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, UserRound, XCircle } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Card } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
 import { SegmentedButton, TabBar } from "../../shared/components/fiori/Inputs";
-import { CHART_COLORS, HeaderKpi, MicroBar } from "../../shared/components/fiori/Kpi";
+import { HeaderKpi, MicroBar } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
@@ -15,6 +15,7 @@ import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec } from "../../shared/lib/format";
 import { useDivida } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
+import { COR_MODALIDADE } from "../data/contratos";
 import { CONTAS_CONTABEIS, TOLERANCIA_CONCILIACAO, type GrupoContabil, type StatusEtapa } from "../data/fechamento";
 import {
   checagensIntegridade,
@@ -48,23 +49,65 @@ function fmtDif(v: number): string {
   return `${v > 0 ? "+" : "−"}${fmtDec(Math.abs(v), 2)}`;
 }
 
-/** O motor formata "R$ -0,00" quando a diferença é um resíduo negativo de ponto flutuante */
-function semZeroNegativo(texto: string): string {
-  return texto.replace(/-0,00(?!\d)/g, "0,00");
+/** Diferença em reais com o sinal antes do símbolo, como nos demais formatadores: "−R$ 12.480,55" / "+R$ 3.412,90" */
+function fmtDifBRL(v: number): string {
+  if (Math.abs(v) < 0.005) return fmtBRL(0, true);
+  return `${v > 0 ? "+" : "−"}${fmtBRL(Math.abs(v), true)}`;
+}
+
+/**
+ * Textos montados pelo motor de fechamento: "R$ -0,00" de resíduo de ponto flutuante vira "R$ 0,00", o hífen de
+ * negativo vira o sinal de menos tipográfico (antes do símbolo), "R$" fica preso ao número (espaço não separável) e
+ * "roll-forward" segue o termo das telas ("movimentação").
+ */
+function normalizarTexto(texto: string): string {
+  return texto
+    .replace(/-0,00(?!\d)/g, "0,00")
+    .replace(/R\$ ?-(?=\d)/g, "−R$ ")
+    .replace(/(^|[\s(])-(?=\d)/g, "$1−")
+    .replace(/R\$ /g, "R$\u00a0")
+    .replace(/\bno roll-forward\b/g, "na movimentação")
+    .replace(/\broll-forward\b/g, "movimentação");
 }
 
 function plural(n: number, singular: string, pluralTxt: string): string {
   return `${n} ${n === 1 ? singular : pluralTxt}`;
 }
 
+/** Cor do grupo contábil = cor da modalidade em todas as telas de Captações; "CRA/CRI" usa a cor de CRA */
+function corDoGrupo(grupo: GrupoContabil): string {
+  return COR_MODALIDADE[grupo === "CRA/CRI" ? "CRA" : grupo] ?? "#758ca4";
+}
+
 /** Grupos contábeis do passivo de captações, com o nome do plano de contas do FI-GL */
 const GRUPOS: { grupo: GrupoContabil; nome: string; cor: string }[] = (["BNDES", "CCB", "Debêntures", "CRA/CRI"] as GrupoContabil[]).map(
-  (grupo, i) => {
+  (grupo) => {
     const conta = CONTAS_CONTABEIS.find((c) => c.grupo === grupo);
-    return { grupo, nome: conta ? conta.descricao.split(" – ")[0] : grupo, cor: CHART_COLORS[i] };
+    return { grupo, nome: conta ? conta.descricao.split(" – ")[0] : grupo, cor: corDoGrupo(grupo) };
   },
 );
-const COR_GRUPO = Object.fromEntries(GRUPOS.map((g) => [g.grupo, g.cor])) as Record<GrupoContabil, string>;
+
+/** Luminância relativa (WCAG 2.x) de uma cor RGB */
+function luminancia(rgb: number[]): number {
+  const [r, g, b] = rgb.map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Fundo das tags de grupo (cor a 8%) e texto escurecido até contraste ≥ 4,5:1 sobre esse fundo (WCAG AA, texto de 11 px) */
+const ALFA_FUNDO_TAG = 0.08;
+function corTextoTag(hex: string): string {
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const fundo = luminancia(rgb.map((v) => 255 - (255 - v) * ALFA_FUNDO_TAG));
+  let c = rgb;
+  while ((fundo + 0.05) / (luminancia(c) + 0.05) < 4.5) c = c.map((v) => Math.floor(v * 0.9));
+  return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+const COR_TAG = Object.fromEntries(
+  GRUPOS.map((g) => [g.grupo, { texto: corTextoTag(g.cor), borda: `${g.cor}66`, fundo: `${g.cor}14` }]),
+) as Record<GrupoContabil, { texto: string; borda: string; fundo: string }>;
 
 /** "Financiamentos BNDES – Principal – circulante" → "Principal – circulante" */
 function rubricaConta(descricao: string): string {
@@ -73,10 +116,12 @@ function rubricaConta(descricao: string): string {
 }
 
 const STATUS_GL: Record<LinhaConciliacaoGL["status"], ValueState> = { Conciliado: "positive", Divergente: "negative" };
-const STATUS_EXTRATO: Record<LinhaConciliacaoExtrato["status"], ValueState> = {
-  Conciliado: "positive",
-  Arredondamento: "information",
-  Divergente: "negative",
+/** Arredondamento dentro da tolerância conta como conciliado (o motivo fica na coluna própria) */
+const conciliadoExtrato = (l: LinhaConciliacaoExtrato) => l.status !== "Divergente";
+const STATUS_EXTRATO_TEXTO: Record<LinhaConciliacaoExtrato["status"], string> = {
+  Conciliado: "Conciliado",
+  Arredondamento: "Conciliado (arredondamento)",
+  Divergente: "Divergente",
 };
 const STATUS_ETAPA: Record<StatusEtapa, ValueState> = { Concluído: "positive", "Com pendência": "critical", Pendente: "neutral" };
 
@@ -128,7 +173,10 @@ const LINK_CHECAGEM: Record<string, { rotulo: string; rota?: string; aba?: Aba }
 const TRANSACOES_SAP: { codigo: string; descricao: string }[] = [
   { codigo: "TBB1", descricao: "Contabilização dos fluxos (pagamentos de principal, juros e custos) no FI-GL" },
   { codigo: "TPM44", descricao: "Apropriação por competência (accrual/deferral) de juros e custos de transação" },
-  { codigo: "TPM1", descricao: "Avaliação: atualização monetária do principal pelos índices importados" },
+  {
+    codigo: "TPM1",
+    descricao: "Avaliação: atualização monetária do principal – IPCA (títulos IPCA+ e TLP) e parcela da TJLP acima de 6% a.a. (BNDES)",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -147,7 +195,8 @@ export function C05Fechamento() {
     const extratos = conciliacaoExtratos(posicoes, db);
     const checagens: Checagem[] = checagensIntegridade(posicoes, db, p, gl, extratos).map((c) => ({
       ...c,
-      detalhe: semZeroNegativo(c.detalhe),
+      descricao: normalizarTexto(c.descricao),
+      detalhe: normalizarTexto(c.detalhe),
     }));
     const checklist = checklistFechamento(db, checagens);
 
@@ -219,6 +268,10 @@ export function C05Fechamento() {
   const dataAprovacao = aprovacao ? dataDoDiaUtil(db, aprovacao.dia) : null;
   const outrasFalhas = d.checagens.filter((c) => !c.ok && c.id !== "gl" && c.id !== "extratos");
   const qtdPendencias = d.glDiv.length + d.extDiv.length + outrasFalhas.length;
+  // Mesmo critério do Launchpad: etapa de aprovação concluída = "Aprovado"; sem pendências = "Pronto para aprovação"
+  const aprovado = aprovacao?.status === "Concluído";
+  const situacaoAprovacao = aprovado ? "período aprovado pela Controladoria" : qtdPendencias === 0 ? "período pronto para aprovação" : "aprovação pendente";
+  const qtdArredondamento = d.extratos.filter((l) => l.status === "Arredondamento").length;
 
   const linhasGL = d.gl.filter(
     (l) => (!grupo || l.conta.grupo === grupo) && (somenteDivergentes === "todas" || l.status === "Divergente"),
@@ -287,7 +340,7 @@ export function C05Fechamento() {
             { titulo: "Saldo TRM (R$)", tipo: "moeda", largura: 18 },
             { titulo: "Saldo extrato (R$)", tipo: "moeda", largura: 18 },
             { titulo: "Diferença (R$)", tipo: "moeda", largura: 14 },
-            { titulo: "Status", largura: 16 },
+            { titulo: "Status", largura: 26 },
             { titulo: "Motivo", largura: 90 },
           ],
           linhas: d.extratos.map((l) => [
@@ -299,7 +352,7 @@ export function C05Fechamento() {
             l.saldoTRM,
             l.saldoExtrato,
             l.diferenca,
-            l.status,
+            STATUS_EXTRATO_TEXTO[l.status],
             l.motivo ?? "",
           ]),
           total: [
@@ -315,8 +368,8 @@ export function C05Fechamento() {
             "",
           ],
           notas: [
-            `Arredondamento: diferença de centavos (PU × quantidade) dentro da tolerância de ${TOLERANCIA}.`,
-            `Saldos TRM calculados com os dados de mercado importados do SAP (último dado disponível: ${fmtDate(ultimoDadoNaDataBase(db))}).`,
+            `Arredondamento: diferença de centavos (PU × quantidade) dentro da tolerância de ${TOLERANCIA} – conta como conciliado.`,
+            `Saldos TRM apurados com as séries históricas de CDI, IPCA, TJLP e TLP importadas do SAP até a data-base (último dado disponível: ${fmtDate(ultimoDadoNaDataBase(db))}): CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos, com a TJLP acima de 6% a.a. capitalizada no principal.`,
             "Os custos de transação a apropriar não constam dos extratos e não entram nesta conciliação.",
           ],
         },
@@ -379,7 +432,7 @@ export function C05Fechamento() {
       header: "Grupo",
       minWidth: 100,
       value: (l) => l.conta.grupo,
-      render: (l) => <Tag color={COR_GRUPO[l.conta.grupo]}>{l.conta.grupo}</Tag>,
+      render: (l) => <TagGrupo grupo={l.conta.grupo} />,
     },
     {
       key: "trm",
@@ -428,39 +481,43 @@ export function C05Fechamento() {
   const colExt: Column<LinhaConciliacaoExtrato>[] = [
     {
       key: "contrato",
-      header: "Contrato",
-      minWidth: 210,
+      header: "Contrato · fonte do extrato",
+      minWidth: 230,
       value: (l) => l.pos.c.id,
       render: (l) => (
-        <div className="py-0.5">
+        <div className="py-0.5" title={l.pos.c.instrumento}>
           <div className="font-semibold text-text">{l.pos.c.id}</div>
-          <div className="text-xs text-label leading-snug mt-0.5">{l.pos.c.instrumento}</div>
+          <div className="text-xs text-label leading-snug mt-0.5">{l.fonte}</div>
         </div>
       ),
       total: (rows) => plural(rows.length, "contrato", "contratos"),
     },
     {
-      key: "fonte",
-      header: "Fonte do extrato",
-      minWidth: 190,
-      value: (l) => l.fonte,
-      render: (l) => <span className="text-[13px] leading-snug block">{l.fonte}</span>,
+      key: "principal",
+      header: "Principal atualizado (R$)",
+      align: "right",
+      minWidth: 150,
+      value: (l) => l.pos.principalAtualizado,
+      render: (l) => fmtValor(l.pos.principalAtualizado),
+      total: () => fmtValor(somaExt((l) => l.pos.principalAtualizado)),
+    },
+    {
+      key: "juros",
+      header: "Juros a pagar (R$)",
+      align: "right",
+      minWidth: 120,
+      value: (l) => l.pos.jurosAPagar,
+      render: (l) => fmtValor(l.pos.jurosAPagar),
+      total: () => fmtValor(somaExt((l) => l.pos.jurosAPagar)),
     },
     {
       key: "trm",
       header: "Saldo TRM (R$)",
       headerTitle: "Principal atualizado + juros a pagar",
       align: "right",
-      minWidth: 150,
+      minWidth: 140,
       value: (l) => l.saldoTRM,
-      render: (l) => (
-        <div>
-          <div>{fmtValor(l.saldoTRM)}</div>
-          <div className="text-xs text-label">
-            {fmtCompact(l.pos.principalAtualizado)} + {fmtCompact(l.pos.jurosAPagar)}
-          </div>
-        </div>
-      ),
+      render: (l) => <span className="font-semibold">{fmtValor(l.saldoTRM)}</span>,
       total: () => fmtValor(totalExtTRM),
     },
     {
@@ -485,14 +542,14 @@ export function C05Fechamento() {
     {
       key: "status",
       header: "Status",
-      minWidth: 140,
-      value: (l) => l.status,
-      render: (l) => <ObjectStatus state={STATUS_EXTRATO[l.status]}>{l.status}</ObjectStatus>,
+      minWidth: 120,
+      value: (l) => (conciliadoExtrato(l) ? 0 : 1),
+      render: (l) => <StatusExtrato l={l} />,
     },
     {
       key: "motivo",
       header: "Motivo",
-      minWidth: 250,
+      minWidth: 230,
       sortable: false,
       render: (l) =>
         l.motivo ? (
@@ -502,11 +559,6 @@ export function C05Fechamento() {
         ),
     },
   ];
-
-  const statusExtratos = (["Conciliado", "Arredondamento", "Divergente"] as const).map((s) => ({
-    status: s,
-    qtd: d.extratos.filter((l) => l.status === s).length,
-  }));
 
   return (
     <ReportPage
@@ -536,7 +588,7 @@ export function C05Fechamento() {
             label="Etapas concluídas"
             value={`${d.etapasConcluidas}/${d.checklist.length}`}
             state={d.etapasConcluidas < d.checklist.length ? "critical" : "positive"}
-            sub="checklist DU-2 a DU+3"
+            sub={aprovado ? "Aprovado" : qtdPendencias === 0 ? "Pronto para aprovação" : "aprovação pendente"}
           />
           <HeaderKpi
             label="Maior diferença"
@@ -570,41 +622,56 @@ export function C05Fechamento() {
         <MessageStrip design="positive">
           <strong>Fechamento de {fmtDate(db)} sem pendências:</strong> {d.gl.length} contas TRM × FI-GL e {d.extratos.length}{" "}
           extratos conciliados dentro da tolerância de {TOLERANCIA}, {d.checagensOk} de {d.checagens.length} checagens de
-          integridade OK e {d.etapasConcluidas} de {d.checklist.length} etapas do checklist concluídas
-          {d.etapasConcluidas === d.checklist.length ? " – período aprovado pela Controladoria." : "."}
+          integridade OK e {d.etapasConcluidas} de {d.checklist.length} etapas do checklist concluídas – {situacaoAprovacao}.
         </MessageStrip>
       ) : (
-        <MessageStrip design="critical">
-          <strong>
-            Fechamento de {fmtDate(db)} com {plural(qtdPendencias, "pendência", "pendências")} acima da tolerância de {TOLERANCIA}:
-          </strong>
-          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+        <Card
+          title={`Pendências do fechamento de ${fmtDate(db)}`}
+          subtitle={`Diferenças acima da tolerância de ${TOLERANCIA} bloqueiam a aprovação da Controladoria`}
+          icon={<AlertTriangle className="w-5 h-5 text-critical-strong" aria-hidden />}
+          status={
+            <ObjectStatus state="critical" inverted>
+              {plural(qtdPendencias, "pendência", "pendências")}
+            </ObjectStatus>
+          }
+          bodyClassName="px-4 pb-3"
+        >
+          <ul className="border-t border-line-soft divide-y divide-line-soft text-[13px] text-text">
             {d.glDiv.map((l) => (
-              <li key={l.conta.conta}>
-                Conta <strong className="tabular">{l.conta.conta}</strong> ({l.conta.grupo} – {rubricaConta(l.conta.descricao).toLowerCase()}): saldo
-                do FI-GL {fmtBRL(Math.abs(l.diferenca), true)} {l.diferenca < 0 ? "menor" : "maior"} que o TRM.{" "}
-                <LinkAcao onClick={() => irPara("gl")}>Ver conciliação</LinkAcao>
+              <li key={l.conta.conta} className="flex items-start gap-2 py-2">
+                <XCircle className="w-4 h-4 text-negative shrink-0 mt-0.5" aria-label="Divergente" />
+                <span className="min-w-0 leading-relaxed">
+                  Conta <strong className="tabular">{l.conta.conta}</strong> ({l.conta.grupo} – {rubricaConta(l.conta.descricao).toLowerCase()}):
+                  saldo do FI-GL {fmtBRL(Math.abs(l.diferenca), true)} {l.diferenca < 0 ? "menor" : "maior"} que o TRM.{" "}
+                  <LinkAcao onClick={() => irPara("gl")}>Ver conciliação</LinkAcao>
+                </span>
               </li>
             ))}
             {d.extDiv.map((l) => (
-              <li key={l.pos.c.id}>
-                Extrato do <strong>{l.pos.c.id}</strong>: saldo {fmtBRL(Math.abs(l.diferenca), true)}{" "}
-                {l.diferenca < 0 ? "menor" : "maior"} que o TRM. <LinkAcao onClick={() => irPara("extratos")}>Ver conciliação</LinkAcao>
+              <li key={l.pos.c.id} className="flex items-start gap-2 py-2">
+                <XCircle className="w-4 h-4 text-negative shrink-0 mt-0.5" aria-label="Divergente" />
+                <span className="min-w-0 leading-relaxed">
+                  Extrato do <strong>{l.pos.c.id}</strong>: saldo {fmtBRL(Math.abs(l.diferenca), true)} {l.diferenca < 0 ? "menor" : "maior"}{" "}
+                  que o TRM. <LinkAcao onClick={() => irPara("extratos")}>Ver conciliação</LinkAcao>
+                </span>
               </li>
             ))}
             {outrasFalhas.map((c) => (
-              <li key={c.id}>
-                {c.descricao}: {c.detalhe}. <LinkAcao onClick={() => irPara("checagens")}>Ver checagens</LinkAcao>
+              <li key={c.id} className="flex items-start gap-2 py-2">
+                <XCircle className="w-4 h-4 text-negative shrink-0 mt-0.5" aria-label="Falha" />
+                <span className="min-w-0 leading-relaxed">
+                  {c.descricao}: {c.detalhe}. <LinkAcao onClick={() => irPara("checagens")}>Ver checagens</LinkAcao>
+                </span>
               </li>
             ))}
           </ul>
-          {aprovacao && aprovacao.status !== "Concluído" && dataAprovacao && (
-            <p className="mt-1">
+          {aprovacao && !aprovado && dataAprovacao && (
+            <p className="text-xs text-label leading-relaxed border-t border-line-soft pt-2">
               Checklist com {d.etapasConcluidas} de {d.checklist.length} etapas concluídas; a aprovação da Controladoria ({aprovacao.dia},{" "}
               {fmtDate(dataAprovacao)}) aguarda a regularização.
             </p>
           )}
-        </MessageStrip>
+        </Card>
       )}
 
       {/* ------------------------------------------------------------------ TRM × FI-GL */}
@@ -708,7 +775,7 @@ export function C05Fechamento() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-text tabular">{l.conta.conta}</span>
-                        <Tag color={COR_GRUPO[l.conta.grupo]}>{l.conta.grupo}</Tag>
+                        <TagGrupo grupo={l.conta.grupo} />
                       </div>
                       <div className="text-xs text-label leading-snug mt-0.5">{rubricaConta(l.conta.descricao)}</div>
                     </div>
@@ -760,13 +827,20 @@ export function C05Fechamento() {
           bodyClassName="px-0! pb-0!"
           className="min-w-0 overflow-hidden"
         >
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 pb-3">
-            {statusExtratos.map((s) => (
-              <span key={s.status} className="inline-flex items-center gap-1.5 text-[13px]">
-                <ObjectStatus state={STATUS_EXTRATO[s.status]}>{s.status}</ObjectStatus>
-                <span className="text-text font-semibold tabular">{s.qtd}</span>
-              </span>
-            ))}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 pb-3 text-[13px]">
+            <span className="inline-flex flex-wrap items-center gap-x-1.5">
+              <ObjectStatus state="positive">Conciliado</ObjectStatus>
+              <span className="text-text font-semibold tabular">{extOk}</span>
+              {qtdArredondamento > 0 && (
+                <span className="text-label">
+                  ({qtdArredondamento === extOk && extOk > 1 ? "todos" : `dos quais ${qtdArredondamento}`} com arredondamento de centavos)
+                </span>
+              )}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <ObjectStatus state={d.extDiv.length ? "negative" : "neutral"}>Divergente</ObjectStatus>
+              <span className="text-text font-semibold tabular">{d.extDiv.length}</span>
+            </span>
           </div>
 
           <div className="hidden lg:block border-t border-line-soft">
@@ -790,13 +864,15 @@ export function C05Fechamento() {
                     <div className="text-sm font-semibold text-text">{l.pos.c.id}</div>
                     <div className="text-xs text-label leading-snug mt-0.5">{l.pos.c.instrumento}</div>
                   </div>
-                  <ObjectStatus state={STATUS_EXTRATO[l.status]}>{l.status}</ObjectStatus>
+                  <StatusExtrato l={l} />
                 </div>
                 <div className="text-xs text-label leading-snug mt-1.5">
                   <span className="text-text">Fonte:</span> {l.fonte}
                 </div>
                 <PopInValores rotulo="Extrato (R$)" trm={l.saldoTRM} outro={l.saldoExtrato} dif={l.diferenca} />
-                {l.status === "Divergente" && l.motivo && <p className="text-xs text-text leading-snug mt-2">{l.motivo}</p>}
+                {l.motivo && (
+                  <p className={clsx("text-xs leading-snug mt-2", l.status === "Divergente" ? "text-text" : "text-label")}>{l.motivo}</p>
+                )}
               </li>
             ))}
             <li className="px-4 py-3 bg-[#f5f6f7]">
@@ -817,9 +893,10 @@ export function C05Fechamento() {
               <strong className="text-text">{TOLERANCIA}</strong> – conta como conciliado.
             </li>
             <li>
-              (ii) Saldos do TRM calculados com os dados de mercado importados do SAP (último dado disponível:{" "}
-              {fmtDate(ultimoDadoNaDataBase(db))}); a projeção dos fluxos futuros usa esse mesmo último dado e não entra
-              na conciliação.
+              (ii) Saldos do TRM apurados com as séries históricas de CDI, IPCA, TJLP e TLP importadas do SAP até a data-base (último
+              dado disponível: {fmtDate(ultimoDadoNaDataBase(db))}): CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos, com a
+              TJLP acima de 6% a.a. capitalizada no principal. A projeção dos fluxos futuros (último dado disponível, pagamentos no dia
+              útil seguinte) não entra na conciliação.
             </li>
             <li>
               (iii) Os extratos não trazem os custos de transação a apropriar: saldo TRM dos extratos ({fmtBRL(totalExtTRM, true)}) −
@@ -906,7 +983,7 @@ export function C05Fechamento() {
               {d.glDiv.length + d.extDiv.length === 0 && outrasFalhas.length === 0 ? (
                 <div className="flex items-start gap-2 text-[13px] text-text">
                   <CheckCircle2 className="w-4 h-4 text-positive shrink-0 mt-px" />
-                  Nenhuma pendência – conciliações dentro da tolerância e período pronto para aprovação.
+                  Nenhuma pendência – conciliações dentro da tolerância e {situacaoAprovacao}.
                 </div>
               ) : (
                 <ul className="space-y-3">
@@ -980,7 +1057,7 @@ export function C05Fechamento() {
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-label">
                               {e.transacao && (
                                 <span className="inline-flex items-center gap-1">
-                                  Transação <Tag color="#0070f2">{e.transacao}</Tag>
+                                  Transação <Tag>{e.transacao}</Tag>
                                 </span>
                               )}
                               <span className="inline-flex items-center gap-1">
@@ -1048,15 +1125,16 @@ export function C05Fechamento() {
                 {TRANSACOES_SAP.map((t) => (
                   <li key={t.codigo} className="flex items-start gap-3 text-[13px]">
                     <span className="w-14 shrink-0">
-                      <Tag color="#0070f2">{t.codigo}</Tag>
+                      <Tag>{t.codigo}</Tag>
                     </span>
                     <span className="text-text leading-snug">{t.descricao}</span>
                   </li>
                 ))}
               </ul>
               <p className="text-xs text-label mt-3 leading-relaxed">
-                Os dados de mercado usados na avaliação (TPM1) e na apropriação (TPM44) são os importados do SAP até a data-base;
-                as parcelas futuras são projetadas com o último dado disponível.
+                A apropriação (TPM44) e a avaliação (TPM1) usam as séries históricas de CDI, IPCA, TJLP e TLP importadas do SAP até a
+                data-base – CDI e títulos em 252 dias úteis; BNDES em 365 dias corridos. As parcelas futuras são projetadas com o
+                último dado disponível e, quando vencem em dia não útil, pagas no dia útil seguinte.
               </p>
             </Card>
           </div>
@@ -1069,6 +1147,24 @@ export function C05Fechamento() {
 // ---------------------------------------------------------------------------
 // Componentes auxiliares
 // ---------------------------------------------------------------------------
+
+/** Tag do grupo contábil: cor da modalidade no fundo e na borda, texto escurecido para contraste AA */
+function TagGrupo({ grupo }: { grupo: GrupoContabil }) {
+  const c = COR_TAG[grupo];
+  return (
+    <span
+      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold border whitespace-nowrap"
+      style={{ color: c.texto, borderColor: c.borda, backgroundColor: c.fundo }}
+    >
+      {grupo}
+    </span>
+  );
+}
+
+/** Status do extrato: arredondamento dentro da tolerância é conciliado */
+function StatusExtrato({ l }: { l: LinhaConciliacaoExtrato }) {
+  return conciliadoExtrato(l) ? <ObjectStatus state="positive">Conciliado</ObjectStatus> : <ObjectStatus state="negative">Divergente</ObjectStatus>;
+}
 
 function Diferenca({ valor, forte }: { valor: number; forte?: boolean }) {
   const fora = Math.abs(valor) > TOLERANCIA_CONCILIACAO;
@@ -1134,7 +1230,7 @@ function Pendencia({ titulo, valor, motivo, onVer }: { titulo: string; valor: nu
     <li className="rounded-lg border border-[#f53232]/30 bg-[#fff6f9] px-3 py-2.5 text-[13px]">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-semibold text-text tabular">{titulo}</span>
-        <span className="tabular font-bold text-negative whitespace-nowrap">R$ {fmtDif(valor)}</span>
+        <span className="tabular font-bold text-negative whitespace-nowrap">{fmtDifBRL(valor)}</span>
       </div>
       {motivo && <p className="text-text leading-snug mt-1">{motivo}</p>}
       <div className="mt-1.5">

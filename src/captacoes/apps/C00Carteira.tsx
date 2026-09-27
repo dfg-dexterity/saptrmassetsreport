@@ -5,7 +5,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, Field } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
 import { FilterField, SearchField, Select } from "../../shared/components/fiori/Inputs";
-import { CHART_COLORS, HeaderKpi } from "../../shared/components/fiori/Kpi";
+import { HeaderKpi } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
@@ -16,15 +16,27 @@ import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtNum, fmtPct, fmtX } from "../../
 import { ESCOPOS, useCovenants, useDivida, type Escopo } from "../context/useDivida";
 import { MAPEAMENTO_C00, relatorioCaptacao } from "../data/catalogo";
 import { COVENANTS_DIVIDA, type CovenantDivida } from "../data/covenants";
-import { EMPRESAS_DIVIDA, GRUPO_MODALIDADE, taxaContratadaDivida, type ContratoDivida, type IndexadorDivida } from "../data/contratos";
+import {
+  COR_INDEXADOR,
+  COR_MODALIDADE,
+  EMPRESAS_DIVIDA,
+  GRUPO_MODALIDADE,
+  taxaContratadaDivida,
+  type ContratoDivida,
+  type IndexadorDivida,
+} from "../data/contratos";
 import type { ApuracaoCovenant } from "../lib/covenants";
 import { calcularPosicaoDivida, custoMedioPonderado, prazoMedioCarteira, totalDivida, type PosicaoDivida } from "../lib/divida";
 
 const rel = relatorioCaptacao("c00");
 const TODOS = "__todos";
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-/** Ordem fixa dos indexadores (mesmas cores da tela de Premissas) */
+/** Ordem fixa dos indexadores (cores de COR_INDEXADOR, as mesmas da tela de Premissas) */
 const ORDEM_INDEXADOR: IndexadorDivida[] = ["CDI", "IPCA", "TJLP", "TLP", "Pré"];
+/** Circulante × não circulante: mesmas cores do C02 */
+const COR_CP = "#e26300";
+const COR_NC = "#0070f2";
+const corModalidade = (c: ContratoDivida) => COR_MODALIDADE[GRUPO_MODALIDADE[c.modalidade]] ?? "#758ca4";
 /** sap.m.ColumnListItem com highlight "Error" (barra vermelha à esquerda da linha) */
 const HIGHLIGHT_RECLASSIFICADO = "[&>td:first-child]:shadow-[inset_3px_0_0_#f53232]";
 
@@ -55,6 +67,15 @@ function fmtPrazo(dias: number): string {
 
 function plural(n: number, singular: string, pluralTxt: string): string {
   return `${fmtInt(n)} ${n === 1 ? singular : pluralTxt}`;
+}
+
+/** Participação com 1 casa, sem "0,0%" para valores positivos pequenos (nem "100,0%" para quase o todo) */
+function fmtParticipacao(v: number, total: number): string {
+  if (!(total > 0)) return "—";
+  const f = v / total;
+  if (f > 0 && f < 0.0005) return "< 0,1%";
+  if (f < 1 && f > 0.9995) return "> 99,9%";
+  return fmtPct(f, 1);
 }
 
 function fmtLimite(cov: CovenantDivida): string {
@@ -107,7 +128,7 @@ interface Fatia {
   cor: string;
 }
 
-function fatiar(pos: PosicaoDivida[], chave: (x: PosicaoDivida) => string, ordem: string[]): Fatia[] {
+function fatiar(pos: PosicaoDivida[], chave: (x: PosicaoDivida) => string, cor: (k: string) => string): Fatia[] {
   const total = totalDivida(pos);
   const mapa = new Map<string, { valor: number; qtd: number }>();
   for (const x of pos) {
@@ -118,10 +139,7 @@ function fatiar(pos: PosicaoDivida[], chave: (x: PosicaoDivida) => string, ordem
     mapa.set(k, f);
   }
   return [...mapa.entries()]
-    .map(([k, f]) => {
-      const i = ordem.indexOf(k);
-      return { chave: k, valor: f.valor, qtd: f.qtd, share: total > 0 ? f.valor / total : 0, cor: CHART_COLORS[(i < 0 ? ordem.length : i) % CHART_COLORS.length] };
-    })
+    .map(([k, f]) => ({ chave: k, valor: f.valor, qtd: f.qtd, share: total > 0 ? f.valor / total : 0, cor: cor(k) }))
     .sort((a, b) => b.valor - a.valor);
 }
 
@@ -140,12 +158,11 @@ export function C00Carteira() {
   const telaLarga = useTelaLarga(640);
   const ultimoDado = ultimoDadoNaDataBase(p.dataBase);
 
-  // Ordem das modalidades pelo saldo da empresa selecionada (cores estáveis ao filtrar; igual ao Launchpad no consolidado)
-  const ordemModalidade = useMemo(() => fatiar(posicoes, (x) => GRUPO_MODALIDADE[x.c.modalidade], []).map((f) => f.chave), [posicoes]);
-
+  const gruposPresentes = new Set<string>(posicoes.map((x) => GRUPO_MODALIDADE[x.c.modalidade]));
+  if (modalidade !== TODOS) gruposPresentes.add(modalidade);
   const opcoesModalidade = [
     { value: TODOS, label: "Todas" },
-    ...[...new Set([...ordemModalidade, ...(modalidade !== TODOS ? [modalidade] : [])])].sort((a, b) => a.localeCompare(b, "pt-BR")).map((v) => ({ value: v, label: v })),
+    ...[...gruposPresentes].sort((a, b) => a.localeCompare(b, "pt-BR")).map((v) => ({ value: v, label: v })),
   ];
   const presentesIdx = new Set<string>(posicoes.map((x) => x.c.indexador));
   if (indexador !== TODOS) presentesIdx.add(indexador);
@@ -185,14 +202,16 @@ export function C00Carteira() {
       grupos: new Set(linhas.map((x) => GRUPO_MODALIDADE[x.c.modalidade])).size,
       reclass,
       valorReclass: reclass.reduce((s, x) => s + valorReclassificado(x, p.dataBase, p), 0),
-      porModalidade: fatiar(linhas, (x) => GRUPO_MODALIDADE[x.c.modalidade], ordemModalidade),
-      porIndexador: fatiar(linhas, (x) => x.c.indexador, ORDEM_INDEXADOR),
+      porModalidade: fatiar(linhas, (x) => GRUPO_MODALIDADE[x.c.modalidade], (g) => COR_MODALIDADE[g] ?? "#758ca4"),
+      porIndexador: fatiar(linhas, (x) => x.c.indexador, (i) => COR_INDEXADOR[i as IndexadorDivida] ?? "#758ca4"),
     };
-  }, [linhas, ordemModalidade, p]);
+  }, [linhas, p]);
 
   // Covenants descumpridos sem waiver que reclassificam contratos do conjunto filtrado
   const covReclass = apuracoes.filter((a) => a.reclassifica && a.cov.contratos.some((id) => k.reclass.some((x) => x.c.id === id)));
 
+  // Colunas de valor logo após a taxa: a 1440 px o saldo, o circulante e o não circulante ficam visíveis sem rolagem
+  // (e o saldo continua visível com o painel de detalhe aberto). Captação e valor captado seguem no detalhe e no Excel.
   const colunas: Column<PosicaoDivida>[] = [
     {
       key: "contrato",
@@ -200,7 +219,7 @@ export function C00Carteira() {
       sticky: telaLarga,
       value: (x) => x.c.id,
       render: (x) => (
-        <div className="min-w-[11.5rem] max-w-[16rem]">
+        <div className="min-w-[9.5rem] max-w-[12.5rem]">
           <div className="font-bold text-text">{x.c.id}</div>
           <div className="text-xs text-label leading-snug line-clamp-2" title={x.c.instrumento}>
             {x.c.instrumento}
@@ -216,27 +235,23 @@ export function C00Carteira() {
     },
     {
       key: "modalidade",
-      header: "Modalidade",
-      value: (x) => x.c.modalidade,
+      header: "Modalidade / Credor",
+      value: (x) => `${GRUPO_MODALIDADE[x.c.modalidade]} ${x.c.modalidade}`,
       render: (x) => (
-        <div className="whitespace-nowrap">
-          <div className="text-text">{x.c.modalidade}</div>
-          <div className="text-xs text-label">
-            Empresa {x.c.empresa}
-            {x.c.formaBNDES ? ` · ${x.c.formaBNDES}` : ""}
+        <div className="min-w-[10.5rem] max-w-[13.5rem]">
+          <div className="flex items-center gap-1.5 text-text whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corModalidade(x.c) }} aria-hidden />
+            {x.c.modalidade}
+            {x.c.formaBNDES && <span className="text-xs text-label">· {x.c.formaBNDES}</span>}
           </div>
-        </div>
-      ),
-    },
-    {
-      key: "credor",
-      header: "Credor",
-      minWidth: 190,
-      value: (x) => x.c.credor,
-      render: (x) => (
-        <div>
-          <div className="font-semibold text-text">{x.c.credor}</div>
-          {x.c.agente && <div className="text-xs text-label leading-snug">{x.c.agente}</div>}
+          <div className="text-xs text-label leading-snug truncate pl-3.5" title={`${x.c.credor} · Empresa ${x.c.empresa}`}>
+            <span className="font-semibold text-text">{x.c.credor}</span> · Empresa {x.c.empresa}
+          </div>
+          {x.c.agente && (
+            <div className="text-xs text-label leading-snug truncate pl-3.5" title={x.c.agente}>
+              {x.c.agente}
+            </div>
+          )}
         </div>
       ),
     },
@@ -251,31 +266,36 @@ export function C00Carteira() {
         </div>
       ),
     },
-    { key: "captacao", header: "Captação", align: "right", value: (x) => x.c.dataCaptacao, render: (x) => fmtDate(x.c.dataCaptacao) },
     {
-      key: "vencimento",
-      header: "Vencimento",
+      key: "saldo",
+      header: "Saldo contábil",
+      headerTitle: "Custo amortizado: principal atualizado + juros a pagar − custos a apropriar",
       align: "right",
-      value: (x) => x.c.vencimento,
-      render: (x) => (
-        <div>
-          <div>{fmtDate(x.c.vencimento)}</div>
-          <div className={clsx("text-xs", x.diasAteVencimento <= 365 ? "text-critical font-semibold" : "text-label")}>{fmtPrazo(x.diasAteVencimento)}</div>
-        </div>
-      ),
+      value: (x) => x.saldoContabil,
+      render: (x) => <span className="font-semibold">{fmtNum(x.saldoContabil)}</span>,
+      total: (r) => fmtNum(totalDivida(r)),
     },
     {
-      key: "captado",
-      header: "Valor captado",
+      key: "circulante",
+      header: "Circulante",
+      headerTitle: "Principal com vencimento em até 12 meses + juros a pagar − custos a apropriar no período (CPC 26)",
       align: "right",
-      value: (x) => x.c.valorCaptado,
-      render: (x) => fmtNum(x.c.valorCaptado),
-      total: (r) => fmtNum(r.reduce((s, x) => s + x.c.valorCaptado, 0)),
+      value: (x) => x.circulante,
+      render: (x) => <span className={clsx(x.reclassificado && "text-negative font-semibold")}>{fmtNum(x.circulante, { dash: true })}</span>,
+      total: (r) => fmtNum(soma(r, (x) => x.circulante), { dash: true }),
+    },
+    {
+      key: "naoCirculante",
+      header: "Não circulante",
+      align: "right",
+      value: (x) => x.naoCirculante,
+      render: (x) => fmtNum(x.naoCirculante, { dash: true }),
+      total: (r) => fmtNum(soma(r, (x) => x.naoCirculante), { dash: true }),
     },
     {
       key: "principal",
       header: "Principal atualizado",
-      headerTitle: "Principal nominal remanescente + atualização monetária (IPCA / TLP)",
+      headerTitle: "Principal nominal remanescente + atualização monetária (IPCA nos contratos IPCA+ e TLP; excedente da TJLP sobre 6% a.a. nos contratos TJLP)",
       align: "right",
       value: (x) => x.principalAtualizado,
       render: (x) => fmtNum(x.principalAtualizado),
@@ -291,37 +311,12 @@ export function C00Carteira() {
     },
     {
       key: "custos",
-      header: "(−) Custos a apropriar",
+      header: "(−) Custos",
       headerTitle: "Custos de transação a apropriar (redutora do passivo, apropriação linear até o vencimento)",
       align: "right",
       value: (x) => x.custosAApropriar,
       render: (x) => <span className="text-label">{fmtRedutora(x.custosAApropriar)}</span>,
       total: (r) => fmtRedutora(soma(r, (x) => x.custosAApropriar)),
-    },
-    {
-      key: "saldo",
-      header: "Saldo contábil",
-      headerTitle: "Custo amortizado: principal atualizado + juros a pagar − custos a apropriar",
-      align: "right",
-      value: (x) => x.saldoContabil,
-      render: (x) => <span className="font-semibold">{fmtNum(x.saldoContabil)}</span>,
-      total: (r) => fmtNum(totalDivida(r)),
-    },
-    {
-      key: "circulante",
-      header: "Circulante",
-      align: "right",
-      value: (x) => x.circulante,
-      render: (x) => <span className={clsx(x.reclassificado && "text-negative font-semibold")}>{fmtNum(x.circulante, { dash: true })}</span>,
-      total: (r) => fmtNum(soma(r, (x) => x.circulante), { dash: true }),
-    },
-    {
-      key: "naoCirculante",
-      header: "Não circulante",
-      align: "right",
-      value: (x) => x.naoCirculante,
-      render: (x) => fmtNum(x.naoCirculante, { dash: true }),
-      total: (r) => fmtNum(soma(r, (x) => x.naoCirculante), { dash: true }),
     },
     {
       key: "cet",
@@ -350,6 +345,18 @@ export function C00Carteira() {
         ) : (
           <span className="text-label">—</span>
         ),
+    },
+    {
+      key: "vencimento",
+      header: "Vencimento",
+      align: "right",
+      value: (x) => x.c.vencimento,
+      render: (x) => (
+        <div>
+          <div>{fmtDate(x.c.vencimento)}</div>
+          <div className={clsx("text-xs", x.diasAteVencimento <= 365 ? "text-critical font-semibold" : "text-label")}>{fmtPrazo(x.diasAteVencimento)}</div>
+        </div>
+      ),
     },
   ];
 
@@ -545,7 +552,9 @@ export function C00Carteira() {
   };
 
   const vazio = linhas.length === 0;
-  const pctDoSaldo = (v: number) => (k.saldo > 0 ? `${fmtPct(v / k.saldo, 1)} do saldo` : "—");
+  const pctDoSaldo = (v: number) => (k.saldo > 0 ? `${fmtParticipacao(v, k.saldo)} do saldo` : "—");
+  const ordenadasSaldo = [...linhas].sort((a, b) => b.saldoContabil - a.saldoContabil);
+  const alternar = (id: string) => setSelecionado(id === selecionado ? null : id);
 
   return (
     <ReportPage
@@ -554,7 +563,12 @@ export function C00Carteira() {
       kpis={
         <>
           <HeaderKpi label="Saldo (custo amortizado)" value={fmtCompact(k.saldo)} sub="Principal + juros − custos" />
-          <HeaderKpi label="Circulante" value={fmtCompact(k.circulante)} state={k.reclass.length ? "critical" : "neutral"} sub={pctDoSaldo(k.circulante)} />
+          <HeaderKpi
+            label="Circulante"
+            value={fmtCompact(k.circulante)}
+            state={k.reclass.length ? "negative" : "neutral"}
+            sub={k.reclass.length ? `${pctDoSaldo(k.circulante)} · inclui CPC 26.74` : pctDoSaldo(k.circulante)}
+          />
           <HeaderKpi label="Não circulante" value={fmtCompact(k.naoCirculante)} sub={pctDoSaldo(k.naoCirculante)} />
           <HeaderKpi label="Custo médio ponderado" value={vazio ? "—" : fmtPct(k.custoMedio)} unit={vazio ? undefined : "a.a."} sub={vazio ? "—" : `CET médio ${fmtPct(k.cetMedio)}`} />
           <HeaderKpi label="Prazo médio" value={vazio ? "—" : fmtDec(k.prazoMedio, 1)} unit={vazio ? undefined : "anos"} sub="Principal remanescente" />
@@ -588,7 +602,7 @@ export function C00Carteira() {
         {filtrosAtivos > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 text-[13px]">
             <span className="text-label">
-              {filtrosAtivos} filtro(s) ativo(s) · {linhas.length} de {plural(posicoes.length, "contrato", "contratos")}
+              {plural(filtrosAtivos, "filtro ativo", "filtros ativos")} · {linhas.length} de {plural(posicoes.length, "contrato", "contratos")}
             </span>
             <button type="button" className="text-link font-semibold hover:underline" onClick={limparFiltros}>
               Limpar filtros
@@ -613,24 +627,91 @@ export function C00Carteira() {
         </MessageStrip>
       )}
 
-      <div className={clsx("grid gap-5", sel ? "lg:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1")}>
+      <div className={clsx("grid gap-5", sel ? "xl:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1")}>
         <Card
           title={`Contratos (${linhas.length})`}
-          subtitle="Posição pelo custo amortizado na data-base · clique em uma linha para ver os termos e a decomposição do saldo"
+          subtitle="Valores em R$ · posição pelo custo amortizado na data-base · clique em um contrato para ver os termos e a decomposição do saldo"
           bodyClassName="px-0 pb-0"
           className="min-w-0 overflow-hidden"
         >
-          <DataTable
-            columns={colunas}
-            rows={linhas}
-            rowKey={(x) => x.c.id}
-            onRowClick={(x) => setSelecionado(x.c.id === selecionado ? null : x.c.id)}
-            selectedKey={selecionado}
-            rowClassName={(x) => (x.reclassificado && x.c.id !== selecionado ? HIGHLIGHT_RECLASSIFICADO : undefined)}
-            showTotals
-            defaultSort={{ key: "saldo", dir: "desc" }}
-            emptyText="Nenhum contrato atende aos filtros"
-          />
+          <div className="hidden lg:block">
+            <DataTable
+              columns={colunas}
+              rows={linhas}
+              rowKey={(x) => x.c.id}
+              onRowClick={(x) => alternar(x.c.id)}
+              selectedKey={selecionado}
+              rowClassName={(x) => (x.reclassificado && x.c.id !== selecionado ? HIGHLIGHT_RECLASSIFICADO : undefined)}
+              showTotals
+              defaultSort={{ key: "saldo", dir: "desc" }}
+              emptyText="Nenhum contrato atende aos filtros"
+            />
+          </div>
+          {/* Pop-in (sap.m.Table responsiva): em telas estreitas os valores descem para baixo do contrato */}
+          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            {ordenadasSaldo.length === 0 && <li className="py-12 text-center text-label text-sm">Nenhum contrato atende aos filtros</li>}
+            {ordenadasSaldo.map((x) => {
+              const ativo = x.c.id === selecionado;
+              return (
+                <li key={x.c.id}>
+                  <button
+                    type="button"
+                    onClick={() => alternar(x.c.id)}
+                    aria-expanded={ativo}
+                    className={clsx(
+                      "w-full text-left px-4 py-3",
+                      ativo ? "bg-selected shadow-[inset_3px_0_0_#0064d9]" : "hover:bg-[#f2f4f6]",
+                      x.reclassificado && !ativo && "shadow-[inset_3px_0_0_#f53232]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-sm">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corModalidade(x.c) }} aria-hidden />
+                          <span className="font-bold text-text whitespace-nowrap shrink-0">{x.c.id}</span>
+                          <span className="text-xs text-label truncate">· {x.c.modalidade}</span>
+                        </div>
+                        <div className="text-xs text-text leading-snug pl-3.5">{taxaContratadaDivida(x.c)}</div>
+                        <div className="text-xs text-label leading-snug truncate pl-3.5">
+                          {x.c.credor} · Empresa {x.c.empresa}
+                        </div>
+                        {x.reclassificado && (
+                          <ObjectStatus inverted state="negative" className="mt-1 ml-3.5">
+                            Reclassificado (CPC 26)
+                          </ObjectStatus>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-bold text-text tabular">{fmtNum(x.saldoContabil)}</div>
+                        <div className="text-xs text-label tabular whitespace-nowrap">venc. {fmtDate(x.c.vencimento)}</div>
+                      </div>
+                    </div>
+                    <PopInPosicao
+                      circulante={x.circulante}
+                      naoCirculante={x.naoCirculante}
+                      principal={x.principalAtualizado}
+                      juros={x.jurosAPagar}
+                      destaqueCirculante={x.reclassificado}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+            {ordenadasSaldo.length > 0 && (
+              <li className="px-4 py-3 bg-[#f5f6f7]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-sm font-bold text-text">Total ({linhas.length})</div>
+                  <div className="text-sm font-bold text-text tabular">{fmtNum(k.saldo)}</div>
+                </div>
+                <PopInPosicao
+                  circulante={k.circulante}
+                  naoCirculante={k.naoCirculante}
+                  principal={soma(linhas, (x) => x.principalAtualizado)}
+                  juros={soma(linhas, (x) => x.jurosAPagar)}
+                />
+              </li>
+            )}
+          </ul>
           <p className="px-4 py-2.5 text-xs text-label border-t border-line-soft">
             Valores em R$. CET e próximo pagamento projetados com o último dado disponível importado do SAP ({fmtDate(ultimoDado)}).
           </p>
@@ -653,8 +734,10 @@ export function C00Carteira() {
 
       <MessageStrip>
         Saldo pelo custo amortizado = principal atualizado + juros a pagar − custos de transação a apropriar (CPC 48). Circulante =
-        principal com vencimento em até 12 meses + juros a pagar − custos a apropriar no período (CPC 26). Taxas pós-fixadas, CET e
-        próximos pagamentos projetados com o último dado disponível importado do SAP ({fmtDate(ultimoDado)}).
+        principal com vencimento em até 12 meses + juros a pagar − custos a apropriar no período (CPC 26). Juros compostos em base
+        de 252 dias úteis (CDI e títulos IPCA+) e de 365 dias corridos (BNDES, com o excedente da TJLP sobre 6% a.a. capitalizado no
+        principal); até a data-base valem as séries históricas de CDI, IPCA e TJLP importadas do SAP e, depois dela, o último dado
+        disponível ({fmtDate(ultimoDado)}), que projeta taxas pós-fixadas, CET e próximos pagamentos (datas no dia útil seguinte).
       </MessageStrip>
     </ReportPage>
   );
@@ -737,7 +820,9 @@ function DetalheContrato({
   const reclassificado = pos.reclassificado ? valorReclassificado(pos, p.dataBase, p) : 0;
   const cpc20Ativo = c.capitalizacaoCPC20 ? c.capitalizacaoCPC20.ate > p.dataBase : false;
   const prazoTotalAnos = diffDays(c.dataCaptacao, c.vencimento) / 365;
-  const pct = (v: number) => (pos.saldoContabil > 0 ? fmtPct(v / pos.saldoContabil, 1) : "—");
+  const pct = (v: number) => fmtParticipacao(v, pos.saldoContabil);
+  const rotuloAtualizacao =
+    c.indexador === "IPCA" || c.indexador === "TLP" ? " (IPCA)" : c.indexador === "TJLP" ? " (TJLP acima de 6% a.a.)" : "";
 
   const valorCampo: Record<string, string> = {
     C01: `${c.empresa} – ${EMPRESAS_DIVIDA[c.empresa] ?? ""}`,
@@ -756,7 +841,7 @@ function DetalheContrato({
   const mapa = MAPEAMENTO_C00.filter((m) => m.visao && valorCampo[m.id] !== undefined);
 
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg xl:shadow-fiori overflow-hidden self-auto xl:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 xl:sticky xl:inset-auto xl:top-[4.25rem] xl:z-auto xl:max-h-[calc(100vh-5.5rem)]">
       <header className="shrink-0 px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -810,7 +895,7 @@ function DetalheContrato({
           <h4 className="text-sm font-bold text-text mb-2">Posição na data-base (custo amortizado)</h4>
           <dl className="space-y-1.5 text-[13px]">
             <Linha label="Principal nominal remanescente" valor={fmtBRL(pos.principalNominal, true)} />
-            <Linha label={`(+) Atualização monetária${c.indexador === "IPCA" || c.indexador === "TLP" ? " (IPCA)" : ""}`} valor={fmtBRL(pos.atualizacaoMonetaria, true)} />
+            <Linha label={`(+) Atualização monetária${rotuloAtualizacao}`} valor={fmtBRL(pos.atualizacaoMonetaria, true)} />
             <div className="border-t border-line-soft pt-1.5">
               <Linha label="Principal atualizado" valor={fmtBRL(pos.principalAtualizado, true)} semi />
             </div>
@@ -823,8 +908,8 @@ function DetalheContrato({
             <Linha label={`Não circulante (${pct(pos.naoCirculante)})`} valor={fmtBRL(pos.naoCirculante, true)} />
           </dl>
           <div className="flex h-2 rounded-full overflow-hidden mt-3 bg-[#e5e5e5]" aria-hidden>
-            <div style={{ width: `${pos.saldoContabil > 0 ? (pos.circulante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: pos.reclassificado ? "#f53232" : CHART_COLORS[1] }} />
-            <div style={{ width: `${pos.saldoContabil > 0 ? (pos.naoCirculante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: CHART_COLORS[0] }} />
+            <div style={{ width: `${pos.saldoContabil > 0 ? (pos.circulante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: pos.reclassificado ? "#f53232" : COR_CP }} />
+            <div style={{ width: `${pos.saldoContabil > 0 ? (pos.naoCirculante / pos.saldoContabil) * 100 : 0}%`, backgroundColor: COR_NC }} />
           </div>
           <div className="flex justify-between text-[11px] text-label mt-1">
             <span>Circulante</span>
@@ -966,6 +1051,36 @@ function DetalheContrato({
         </section>
       </div>
     </aside>
+  );
+}
+
+/** Valores da posição que descem para baixo do contrato na lista pop-in (telas estreitas) */
+function PopInPosicao({
+  circulante,
+  naoCirculante,
+  principal,
+  juros,
+  destaqueCirculante,
+}: {
+  circulante: number;
+  naoCirculante: number;
+  principal: number;
+  juros: number;
+  destaqueCirculante?: boolean;
+}) {
+  const item = (rotulo: string, valor: number, cls?: string) => (
+    <div className="min-w-0">
+      <dt className="text-xs text-label">{rotulo}</dt>
+      <dd className={clsx("text-text font-semibold tabular", cls)}>{fmtNum(valor, { dash: true })}</dd>
+    </div>
+  );
+  return (
+    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+      {item("Circulante", circulante, destaqueCirculante ? "text-negative" : undefined)}
+      {item("Não circulante", naoCirculante)}
+      {item("Principal atualizado", principal)}
+      {item("Juros a pagar", juros)}
+    </dl>
   );
 }
 

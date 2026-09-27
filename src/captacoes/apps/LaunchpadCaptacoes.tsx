@@ -18,7 +18,7 @@ import { useNavigate } from "react-router";
 import { Area, AreaChart, Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 import { Card, SectionTitle } from "../../shared/components/fiori/Card";
 import { GenericTile } from "../../shared/components/fiori/GenericTile";
-import { CHART_COLORS, MicroBar } from "../../shared/components/fiori/Kpi";
+import { MicroBar } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ShellBar } from "../../shared/components/shell/ShellBar";
@@ -27,11 +27,11 @@ import cdsResumo from "../../shared/data/cdsResumo";
 import { AVISO_DADOS, IMPORTACAO_SAP, ultimoDadoNaDataBase } from "../../shared/data/mercado";
 import type { RelatorioBase } from "../../shared/data/relatorio";
 import { addDays, diffDays, fmtDate, lastMonthEnds } from "../../shared/lib/dates";
-import { fmtCompact, fmtDec, fmtInt, fmtMi, fmtMil, fmtPct, fmtX } from "../../shared/lib/format";
+import { fmtCompact, fmtDec, fmtInt, fmtMi, fmtPct, fmtX } from "../../shared/lib/format";
 import type { ApuracaoCovenant } from "../lib/covenants";
 import type { CovenantId } from "../data/covenants";
 import { RELATORIOS_CAPTACOES, SECOES_CAPTACOES } from "../data/catalogo";
-import { GRUPO_MODALIDADE, type ContratoDivida } from "../data/contratos";
+import { COR_MODALIDADE, GRUPO_MODALIDADE, type ContratoDivida } from "../data/contratos";
 import { useCovenants, useDivida } from "../context/useDivida";
 import {
   cronograma,
@@ -43,7 +43,7 @@ import {
   prazoMedioCarteira,
   totalDivida,
 } from "../lib/divida";
-import { checagensIntegridade, conciliacaoExtratos, conciliacaoGL } from "../lib/fechamento";
+import { checagensIntegridade, checklistFechamento, conciliacaoExtratos, conciliacaoGL } from "../lib/fechamento";
 
 // ---------------------------------------------------------------------------
 // Helpers locais
@@ -90,6 +90,10 @@ function siglaCovenant(a: ApuracaoCovenant) {
   return a.cov.id === "icsd" ? "ICSD" : NOME_CURTO[a.cov.id];
 }
 
+/** Mesmas cores do C02: circulante (12 meses) × não circulante */
+const COR_CP = "#e26300";
+const COR_NC = "#0070f2";
+
 const COR_ESTADO: Record<ValueState, string> = {
   positive: "#256f3a",
   critical: "#b44f00",
@@ -111,6 +115,8 @@ interface EventoContratual {
   data: string;
   titulo: string;
   detalhe: string;
+  /** texto completo (tooltip) quando o detalhe é resumido */
+  dica?: string;
   critico: boolean;
 }
 
@@ -186,16 +192,17 @@ export function LaunchpadCaptacoes() {
           critico: true,
         });
       }
+      // Início da amortização: 1ª parcela de principal do cronograma projetado pelo motor (mesmo valor do C00/C02)
       const jaAmortizou = c.amortizacoes.some((a) => a.data <= db);
-      const primeira = c.amortizacoes.find((a) => a.data > db);
+      const primeira = eventos.find((e) => e.c.id === c.id && e.principal > 0.5);
       if (!jaAmortizou && primeira && primeira.data <= limite12m && primeira.data < c.vencimento) {
-        const fator = x.principalNominal > 0 ? x.principalAtualizado / x.principalNominal : 1;
         eventosContratuais.push({
-          chave: `car-${c.id}`,
+          chave: `amort-${c.id}`,
           c,
           data: primeira.data,
-          titulo: `${c.id} · fim da carência`,
-          detalhe: `${fmtDate(primeira.data)} · 1ª parcela ${fmtCompact(primeira.pct * c.valorCaptado * fator)}`,
+          titulo: `${c.id} · início da amortização`,
+          detalhe: `${fmtDate(primeira.data)} · 1ª parcela + juros ${fmtCompact(primeira.principal + primeira.juros)}`,
+          dica: `1ª parcela em ${fmtDate(primeira.data)}: principal ${fmtCompact(primeira.principal)} + juros ${fmtCompact(primeira.juros)} (projeção com o último dado disponível)`,
           critico: false,
         });
       }
@@ -226,6 +233,8 @@ export function LaunchpadCaptacoes() {
     const gl = conciliacaoGL(posicoes, db);
     const extratos = conciliacaoExtratos(posicoes, db);
     const checagens = checagensIntegridade(posicoes, db, p, gl, extratos);
+    // Mesmo critério do C05: "Aprovado" só com a etapa de aprovação da Controladoria concluída
+    const aprovado = checklistFechamento(db, checagens).find((e) => e.id === "aprovacao")?.status === "Concluído";
 
     return {
       total,
@@ -249,6 +258,7 @@ export function LaunchpadCaptacoes() {
       composicao,
       checagens,
       checagensOk: checagens.filter((c) => c.ok).length,
+      aprovado,
     };
   }, [posicoes, contratos, abertura, db, p]);
 
@@ -336,7 +346,7 @@ export function LaunchpadCaptacoes() {
           <BarChart data={d.perfil} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap="18%">
             <Bar dataKey="v" isAnimationActive={false} radius={[2, 2, 0, 0]}>
               {d.perfil.map((b) => (
-                <Cell key={b.rotulo} fill={b.cp ? "#8b47d7" : "#c9b0ee"} />
+                <Cell key={b.rotulo} fill={b.cp ? COR_CP : COR_NC} fillOpacity={b.cp ? 1 : 0.55} />
               ))}
             </Bar>
           </BarChart>
@@ -346,7 +356,7 @@ export function LaunchpadCaptacoes() {
     c01: {
       title: "Movimentação da Dívida",
       subtitle: `C01 · Desde ${fmtDate(abertura)}`,
-      value: `${d.variacao > 0 ? "+" : ""}${fmtMi(d.variacao)}`,
+      value: `${d.variacao > 0.05e6 ? "+" : d.variacao < -0.05e6 ? "\u2212" : ""}${fmtMi(Math.abs(d.variacao))}`,
       indicator: d.variacao >= 0 ? "up" : "down",
       unit: "R$ milhões no exercício",
       footer: `Captações: ${fmtCompact(d.mov.captacoes)}`,
@@ -373,15 +383,23 @@ export function LaunchpadCaptacoes() {
       value: `${d.checagensOk}/${d.checagens.length}`,
       unit: "checagens OK",
       state: checagensPendentes ? "critical" : "positive",
-      footer: checagensPendentes ? plural(checagensPendentes, "checagem pendente", "checagens pendentes") : "Pronto para aprovação",
+      footer: checagensPendentes
+        ? plural(checagensPendentes, "checagem pendente", "checagens pendentes")
+        : d.aprovado
+          ? "Período aprovado"
+          : "Pronto para aprovação",
       footerState: checagensPendentes ? "critical" : "positive",
     },
     c06: {
       title: "Nota Explicativa de Captações",
       subtitle: "C06 · CPC 40 / CPC 26",
-      value: fmtMil(d.total),
-      unit: "R$ mil (consolidado)",
-      footer: `CP ${fmtMil(d.circulante)} · NC ${fmtMil(d.naoCirculante)}`,
+      value: fmtMi(d.total),
+      unit: "R$ milhões (consolidado)",
+      footer: (
+        <span title={`Circulante ${fmtCompact(d.circulante)} · Não circulante ${fmtCompact(d.naoCirculante)}`}>
+          CP {fmtMi(d.circulante)} · NC {fmtMi(d.naoCirculante)}
+        </span>
+      ),
     },
     cds: {
       title: "Catálogo de CDS Views",
@@ -421,16 +439,17 @@ export function LaunchpadCaptacoes() {
           </div>
         </div>
 
-        <MessageStrip design="critical" className="mb-7">
-          <span className="block">{AVISO_DADOS}</span>
-          <span className="block text-xs text-label mt-0.5">
-            <button type="button" className="text-link font-semibold hover:underline" onClick={() => navigate("/premissas")}>
-              Premissas gerais
-            </button>{" "}
-            importadas do {IMPORTACAO_SAP.sistema} em {fmtDataHora(IMPORTACAO_SAP.ultimaImportacao)} · último dado
-            disponível {fmtDate(ultimoDadoNaDataBase(p.dataBase))}
-          </span>
+        <MessageStrip design="critical" className="mb-2">
+          <strong>{AVISO_DADOS}</strong>
         </MessageStrip>
+        <p className="text-xs text-label mb-7 px-1">
+          Premissas gerais importadas do {IMPORTACAO_SAP.sistema} em {fmtDataHora(IMPORTACAO_SAP.ultimaImportacao)} · último dado
+          disponível {fmtDate(ultimoDadoNaDataBase(p.dataBase))} ·{" "}
+          <button type="button" className="text-link font-semibold hover:underline" onClick={() => navigate("/premissas")}>
+            ver premissas
+          </button>{" "}
+          · altere a data-base no topo da página para rever o fechamento de meses anteriores.
+        </p>
 
         {/* Visão geral */}
         {!termo && (
@@ -561,15 +580,18 @@ export function LaunchpadCaptacoes() {
                 actions={<VerMais onClick={() => navigate("/c00-carteira")} />}
               >
                 <ul className="space-y-2.5">
-                  {d.composicao.map((g, i) => (
+                  {d.composicao.map((g) => (
                     <li key={g.grupo}>
                       <div className="flex items-center justify-between gap-3 text-[13px] mb-1">
-                        <span className="text-text font-semibold truncate">{g.grupo}</span>
+                        <span className="inline-flex items-center gap-2 text-text font-semibold truncate">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COR_MODALIDADE[g.grupo] ?? "#758ca4" }} />
+                          {g.grupo}
+                        </span>
                         <span className="tabular text-label whitespace-nowrap">
                           {fmtCompact(g.v)} · {fmtPct(g.share, 1)}
                         </span>
                       </div>
-                      <MicroBar value={g.share} max={1} color={CHART_COLORS[i % CHART_COLORS.length]} />
+                      <MicroBar value={g.share} max={1} color={COR_MODALIDADE[g.grupo] ?? "#758ca4"} />
                     </li>
                   ))}
                 </ul>
@@ -582,7 +604,7 @@ export function LaunchpadCaptacoes() {
               {/* Eventos contratuais */}
               <Card
                 title="Eventos contratuais"
-                subtitle="Vencimentos, carências e CPC 20 nos próximos 12 meses"
+                subtitle="Vencimentos, início da amortização e CPC 20 nos próximos 12 meses"
                 icon={<CalendarClock className="w-5 h-5 text-[#c87b00]" />}
                 actions={<VerMais onClick={() => navigate("/c02-cronograma")} />}
               >
@@ -594,7 +616,9 @@ export function LaunchpadCaptacoes() {
                       <li key={e.chave} className="flex items-center justify-between gap-3 px-1 py-2">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold text-text truncate">{e.titulo}</div>
-                          <div className="text-xs text-label truncate">{e.detalhe}</div>
+                          <div className="text-xs text-label truncate" title={e.dica ?? e.detalhe}>
+                            {e.detalhe}
+                          </div>
                         </div>
                         <ObjectStatus inverted icon={false} state={e.critico ? "critical" : "information"}>
                           {plural(diffDays(db, e.data), "dia", "dias")}

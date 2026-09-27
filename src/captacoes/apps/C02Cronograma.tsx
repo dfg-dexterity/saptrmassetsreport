@@ -5,37 +5,33 @@ import { Link } from "react-router";
 import { Bar, BarChart, CartesianGrid, Legend, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
-import { FilterField, Select } from "../../shared/components/fiori/Inputs";
+import { FilterField, Select, TabBar } from "../../shared/components/fiori/Inputs";
 import { AXIS_STYLE, HeaderKpi, MicroBar } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
-import { IMPORTACAO_SAP } from "../../shared/data/mercado";
+import { ultimoDadoNaDataBase } from "../../shared/data/mercado";
 import { addDays, addMonths, diffDays, fmtDate, fmtMonthLong, fmtMonthShort, monthOf, yearOf } from "../../shared/lib/dates";
 import { exportarExcel, type ColunaExport } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtMil, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
 import { ESCOPOS, useCovenants, useDivida, type Escopo } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
-import { EMPRESAS_DIVIDA, GRUPO_MODALIDADE, type ContratoDivida } from "../data/contratos";
+import { COR_MODALIDADE, EMPRESAS_DIVIDA, GRUPO_MODALIDADE, type ContratoDivida } from "../data/contratos";
 import { cronograma, perfilAmortizacao, posicoesDivida, prazoMedioCarteira, totalDivida, type PosicaoDivida } from "../lib/divida";
 
 const rel = relatorioCaptacao("c02");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 const legendStyle = { fontSize: 12, fontFamily: "72, Arial" };
+/** Texto da legenda na cor de texto (a cor da série fica só no marcador – contraste AA) */
+const legendaTexto = (v: string) => <span style={{ color: "#1d2d3e" }}>{v}</span>;
 
 /** Tolerância de fechamento (R$) entre o perfil de amortização e o principal atualizado */
 const TOLERANCIA = 1;
 /** A partir do 6º ano do não circulante os anos são agrupados em "AAAA em diante" */
 const ANOS_INDIVIDUAIS = 5;
 
-/** Grupos de modalidade na ordem e com as cores do Launchpad (composição por saldo) */
-const GRUPOS: { id: string; cor: string }[] = [
-  { id: "Debêntures", cor: "#168eff" },
-  { id: "BNDES", cor: "#c87b00" },
-  { id: "CRA", cor: "#75980b" },
-  { id: "CCB", cor: "#df1278" },
-  { id: "CRI", cor: "#8b47d7" },
-];
+/** Grupos de modalidade na ordem do Launchpad, com as cores únicas de COR_MODALIDADE (as mesmas em todas as telas) */
+const GRUPOS: { id: string; cor: string }[] = ["Debêntures", "BNDES", "CRA", "CCB", "CRI"].map((id) => ({ id, cor: COR_MODALIDADE[id] }));
 const ORDEM_GRUPO = new Map(GRUPOS.map((g, i) => [g.id, i]));
 const COR_PRINCIPAL = "#5d36ff";
 const COR_JUROS = "#049f9a";
@@ -54,21 +50,39 @@ const mesLongo = (mes: string) => fmtMonthLong(`${mes}-01`);
 const nomeMes = (iso: string) => fmtMonthShort(iso).split("/")[0];
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 const mi = (v: number) => v / 1e6;
+/** Série do gráfico em R$ milhões; zero vira null para não aparecer no tooltip */
+const miOuNulo = (v: number) => (Math.abs(v) >= 500 ? v / 1e6 : null);
+/** Tooltip dos gráficos em R$ milhões: valor com 1 casa (R$ mi / R$ mil) */
+const tooltipMi = (v: number, n: string) => [fmtCompact(v * 1e6), n];
 
-/** Custos de transação como redutora (negativo entre parênteses) */
-const fmtRedutora = (v: number) => fmtNum(-v, { parens: true, dash: true });
-const fmtValor = (v: number) => fmtNum(v, { dash: true });
+/** Tabelas em R$ mil (padrão de nota explicativa): negativos entre parênteses, zero como "–" */
+const fmtValor = (v: number) => fmtMil(v);
+/** Custos de transação como redutora (negativo entre parênteses), em R$ mil */
+const fmtRedutora = (v: number) => fmtMil(-v);
+/** Valor já arredondado em R$ mil */
+const fmtInteiroMil = (v: number) => fmtNum(v, { parens: true, dash: true });
+const NOTA_ARREDONDAMENTO = "Valores em R$ mil; totais podem não conferir por arredondamento.";
+
+/**
+ * Arredonda os componentes para R$ mil e ajusta o maior deles para que a soma feche com o total já arredondado
+ * (quadros de composição: as linhas somam exatamente o total exibido).
+ */
+function fecharEmMil(componentes: number[], alvoMil: number): number[] {
+  const r = componentes.map((v) => Math.round(v / 1000));
+  const dif = alvoMil - r.reduce((s, v) => s + v, 0);
+  if (dif !== 0 && r.length) {
+    let i = 0;
+    for (let k = 1; k < componentes.length; k++) if (Math.abs(componentes[k]) > Math.abs(componentes[i])) i = k;
+    r[i] += dif;
+  }
+  return r;
+}
 
 /** Rótulo do primeiro ano do não circulante (parcial quando começa depois de janeiro) */
 function rotuloAno(ano: number, inicioNC: string): string {
   if (ano !== yearOf(inicioNC) || monthOf(inicioNC) === 1) return String(ano);
   const ini = nomeMes(inicioNC);
   return ini === "dez" ? `${ano} (dez)` : `${ano} (${ini}–dez)`;
-}
-
-/** Último dado de mercado disponível na data-base (a importação pode ter dados posteriores a ela) */
-function ultimoDadoNaDataBase(dataBase: string): string {
-  return dataBase < IMPORTACAO_SAP.ultimoDadoDisponivel ? dataBase : IMPORTACAO_SAP.ultimoDadoDisponivel;
 }
 
 /**
@@ -101,6 +115,10 @@ interface LinhaComposicao {
   juros: number;
   /** custos a apropriar deduzidos do circulante (efetivos, após o limite do circulante do contrato) */
   custosCirculante: number;
+  /** parte de custosCirculante dos próximos 12 meses pelo cronograma contratual */
+  custos12m: number;
+  /** custos de longo prazo levados ao circulante junto com o principal reclassificado (CPC 26.74) */
+  custosReclassificados: number;
   /** excedente dos custos de 12 meses mantido no não circulante (circulante do contrato não fica negativo) */
   excedenteCustos: number;
   circulante: number;
@@ -150,6 +168,8 @@ interface AnoFluxo {
   contratos: string[];
 }
 
+type Aba = "cplp" | "perfil" | "fluxos";
+
 interface LinhaGrupo {
   id: string;
   cor: string;
@@ -191,6 +211,8 @@ export function C02Cronograma() {
       const contratual = contratuais.get(x.c.id) ?? x;
       const principalContratual = contratual.principalCirculante;
       const custosCirculante = x.principalCirculante + x.jurosAPagar - x.circulante;
+      // custos dos próximos 12 meses pelo cronograma contratual; o restante (só nos reclassificados) é de longo prazo
+      const custos12m = x.reclassificado ? contratual.principalCirculante + contratual.jurosAPagar - contratual.circulante : custosCirculante;
       return {
         pos: x,
         principalContratual,
@@ -198,6 +220,8 @@ export function C02Cronograma() {
         principalCirculante: x.principalCirculante,
         juros: x.jurosAPagar,
         custosCirculante,
+        custos12m,
+        custosReclassificados: custosCirculante - custos12m,
         excedenteCustos: Math.max(0, custosDozeMeses(x, db) - custosCirculante),
         circulante: x.circulante,
         principalNC: x.principalAtualizado - x.principalCirculante,
@@ -235,10 +259,10 @@ export function C02Cronograma() {
       : anos.map((a) => ({ key: String(a), rotulo: rotuloAno(a, inicioNC), anos: [a] }));
     const divergentes = perfil.filter((l) => Math.abs(l.diferenca) > TOLERANCIA);
 
-    // Gráfico: 12 meses + cada ano do não circulante, empilhado por grupo de modalidade
+    // Gráfico: 12 meses + cada ano do não circulante, empilhado por grupo de modalidade (R$ milhões)
     const grafico = [
-      { rotulo: "12m", rotuloLongo: `Circulante – vencimentos até ${fmtDate(limite)}`, ...Object.fromEntries(GRUPOS.map((g) => [g.id, 0])) } as Record<string, number | string>,
-      ...anos.map((a) => ({ rotulo: String(a), rotuloLongo: rotuloAno(a, inicioNC), ...Object.fromEntries(GRUPOS.map((g) => [g.id, 0])) }) as Record<string, number | string>),
+      { rotulo: "12m", rotuloLongo: `Circulante – vencimentos até ${fmtDate(limite)}`, ...Object.fromEntries(GRUPOS.map((g) => [g.id, 0])) } as Record<string, number | string | null>,
+      ...anos.map((a) => ({ rotulo: String(a), rotuloLongo: rotuloAno(a, inicioNC), ...Object.fromEntries(GRUPOS.map((g) => [g.id, 0])) }) as Record<string, number | string | null>),
     ];
     for (const l of perfil) {
       const g = grupoDe(l.pos.c);
@@ -248,6 +272,8 @@ export function C02Cronograma() {
         if (linha) linha[g] = (linha[g] as number) + mi(v);
       }
     }
+    // séries zeradas ficam nulas: não aparecem no tooltip
+    for (const linha of grafico) for (const g of GRUPOS) if (!((linha[g.id] as number) >= 0.0005)) linha[g.id] = null;
     const gruposPresentes = GRUPOS.filter((g) => posicoes.some((x) => grupoDe(x.c) === g.id));
 
     // Resumo por grupo de modalidade (principal)
@@ -326,6 +352,31 @@ export function C02Cronograma() {
 
     const principalContratual12m = tot("principalContratual");
 
+    // Quadros de composição em R$ mil: circulante + não circulante = saldo e linhas que somam cada total
+    const totalMil = Math.round(total / 1000);
+    const [circMil, ncMil] = fecharEmMil([circulante, naoCirculante], totalMil);
+    const [pc12Mil, pReclassMil, jurosCpMil, custos12Mil, custosReclassMil] = fecharEmMil(
+      [principalContratual12m, tot("principalReclassificado"), tot("juros"), -tot("custos12m"), -tot("custosReclassificados")],
+      circMil,
+    );
+    const [pncMil, cncMil] = fecharEmMil([tot("principalNC"), -tot("custosNC")], ncMil);
+    const [paMil, jurosSaldoMil, custosSaldoMil] = fecharEmMil([principalAtualizado, tot("juros"), -custosAApropriar], totalMil);
+    const mil = {
+      total: totalMil,
+      circ: circMil,
+      nc: ncMil,
+      pc12: pc12Mil,
+      pReclass: pReclassMil,
+      juros: jurosCpMil,
+      custos12: custos12Mil,
+      custosReclass: custosReclassMil,
+      pnc: pncMil,
+      cnc: cncMil,
+      pa: paMil,
+      jurosSaldo: jurosSaldoMil,
+      custosSaldo: custosSaldoMil,
+    };
+
     return {
       limite,
       inicioNC,
@@ -337,6 +388,9 @@ export function C02Cronograma() {
       jurosAPagar: tot("juros"),
       principalContratual12m,
       principalReclassificado: tot("principalReclassificado"),
+      custosReclassificados: tot("custosReclassificados"),
+      /** não circulante levado ao circulante (líquido dos custos) – o mesmo valor do C00 e do C04 */
+      reclassificadoLiquido: tot("principalReclassificado") - tot("custosReclassificados"),
       custosCirculante: tot("custosCirculante"),
       principalNC: tot("principalNC"),
       custosNC: tot("custosNC"),
@@ -359,6 +413,7 @@ export function C02Cronograma() {
       proximo,
       prazoMedio: prazoMedioCarteira(posicoes),
       difComposicao: circulante + naoCirculante - total,
+      mil,
     };
   }, [posicoes, contratos, p, db]);
 
