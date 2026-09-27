@@ -82,6 +82,15 @@ export function KpiCard({
         ? "text-positive"
         : "text-negative";
   const corLinha = COR_GRAFICO[state === "neutral" ? "information" : state];
+  // domínio com margem mínima (1% do valor) para não exagerar variações ínfimas; a meta estende o domínio
+  const dominio = (() => {
+    if (!serie || serie.length < 2) return undefined;
+    const ys = serie.map((d) => d.y).concat(referencia !== undefined ? [referencia] : []);
+    const min = Math.min(...ys);
+    const max = Math.max(...ys);
+    const pad = Math.max((max - min) * 0.15, Math.max(Math.abs(min), Math.abs(max)) * 0.01, 1e-9);
+    return [min - pad, max + pad] as [number, number];
+  })();
   const idGrad = `kpi-${titulo.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
@@ -126,8 +135,10 @@ export function KpiCard({
                   <stop offset="100%" stopColor={corLinha} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <YAxis hide domain={["auto", "auto"]} />
-              {referencia !== undefined && <ReferenceLine y={referencia} stroke="#1d2d3e" strokeDasharray="3 3" strokeWidth={1} />}
+              <YAxis hide domain={dominio ?? ["auto", "auto"]} />
+              {referencia !== undefined && (
+                <ReferenceLine y={referencia} stroke="#1d2d3e" strokeDasharray="3 3" strokeWidth={1} ifOverflow="extendDomain" />
+              )}
               <Area
                 type="monotone"
                 dataKey="y"
