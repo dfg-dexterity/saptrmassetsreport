@@ -46,6 +46,9 @@ export const TIPOS_CONTRATO: { tipo: TipoContrato; origem: string; rota: string;
 
 export const MOEDAS: Moeda[] = ["BRL", "USD", "EUR"];
 
+/** Cores únicas por moeda (fora da paleta dos tipos de contrato) – use em todas as telas */
+export const COR_MOEDA: Record<Moeda, string> = { BRL: "#758ca4", USD: "#75980b", EUR: "#df1278" };
+
 export interface ContratoMestre {
   /** transação SAP */
   id: string;

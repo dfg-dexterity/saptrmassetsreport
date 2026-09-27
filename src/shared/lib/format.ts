@@ -33,8 +33,8 @@ export function fmtCompact(v: number): string {
   const sign = v < 0 ? "\u2212" : "";
   // limiares pelo valor já arredondado (999.975 → "R$ 1 mi", não "R$ 1.000 mil")
   if (abs >= 1e9 - 5e6) return `${sign}R$\u00a0${(abs / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}\u00a0bi`;
-  if (abs >= 1e6 - 50) return `${sign}R$\u00a0${(abs / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mi`;
-  if (abs >= 1e3 - 0.5) return `${sign}R$\u00a0${(abs / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}\u00a0mil`;
+  if (abs >= 1e6 - 50) return `${sign}R$\u00a0${(abs / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}\u00a0mi`;
+  if (abs >= 1e3 - 0.5) return `${sign}R$\u00a0${(abs / 1e3).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}\u00a0mil`;
   return `${sign}R$\u00a0${abs.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
 }
 
@@ -73,4 +73,9 @@ export function fmtInt(v: number): string {
 export function fmtDec(v: number, digits = 2): string {
   if (!Number.isFinite(v)) return "—";
   return menos(semZeroNegativo(v, digits).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+}
+
+/** "1 contrato" / "3 contratos" – concordância sem "(s)" */
+export function plural(n: number, singular: string, pluralTxt: string): string {
+  return `${n.toLocaleString("pt-BR")} ${n === 1 ? singular : pluralTxt}`;
 }
