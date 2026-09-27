@@ -1,22 +1,32 @@
 import clsx from "clsx";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, CheckCircle2, ChevronRight, LayoutGrid, Table2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { contratosMestre } from "../../aplicacoes/lib/carteiraMestre";
-import { Card, SectionTitle } from "../../shared/components/fiori/Card";
-import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
-import { SegmentedButton } from "../../shared/components/fiori/Inputs";
+import { LIMITES_POLITICA } from "../../aplicacoes/lib/indicadores";
 import { CHART_SEMANTIC, HeaderKpi } from "../../shared/components/fiori/Kpi";
-import { KpiCard, type KpiIndicadorLateral, type KpiTendencia } from "../../shared/components/fiori/KpiCard";
+import {
+  KpiCard,
+  KpiPainel,
+  KpiPlacar,
+  KpiPonte,
+  KpiSecao,
+  KpiTabela,
+  reaisKpi,
+  type KpiIndicadorLateral,
+  type KpiLinha,
+  type KpiModo,
+  type KpiPlacarItem,
+  type KpiTendencia,
+} from "../../shared/components/fiori/KpiCard";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
-import { ObjectStatus, type ValueState } from "../../shared/components/fiori/ObjectStatus";
+import { type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { usePremissas } from "../../shared/context/MercadoContext";
 import { DADOS_CORPORATIVOS } from "../../shared/data/corporativo";
 import { ultimoDadoNaDataBase, type PremissasMercado } from "../../shared/data/mercado";
-import { addDays, addMonths, fmtDate, fmtMonthShort, fmtQuarter, lastMonthEnds, previousYearEnd, toDay } from "../../shared/lib/dates";
+import { addDays, addMonths, endOfMonth, fmtDate, fmtMonthShort, fmtQuarter, lastMonthEnds, previousYearEnd, toDay } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtCompact, fmtDec, fmtInt, fmtPct, fmtX } from "../../shared/lib/format";
+import { fmtCompact, fmtDec, fmtInt, fmtPct, fmtX, plural } from "../../shared/lib/format";
 import type { Semaforo } from "../../shared/lib/semaforo";
 import { cdiAnual } from "../../shared/lib/taxas";
 import { useCovenants } from "../context/useDivida";
@@ -52,7 +62,7 @@ const rel = relatorioCaptacao("kpis");
 type SecaoKpi = "tamanho" | "custo" | "prazo" | "covenants" | "liquidez";
 
 const SECOES_KPI: { id: SecaoKpi; numero: number; titulo: string; periodo: string }[] = [
-  { id: "tamanho", numero: 1, titulo: "Tamanho da dívida", periodo: "Mensal · dívida líquida trimestral" },
+  { id: "tamanho", numero: 1, titulo: "Tamanho da dívida", periodo: "Mensal · dívida líquida trimestral (apuração dos covenants) e na data-base" },
   { id: "custo", numero: 2, titulo: "Custo da dívida", periodo: "Mensal · 12 fins de mês" },
   { id: "prazo", numero: 3, titulo: "Prazo e perfil", periodo: "Mensal · 12 fins de mês" },
   { id: "covenants", numero: 4, titulo: "Covenants financeiros", periodo: "Trimestral / anual · consolidado" },
@@ -60,13 +70,13 @@ const SECOES_KPI: { id: SecaoKpi; numero: number; titulo: string; periodo: strin
 ];
 
 type Unidade = "brl" | "pctaa" | "pct" | "anos" | "x";
-type TipoMeta = "meta" | "covenant" | "info";
+type TipoMeta = "meta" | "politica" | "covenant" | "info";
 
 export interface DefinicaoKpi {
   id: string;
   secao: SecaoKpi;
   nome: string;
-  /** nome curto para listas e para o tile do Launchpad */
+  /** nome curto para listas, para o placar e para o tile do Launchpad */
   sigla: string;
   subtitulo: string;
   formula: string;
@@ -88,6 +98,7 @@ export interface DefinicaoKpi {
 
 const ROTULO_TIPO: Record<TipoMeta, string> = {
   meta: "meta interna (fictícia)",
+  politica: "política financeira",
   covenant: "covenant contratual",
   info: "informativo",
 };
@@ -107,6 +118,9 @@ const SIGLA_COVENANT: Record<CovenantId, string> = {
   ebitdaDespFin: "EBITDA/encargos",
   dlImoveisPl: "(DL + imóveis)/PL",
 };
+
+/** Cobertura de curto prazo: limite da política financeira interna (o mesmo do R06 e do painel de Aplicações) */
+const LIM_COBERTURA = LIMITES_POLITICA.find((l) => l.id === "liquidez")!;
 
 const DEFINICOES_BASE: DefinicaoKpi[] = [
   {
@@ -129,7 +143,8 @@ const DEFINICOES_BASE: DefinicaoKpi[] = [
     nome: "Dívida líquida",
     sigla: "Dívida líquida",
     subtitulo: "Dívida − caixa − aplicações financeiras",
-    formula: "Dívida bruta − caixa − aplicações financeiras consolidadas (Carteira-Mestre, valor contábil), no fim do trimestre",
+    formula:
+      "Dívida bruta − caixa − aplicações financeiras consolidadas (Carteira-Mestre, valor contábil) no fim do trimestre (apuração dos covenants); na data-base, com o caixa do último balancete trimestral",
     unidade: "brl",
     tipo: "info",
     favoravel: "down",
@@ -198,6 +213,23 @@ const DEFINICOES_BASE: DefinicaoKpi[] = [
     origem: "C00",
   },
   {
+    id: "exposicaoCDI",
+    secao: "custo",
+    nome: "Exposição ao CDI",
+    sigla: "Exposição ao CDI",
+    subtitulo: "Mix por indexador",
+    formula: "Saldo contábil indexado ao CDI (taxa pós-fixada) ÷ dívida bruta; mix por indexador: CDI, IPCA, TJLP/TLP e prefixado",
+    unidade: "pct",
+    tipo: "meta",
+    sentido: "max",
+    limite: 0.6,
+    atencao: 0.5,
+    favoravel: "down",
+    periodicidade: "Mensal",
+    rota: "/c03-encargos",
+    origem: "C03",
+  },
+  {
     id: "prazoMedio",
     secao: "prazo",
     nome: "Prazo médio remanescente",
@@ -263,23 +295,6 @@ const DEFINICOES_BASE: DefinicaoKpi[] = [
     rota: "/c00-carteira",
     origem: "C00",
   },
-  {
-    id: "exposicaoCDI",
-    secao: "prazo",
-    nome: "Exposição ao CDI",
-    sigla: "Exposição ao CDI",
-    subtitulo: "Mix por indexador",
-    formula: "Saldo contábil indexado ao CDI (taxa pós-fixada) ÷ dívida bruta; mix por indexador: CDI, IPCA, TJLP/TLP e prefixado",
-    unidade: "pct",
-    tipo: "meta",
-    sentido: "max",
-    limite: 0.6,
-    atencao: 0.5,
-    favoravel: "down",
-    periodicidade: "Mensal",
-    rota: "/c03-encargos",
-    origem: "C03",
-  },
 ];
 
 const DEFINICOES_COVENANTS: DefinicaoKpi[] = COVENANTS_DIVIDA.map((cov) => ({
@@ -305,15 +320,16 @@ const DEFINICOES_LIQUIDEZ: DefinicaoKpi[] = [
   {
     id: "coberturaCP",
     secao: "liquidez",
-    nome: "Cobertura do curto prazo",
+    nome: "Cobertura de curto prazo",
     sigla: "Cobertura CP",
-    subtitulo: "Aplicações ÷ dívida de curto prazo",
-    formula: "Aplicações financeiras consolidadas (Carteira-Mestre, valor contábil) ÷ passivo circulante da dívida",
+    subtitulo: "(Caixa + aplicações circulantes) ÷ dívida circulante",
+    formula:
+      "(Caixa do último balancete + aplicações circulantes pelo valor contábil – Carteira-Mestre de Aplicações) ÷ dívida circulante pelo custo amortizado (inclui a reclassificação do CPC 26, item 74) – mesma fórmula do R06 e do painel de Aplicações",
     unidade: "x",
-    tipo: "meta",
+    tipo: "politica",
     sentido: "min",
-    limite: 1,
-    atencao: 1.5,
+    limite: LIM_COBERTURA.limite,
+    atencao: LIM_COBERTURA.alerta,
     favoravel: "up",
     periodicidade: "Mensal",
     rota: "/c02-cronograma",
@@ -349,11 +365,11 @@ function sinal(v: number, arredondado: number): string {
   return arredondado === 0 ? "" : v > 0 ? "+" : "−";
 }
 
-/** Valor principal do cartão: número + unidade */
+/** Valor principal do cartão: número + unidade (R$ no mesmo formato do painel de Aplicações: "R$ 161,7" "mi") */
 function partesValor(u: Unidade, v: number): { valor: string; unidade?: string } {
   switch (u) {
     case "brl":
-      return { valor: `R$ ${fmtDec(v / 1e6, 1)}`, unidade: "mi" };
+      return reaisKpi(v);
     case "pctaa":
       return { valor: fmtPct(v, 2), unidade: "a.a." };
     case "pct":
@@ -367,7 +383,7 @@ function partesValor(u: Unidade, v: number): { valor: string; unidade?: string }
 
 function fmtValor(u: Unidade, v: number): string {
   const { valor, unidade } = partesValor(u, v);
-  return unidade ? `${valor} ${unidade}` : valor;
+  return unidade ? `${valor} ${unidade}` : valor;
 }
 
 /** Variação com sinal na unidade do KPI (p.p. para percentuais) */
@@ -376,19 +392,19 @@ function fmtDelta(u: Unidade, d: number): string {
   switch (u) {
     case "brl": {
       const r = Math.round(a / 1e5) / 10;
-      return `${sinal(d, r)}R$ ${fmtDec(a / 1e6, 1)} mi`;
+      return `${sinal(d, r)}R$ ${fmtDec(a / 1e6, 1)} mi`;
     }
     case "pctaa": {
       const r = Math.round(a * 1e4) / 1e4;
-      return `${sinal(d, r)}${fmtDec(a * 100, 2)} p.p.`;
+      return `${sinal(d, r)}${fmtDec(a * 100, 2)} p.p.`;
     }
     case "pct": {
       const r = Math.round(a * 1e3) / 1e3;
-      return `${sinal(d, r)}${fmtDec(a * 100, 1)} p.p.`;
+      return `${sinal(d, r)}${fmtDec(a * 100, 1)} p.p.`;
     }
     case "anos": {
       const r = Math.round(a * 100) / 100;
-      return `${sinal(d, r)}${fmtDec(a, 2)} ${r === 1 ? "ano" : "anos"}`;
+      return `${sinal(d, r)}${fmtDec(a, 2)} ${r === 1 ? "ano" : "anos"}`;
     }
     case "x": {
       const r = Math.round(a * 100) / 100;
@@ -440,6 +456,25 @@ function classeHHI(v: number): string {
   return v < 1500 ? "baixa concentração" : v <= 2500 ? "concentração moderada" : "alta concentração";
 }
 
+/** Primeiro fim de trimestre e primeiro 31/12 depois da data (próximas apurações dos covenants) */
+function proximasApuracoes(data: string): { trimestral: string; anual: string } {
+  const y = Number(data.slice(0, 4));
+  const m = Number(data.slice(5, 7));
+  let qm = Math.ceil(m / 3) * 3;
+  let qy = y;
+  let tri = endOfMonth(qy, qm);
+  if (tri <= data) {
+    qm += 3;
+    if (qm > 12) {
+      qm -= 12;
+      qy += 1;
+    }
+    tri = endOfMonth(qy, qm);
+  }
+  const anual = `${y}-12-31` > data ? `${y}-12-31` : `${y + 1}-12-31`;
+  return { trimestral: tri, anual };
+}
+
 // ---------------------------------------------------------------------------
 // Foto mensal (posições da dívida, fluxos e liquidez num fim de mês)
 // ---------------------------------------------------------------------------
@@ -478,6 +513,8 @@ interface FotoMensal {
   hhi: number;
   mix: Fatia[];
   aplicacoes: number;
+  /** aplicações classificadas no ativo circulante (valor contábil) – base da cobertura de curto prazo */
+  aplicacoesCirculantes: number;
   caixa: number | null;
   dataCaixa: string | null;
 }
@@ -538,7 +575,7 @@ function fotoMensal(data: string, p: PremissasMercado): FotoMensal {
   });
 
   // Liquidez: aplicações consolidadas (Carteira-Mestre) e caixa do último fechamento trimestral
-  const aplicacoes = somar(contratosMestre(data, p), (x) => x.valorContabil);
+  const aplic = contratosMestre(data, p);
   const corp = DADOS_CORPORATIVOS.filter((x) => x.data <= data).pop() ?? null;
 
   return {
@@ -568,10 +605,24 @@ function fotoMensal(data: string, p: PremissasMercado): FotoMensal {
     fontes,
     hhi: indiceHHI(fontes.map((f) => f.share)),
     mix,
-    aplicacoes,
+    aplicacoes: somar(aplic, (x) => x.valorContabil),
+    aplicacoesCirculantes: somar(
+      aplic.filter((x) => x.circulante),
+      (x) => x.valorContabil,
+    ),
     caixa: corp?.caixa ?? null,
     dataCaixa: corp?.data ?? null,
   };
+}
+
+/** Cobertura de curto prazo: (caixa + aplicações circulantes) ÷ dívida circulante */
+function coberturaDe(f: FotoMensal): number | null {
+  return f.circulante > 0 ? ((f.caixa ?? 0) + f.aplicacoesCirculantes) / f.circulante : null;
+}
+
+/** Dívida líquida na data (caixa do último balancete trimestral) – a mesma do R06 e do painel de Aplicações */
+function dividaLiquidaNaData(f: FotoMensal): number {
+  return f.dividaBruta - (f.caixa ?? 0) - f.aplicacoes;
 }
 
 // ---------------------------------------------------------------------------
@@ -593,6 +644,8 @@ export interface ResultadoKpi {
   statusCurto: string;
   /** valor − meta/limite */
   desvio?: number;
+  /** distância até a meta/limite: positiva = dentro, negativa = fora */
+  folga?: number;
   anterior?: { valor: number; rotulo: string };
   laterais?: { label: string; valor: string; state?: ValueState }[];
   detalhe?: string;
@@ -626,9 +679,10 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
     valor: number,
     referencia: string,
     anterior: { valor: number; rotulo: string } | null,
-    extra: Pick<ResultadoKpi, "laterais" | "detalhe"> & { limite?: number; atencao?: number } = {},
+    extra: Pick<ResultadoKpi, "laterais" | "detalhe"> & { limite?: number; atencao?: number; subtitulo?: string } = {},
   ) => {
-    const def = DEF.get(id)!;
+    const base = DEF.get(id)!;
+    const def = extra.subtitulo ? { ...base, subtitulo: extra.subtitulo } : base;
     const limite = extra.limite ?? def.limite;
     const atencao = extra.atencao ?? def.atencao;
     if (def.tipo === "info" || limite === undefined || atencao === undefined || !def.sentido) {
@@ -659,6 +713,7 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
       statusTexto: status === "ok" ? "Na meta" : status === "atencao" ? "Em atenção" : "Fora da meta",
       statusCurto: status === "ok" ? "na meta" : status === "atencao" ? "em atenção" : "fora da meta",
       desvio: valor - limite,
+      folga: def.sentido === "max" ? limite - valor : valor - limite,
       anterior: anterior ?? undefined,
       laterais: extra.laterais,
       detalhe: extra.detalhe,
@@ -673,19 +728,24 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
       { label: "Não circulante", valor: fmtCompact(a.naoCirculante) },
     ],
     detalhe:
-      `${fmtInt(a.contratos)} contratos ativos · ${fmtInt(a.empresas)} empresas` +
+      `${plural(a.contratos, "contrato ativo", "contratos ativos")} · ${plural(a.empresas, "empresa", "empresas")}` +
       (a.reclassificados.length ? ` · ${listar(a.reclassificados)} no circulante por covenant (CPC 26, item 74)` : ""),
   });
 
   const tri = trimestres[trimestres.length - 1];
   const triAnt = trimestres[trimestres.length - 2];
   if (tri) {
+    const naData = dividaLiquidaNaData(a);
+    const mesmaData = tri.data === a.data;
     add("dividaLiquida", tri.dividaLiquida, tri.data, triAnt ? { valor: triAnt.dividaLiquida, rotulo: fmtQuarter(triAnt.data) } : null, {
+      subtitulo: `Dívida − caixa − aplicações · apuração ${fmtQuarter(tri.data)}`,
       laterais: [
         { label: "Caixa + aplicações", valor: fmtCompact(tri.caixa + tri.aplicacoes) },
         { label: "DL/EBITDA", valor: fmtX(tri.dlEbitda) },
       ],
-      detalhe: `Fechamento trimestral de ${fmtDate(tri.data)} (base dos covenants) · aplicações consolidadas da Carteira-Mestre de Aplicações`,
+      detalhe: mesmaData
+        ? `Apuração de ${fmtDate(tri.data)} (base dos covenants) = dívida líquida na data-base · aplicações da Carteira-Mestre de Aplicações`
+        : `Apuração ${fmtQuarter(tri.data)} (${fmtDate(tri.data)}, base dos covenants) · na data-base ${fmtDate(a.data)}${a.dataCaixa ? `, caixa de ${fmtDate(a.dataCaixa)}` : ""}: ${fmtCompact(naData)}`,
     });
   }
 
@@ -724,6 +784,11 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
     detalhe: "TIR dos fluxos de cada contrato: captação líquida dos custos × pagamentos projetados com o último dado disponível",
   });
 
+  const cdi = a.mix.find((m) => m.rotulo === "CDI");
+  add("exposicaoCDI", cdi?.share ?? 0, a.data, b ? { valor: b.mix.find((m) => m.rotulo === "CDI")?.share ?? 0, rotulo: rotuloMes } : null, {
+    detalhe: a.mix.map((m) => `${m.rotulo} ${fmtPct(m.share, 1)}`).join(" · "),
+  });
+
   // 3. Prazo e perfil
   add("prazoMedio", a.prazoMedio, a.data, b && { valor: b.prazoMedio, rotulo: rotuloMes }, {
     detalhe: "Prazo até cada amortização de principal, ponderado pelo principal atualizado (C02)",
@@ -750,11 +815,6 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
       detalhe: `Maior fonte: ${maior.rotulo} · HHI ${fmtInt(a.hhi)} (${classeHHI(a.hhi)})`,
     });
   }
-
-  const cdi = a.mix.find((m) => m.rotulo === "CDI");
-  add("exposicaoCDI", cdi?.share ?? 0, a.data, b ? { valor: b.mix.find((m) => m.rotulo === "CDI")?.share ?? 0, rotulo: rotuloMes } : null, {
-    detalhe: a.mix.map((m) => `${m.rotulo} ${fmtPct(m.share, 1)}`).join(" · "),
-  });
 
   // 4. Covenants (consolidados, iguais ao C04)
   for (const ap of apuracoes) {
@@ -818,6 +878,7 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
       statusCurto:
         ap.status === "ok" ? "cumprido" : ap.status === "atencao" ? "em atenção" : ap.reclassifica ? "descumprido" : "com waiver",
       desvio: ap.valor - ap.cov.limite,
+      folga: ap.cov.tipo === "max" ? ap.cov.limite - ap.valor : ap.valor - ap.cov.limite,
       anterior: ant ? { valor: ant.valor, rotulo: anual ? ant.data.slice(0, 4) : fmtQuarter(ant.data) } : undefined,
       detalhe: base + waiverTexto + (proxima && h.length < 2 ? ` · próxima apuração em ${fmtDate(proxima)}` : ""),
       apuracao: ap,
@@ -826,9 +887,15 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
   }
 
   // 5. Liquidez
-  add("coberturaCP", a.circulante > 0 ? a.aplicacoes / a.circulante : 0, a.data, b && b.circulante > 0 ? { valor: b.aplicacoes / b.circulante, rotulo: rotuloMes } : null, {
-    detalhe: `Aplicações ${fmtCompact(a.aplicacoes)} (Carteira-Mestre, valor contábil) ÷ dívida circulante ${fmtCompact(a.circulante)}`,
-  });
+  const cob = coberturaDe(a);
+  if (cob !== null) {
+    const cobAnt = b ? coberturaDe(b) : null;
+    add("coberturaCP", cob, a.data, cobAnt !== null ? { valor: cobAnt, rotulo: rotuloMes } : null, {
+      detalhe:
+        `(Caixa ${fmtCompact(a.caixa ?? 0)}${a.dataCaixa && a.dataCaixa !== a.data ? ` de ${fmtDate(a.dataCaixa)}` : ""} + aplicações circulantes ${fmtCompact(a.aplicacoesCirculantes)}) ÷ dívida circulante ${fmtCompact(a.circulante)}` +
+        (a.reclassificados.length ? " (com a reclassificação do CPC 26, item 74)" : ""),
+    });
+  }
 
   if (a.caixa !== null) {
     const liquidez = (f: FotoMensal) => (f.caixa !== null && f.caixa + f.aplicacoes > 0 ? (f.principal12m + f.juros12m) / (f.caixa + f.aplicacoes) : null);
@@ -892,7 +959,7 @@ export function avaliarKpisCaptacoes(p: PremissasMercado, apuracoes: ApuracaoCov
 }
 
 // ---------------------------------------------------------------------------
-// Tendência e estados visuais
+// Tendência, laterais e textos
 // ---------------------------------------------------------------------------
 
 function tendenciaDe(k: ResultadoKpi): KpiTendencia | undefined {
@@ -908,44 +975,45 @@ function tendenciaDe(k: ResultadoKpi): KpiTendencia | undefined {
   };
 }
 
-const COR_SEMAFORO = { ok: CHART_SEMANTIC.good, atencao: CHART_SEMANTIC.critical, excedido: CHART_SEMANTIC.bad };
+function rotuloMeta(def: DefinicaoKpi): string {
+  return def.tipo === "covenant" ? "Limite" : def.tipo === "politica" ? "Limite (política)" : def.sobreCDI ? "Meta (CDI + 1,5 p.p.)" : "Meta interna";
+}
 
 function lateraisDe(k: ResultadoKpi): KpiIndicadorLateral[] | undefined {
-  if (k.status !== null && k.limite !== undefined && k.desvio !== undefined) {
-    const desvioState: ValueState = k.status === "ok" ? "positive" : k.status === "atencao" ? "critical" : "negative";
+  if (k.status !== null && k.limite !== undefined && k.folga !== undefined) {
+    const folgaState: ValueState = k.status === "ok" ? "positive" : k.status === "atencao" ? "critical" : "negative";
     return [
-      {
-        label: k.def.tipo === "covenant" ? "Limite" : k.def.sobreCDI ? "Meta (CDI + 1,5 p.p.)" : "Meta interna",
-        value: fmtLimite(k.def, k.limite),
-      },
-      { label: "Desvio", value: fmtDelta(k.def.unidade, k.desvio), state: desvioState },
+      { label: rotuloMeta(k.def), value: fmtLimite(k.def, k.limite) },
+      { label: "Folga", value: fmtDelta(k.def.unidade, k.folga), state: folgaState },
     ];
   }
   return k.laterais?.map((l) => ({ label: l.label, value: l.valor, state: l.state }));
 }
 
-/** Colunas no grid (1 · 2 · 6 colunas): 3 por linha; linha incompleta com 2 cartões ocupa a largura toda */
-function classeColuna(i: number, n: number): string {
-  const md = n % 2 === 1 && i === n - 1 ? "md:col-span-2" : "";
-  let xl = "xl:col-span-2";
-  if (n === 1) xl = "xl:col-span-6";
-  else if (n === 2 || n === 4) xl = "xl:col-span-3";
-  else if (n % 3 === 2 && i >= n - 2) xl = "xl:col-span-3";
-  else if (n % 3 === 1 && i === n - 1) xl = "xl:col-span-6";
-  return clsx(md, xl);
+/** "10,1% · meta ≤ 25,0% · meta interna (fictícia)" */
+function resumoKpi(k: ResultadoKpi): string {
+  if (k.limite === undefined) return `${fmtValor(k.def.unidade, k.valor)} · informativo`;
+  const palavra = k.def.tipo === "meta" ? "meta" : "limite";
+  return `${fmtValor(k.def.unidade, k.valor)} · ${palavra} ${fmtLimite(k.def, k.limite)} · ${ROTULO_TIPO[k.def.tipo]}`;
+}
+
+const ORDEM_STATUS = (k: ResultadoKpi) => (k.status === null ? 4 : k.status === "ok" ? 2 : k.status === "atencao" ? 1 : 0);
+
+/** Colunas do cartão auxiliar que completa a linha da grade (4 colunas em xl, 2 em md) */
+function colunasRestantes(n: number): string {
+  const xl = { 0: "xl:col-span-4", 1: "xl:col-span-3", 2: "xl:col-span-2", 3: "xl:col-span-1" }[n % 4 as 0 | 1 | 2 | 3];
+  return clsx(xl, n % 2 === 0 ? "md:col-span-2" : "md:col-span-1");
 }
 
 // ---------------------------------------------------------------------------
 // Tela
 // ---------------------------------------------------------------------------
 
-type Visao = "cartoes" | "tabela";
-
 export function KpisCaptacoes() {
   const { premissas: p } = usePremissas();
   const apuracoes = useCovenants();
   const db = p.dataBase;
-  const [visao, setVisao] = useState<Visao>("cartoes");
+  const [modo, setModo] = useState<KpiModo>("cartoes");
 
   const d = useMemo(() => {
     const meses = lastMonthEnds(db, 12);
@@ -969,30 +1037,67 @@ export function KpisCaptacoes() {
       custoMedio: mensal((x) => x.custoMedio),
       encargosLTM: mensal((x) => x.encargosLTM),
       cetMedio: mensal((x) => x.cetMedio),
+      exposicaoCDI: mensal((x) => x.mix.find((m) => m.rotulo === "CDI")?.share ?? null),
       prazoMedio: mensal((x) => x.prazoMedio),
       curtoPrazo: mensal((x) => (x.dividaBruta > 0 ? x.circulante / x.dividaBruta : null)),
       vencimentos12m: mensal((x) => x.principal12m),
       concentracao: mensal((x) => x.fontes[0]?.share ?? null),
-      exposicaoCDI: mensal((x) => x.mix.find((m) => m.rotulo === "CDI")?.share ?? null),
-      coberturaCP: mensal((x) => (x.circulante > 0 ? x.aplicacoes / x.circulante : null)),
+      coberturaCP: mensal(coberturaDe),
       servicoLiquidez: mensal((x) => (x.caixa !== null ? (x.principal12m + x.juros12m) / (x.caixa + x.aplicacoes) : null)),
     };
     for (const a of apuracoes) {
       series[`cov-${a.cov.id}`] = a.historico.map((h) => ({ x: a.cov.periodicidade === "Anual" ? h.data.slice(0, 4) : fmtQuarter(h.data), y: h.valor }));
     }
 
-    return { fotos, trimestres, atual, kpis, series, resumo: resumir(kpis), ultimoDado };
+    return { fotos, trimestres, atual, anterior, kpis, series, resumo: resumir(kpis), ultimoDado };
   }, [db, p, apuracoes]);
 
   const { atual, kpis, resumo } = d;
   const tri = d.trimestres[d.trimestres.length - 1];
   const kCusto = kpis.find((k) => k.def.id === "custoMedio");
   const caso = apuracoes.find((a) => a.reclassifica) ?? apuracoes.find((a) => a.status === "excedido" && a.waiverVigente) ?? null;
-  const ancora = (id: string) => `kpi-${id}`;
+  const vsMes = d.anterior ? `vs ${fmtMonthShort(d.anterior.data)}` : "vs mês anterior";
+
   const irPara = (id: string) => {
-    setVisao("cartoes");
-    requestAnimationFrame(() => document.getElementById(ancora(id))?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    setModo("cartoes");
+    requestAnimationFrame(() => document.getElementById(`kpi-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
   };
+
+  const secaoTitulo = (id: SecaoKpi) => {
+    const s = SECOES_KPI.find((x) => x.id === id)!;
+    return `${s.numero}. ${s.titulo}`;
+  };
+
+  const itensPlacar: KpiPlacarItem[] = kpis.map((k) => ({
+    id: k.def.id,
+    secao: k.def.secao,
+    curto: k.def.sigla,
+    nome: k.def.nome,
+    state: k.estado,
+    statusTexto: k.statusTexto,
+    faixa: k.status === null ? null : k.status === "ok" ? "ok" : k.status === "atencao" ? "atencao" : "fora",
+    resumo: resumoKpi(k),
+    prioridade: k.prioridade,
+  }));
+
+  const linhas: KpiLinha[] = kpis.map((k) => ({
+    id: k.def.id,
+    nome: k.def.nome,
+    secao: `${secaoTitulo(k.def.secao)} · ${k.def.periodicidade.toLowerCase()}`,
+    formula: k.def.formula,
+    valor: fmtValor(k.def.unidade, k.valor),
+    valorOrdem: k.valor,
+    valorDetalhe: k.def.id === "dividaLiquida" ? `apuração ${fmtQuarter(k.referencia)}` : fmtDate(k.referencia),
+    meta: k.limite !== undefined ? fmtLimite(k.def, k.limite) : undefined,
+    metaDetalhe: k.limite !== undefined ? ROTULO_TIPO[k.def.tipo] : undefined,
+    folga: k.folga !== undefined ? fmtDelta(k.def.unidade, k.folga) : undefined,
+    state: k.estado,
+    statusTexto: k.statusTexto,
+    statusOrdem: ORDEM_STATUS(k),
+    tendencia: tendenciaDe(k),
+    rota: k.def.rota,
+    origem: `${k.def.origem} · ${NOME_ORIGEM[k.def.origem]}`,
+  }));
 
   // -------------------------------------------------------------------------
   // Exportação
@@ -1007,7 +1112,7 @@ export function KpisCaptacoes() {
         {
           nome: "KPIs",
           titulo: "Painel de KPIs – Captações financeiras",
-          subtitulo: "Consolidado · percentuais em %, desvio = valor − meta/limite (p.p. para percentuais)",
+          subtitulo: "Consolidado · percentuais em % · folga = distância até a meta/limite (positiva = dentro; p.p. para percentuais)",
           colunas: [
             { titulo: "Seção", largura: 22 },
             { titulo: "KPI", largura: 34 },
@@ -1019,7 +1124,7 @@ export function KpisCaptacoes() {
             { titulo: "Sentido", largura: 9 },
             { titulo: "Meta / limite", tipo: "decimal", largura: 14 },
             { titulo: "Início da atenção", tipo: "decimal", largura: 14 },
-            { titulo: "Desvio", tipo: "decimal", largura: 14 },
+            { titulo: "Folga", tipo: "decimal", largura: 14 },
             { titulo: "Status", largura: 26 },
             { titulo: "Período anterior", largura: 16 },
             { titulo: "Valor anterior", tipo: "decimal", largura: 18 },
@@ -1029,9 +1134,8 @@ export function KpisCaptacoes() {
           ],
           linhas: kpis.map((k) => {
             const e = escalaPct(k.def.unidade);
-            const secao = SECOES_KPI.find((s) => s.id === k.def.secao)!;
             return [
-              `${secao.numero}. ${secao.titulo}`,
+              secaoTitulo(k.def.secao),
               k.def.nome,
               k.def.formula,
               unidadeTexto[k.def.unidade],
@@ -1041,7 +1145,7 @@ export function KpisCaptacoes() {
               k.def.sentido === "max" ? "Máximo" : k.def.sentido === "min" ? "Mínimo" : "",
               k.limite !== undefined ? k.limite * e : null,
               k.atencao !== undefined ? k.atencao * e : null,
-              k.desvio !== undefined ? k.desvio * e : null,
+              k.folga !== undefined ? k.folga * e : null,
               k.statusTexto,
               k.anterior?.rotulo ?? "",
               k.anterior ? k.anterior.valor * e : null,
@@ -1051,8 +1155,9 @@ export function KpisCaptacoes() {
             ];
           }),
           notas: [
-            "Metas internas são fictícias (ambiente de demonstração); limites de covenant conforme as escrituras e contratos (C04).",
+            "Metas internas são fictícias (ambiente de demonstração); limites de covenant conforme as escrituras e contratos (C04); cobertura de curto prazo com o limite da política financeira (o mesmo do R06).",
             "Custo médio: meta até o CDI da premissa importada do SAP + 1,5 p.p. Covenants consolidados na última apuração até a data-base.",
+            `Dívida líquida: valor da última apuração trimestral (base dos covenants); na data-base ${fmtDate(db)}: ${fmtCompact(dividaLiquidaNaData(atual))}${atual.dataCaixa && atual.dataCaixa !== db ? ` (caixa de ${fmtDate(atual.dataCaixa)})` : ""}.`,
             `Fluxos futuros (vencimentos e serviço da dívida) projetados com o último dado disponível (${fmtDate(d.ultimoDado)}).`,
           ],
         },
@@ -1081,8 +1186,9 @@ export function KpisCaptacoes() {
             { titulo: "HHI", tipo: "inteiro", largura: 9 },
             ...MIX_INDEXADOR.map((m) => ({ titulo: `% ${m.rotulo}`, tipo: "decimal" as const, largura: 10 })),
             { titulo: "Aplicações financeiras", tipo: "moeda", largura: 18 },
+            { titulo: "Aplicações circulantes", tipo: "moeda", largura: 18 },
             { titulo: "Caixa (último trimestre)", tipo: "moeda", largura: 18 },
-            { titulo: "Cobertura CP (x)", tipo: "decimal", largura: 12 },
+            { titulo: "Cobertura de curto prazo (x)", tipo: "decimal", largura: 14 },
             { titulo: "Serviço 12m ÷ liquidez %", tipo: "decimal", largura: 14 },
           ],
           linhas: d.fotos.map((f) => [
@@ -1106,12 +1212,14 @@ export function KpisCaptacoes() {
             Math.round(f.hhi),
             ...f.mix.map((m) => m.share * 100),
             f.aplicacoes,
+            f.aplicacoesCirculantes,
             f.caixa,
-            f.circulante > 0 ? f.aplicacoes / f.circulante : null,
+            coberturaDe(f),
             f.caixa !== null ? ((f.principal12m + f.juros12m) / (f.caixa + f.aplicacoes)) * 100 : null,
           ]),
           notas: [
             "Posições pelo custo amortizado com a reclassificação do CPC 26 (item 74) vigente em cada data; meses posteriores ao último dado disponível usam a projeção com taxa constante.",
+            "Cobertura de curto prazo = (caixa + aplicações circulantes) ÷ dívida circulante – mesma fórmula do R06 e do painel de Aplicações.",
           ],
         },
         {
@@ -1170,13 +1278,12 @@ export function KpisCaptacoes() {
             { titulo: "Origem", largura: 18 },
           ],
           linhas: DEFINICOES_KPI.map((def) => {
-            const secao = SECOES_KPI.find((s) => s.id === def.secao)!;
             const ref = (v?: number) =>
               v === undefined ? "" : def.sobreCDI ? `CDI + ${fmtDec(v * 100, 1)} p.p.` : fmtLimite(def, v).replace(/^[≤≥] /, "");
             return [
               def.id,
               def.nome,
-              `${secao.numero}. ${secao.titulo}`,
+              secaoTitulo(def.secao),
               def.formula,
               unidadeTexto[def.unidade],
               ROTULO_TIPO[def.tipo],
@@ -1197,6 +1304,37 @@ export function KpisCaptacoes() {
   // Render
   // -------------------------------------------------------------------------
 
+  const cartao = (k: ResultadoKpi) => (
+    <div key={k.def.id} id={`kpi-${k.def.id}`} className="flex min-w-0 scroll-mt-24">
+      <CartaoKpi k={k} serie={d.series[k.def.id]} foto={atual} />
+    </div>
+  );
+
+  const secao = (id: SecaoKpi, doGrupo: ResultadoKpi[], extra?: ReactNode, antes?: ReactNode) => {
+    const s = SECOES_KPI.find((x) => x.id === id)!;
+    const comMeta = doGrupo.filter((k) => k.status !== null);
+    const estado: ValueState = comMeta.some((k) => k.estado === "negative") ? "negative" : comMeta.some((k) => k.status !== "ok") ? "critical" : "positive";
+    return (
+      <KpiSecao
+        key={id}
+        id={id}
+        titulo={secaoTitulo(id)}
+        periodo={s.periodo}
+        contagem={{ ok: comMeta.filter((k) => k.status === "ok").length, total: comMeta.length, estado }}
+        antes={antes}
+      >
+        {doGrupo.map(cartao)}
+        {extra}
+      </KpiSecao>
+    );
+  };
+  const doGrupo = (id: SecaoKpi) => kpis.filter((k) => k.def.secao === id);
+  const dlNaData = dividaLiquidaNaData(atual);
+  const caixaNaData = atual.dataCaixa === db;
+  const covenants = doGrupo("covenants");
+  const liquidez = doGrupo("liquidez");
+  const tamanho = doGrupo("tamanho");
+
   return (
     <ReportPage
       relatorio={rel}
@@ -1208,7 +1346,7 @@ export function KpisCaptacoes() {
             <HeaderKpi
               label="Dívida líquida"
               value={fmtCompact(tri.dividaLiquida)}
-              sub={`${fmtX(tri.dlEbitda)} EBITDA · ${fmtDate(tri.data)}`}
+              sub={`apuração ${fmtQuarter(tri.data)} · ${fmtX(tri.dlEbitda)} EBITDA`}
             />
           )}
           <HeaderKpi
@@ -1222,60 +1360,94 @@ export function KpisCaptacoes() {
             label="KPIs na meta"
             value={`${resumo.ok}/${resumo.comMeta}`}
             state={resumo.estado}
-            sub={
-              resumo.ok === resumo.comMeta
-                ? "todos dentro da meta ou do limite"
-                : [resumo.atencao ? `${resumo.atencao} em atenção` : "", resumo.fora ? `${resumo.fora} fora` : ""].filter(Boolean).join(" · ")
-            }
+            sub={`${resumo.atencao} em atenção · ${resumo.fora} fora da meta`}
           />
         </>
       }
     >
-      <Scorecard kpis={kpis} resumo={resumo} visao={visao} onVisao={setVisao} onIr={irPara} ultimoDado={d.ultimoDado} />
+      <KpiPlacar
+        subtitulo={`${resumo.comMeta} KPIs com meta ou limite · consolidado · data-base ${fmtDate(db)}`}
+        secoes={SECOES_KPI.map((s) => ({ id: s.id, titulo: secaoTitulo(s.id) }))}
+        itens={itensPlacar}
+        modo={modo}
+        onModo={setModo}
+        onIr={irPara}
+        notaFora={resumo.comWaiver ? `${resumo.comWaiver} com waiver vigente` : undefined}
+        rodape={`Metas internas fictícias (ambiente de demonstração), limite da política financeira e limites de covenant conforme escrituras e contratos (C04). Séries com as premissas importadas do SAP; vencimentos e serviço da dívida projetados com o último dado disponível (${fmtDate(d.ultimoDado)}).`}
+      />
 
-      {visao === "tabela" ? (
-        <TabelaKpis kpis={kpis} />
+      {modo === "tabela" ? (
+        <KpiTabela
+          linhas={linhas}
+          subtitulo={`Valor na data-base ou na última apuração · meta/limite · folga · status · tendência ${vsMes} (covenants: vs apuração anterior) · relatório de origem`}
+        />
       ) : (
-        SECOES_KPI.map((s) => {
-          const doGrupo = kpis.filter((k) => k.def.secao === s.id);
-          if (!doGrupo.length) return null;
-          const comMeta = doGrupo.filter((k) => k.status !== null);
-          const okSec = comMeta.filter((k) => k.status === "ok").length;
-          const estadoSec: ValueState = comMeta.some((k) => k.estado === "negative")
-            ? "negative"
-            : comMeta.some((k) => k.status !== "ok")
-              ? "critical"
-              : "positive";
-          return (
-            <section key={s.id} aria-labelledby={`secao-${s.id}`}>
-              <SectionTitle
-                id={`secao-${s.id}`}
-                extra={
-                  comMeta.length ? (
-                    <ObjectStatus state={estadoSec}>
-                      {okSec}/{comMeta.length} na meta
-                    </ObjectStatus>
-                  ) : (
-                    <span className="text-xs text-label whitespace-nowrap">Informativos</span>
-                  )
-                }
-              >
-                {s.numero}. {s.titulo}
-              </SectionTitle>
-              <p className="text-xs text-label -mt-1.5 mb-3">{s.periodo}</p>
-
-              {s.id === "covenants" && caso && <FaixaCovenant caso={caso} dataBase={db} reclassificados={atual.reclassificados} />}
-
-              <div className={clsx("grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4", s.id === "covenants" && caso && "mt-3")}>
-                {doGrupo.map((k, i) => (
-                  <div key={k.def.id} id={ancora(k.def.id)} className={clsx("flex min-w-0 scroll-mt-24", classeColuna(i, doGrupo.length))}>
-                    <CartaoKpi k={k} serie={d.series[k.def.id]} foto={atual} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          );
-        })
+        <>
+          {secao(
+            "tamanho",
+            tamanho,
+            <KpiPainel
+              className={colunasRestantes(tamanho.length)}
+              titulo="Dívida líquida na data-base"
+              subtitulo={`Consolidado · ${fmtDate(db)}${atual.dataCaixa && !caixaNaData ? ` · caixa de ${fmtDate(atual.dataCaixa)}` : ""} · R$`}
+              rota="/c04-covenants"
+              origem="C04 · Covenants"
+              rodape={
+                tri
+                  ? tri.data !== db
+                    ? `Apuração ${fmtQuarter(tri.data)} (base dos covenants): dívida líquida ${fmtCompact(tri.dividaLiquida)}`
+                    : `Igual à apuração ${fmtQuarter(tri.data)} (base dos covenants) · EBITDA 12m ${fmtCompact(tri.ebitdaLTM)}`
+                  : undefined
+              }
+            >
+              <KpiPonte
+                base={atual.dividaBruta}
+                linhas={[
+                  { rotulo: "Dívida bruta", valor: atual.dividaBruta, cor: "#df1278", forte: true },
+                  { rotulo: `(−) Caixa${atual.dataCaixa && !caixaNaData ? ` (${fmtDate(atual.dataCaixa)})` : ""}`, valor: atual.caixa ?? 0, cor: "#758ca4" },
+                  { rotulo: "(−) Aplicações (valor contábil)", valor: atual.aplicacoes, cor: "#0070f2" },
+                  { rotulo: "Dívida líquida", valor: dlNaData, cor: "#8b47d7", forte: true },
+                ]}
+              />
+            </KpiPainel>,
+          )}
+          {secao("custo", doGrupo("custo"))}
+          {secao("prazo", doGrupo("prazo"))}
+          {secao(
+            "covenants",
+            covenants,
+            <PainelFolgaCovenants className={colunasRestantes(covenants.length)} kpis={covenants} dataBase={db} />,
+            caso ? <FaixaCovenant caso={caso} dataBase={db} reclassificados={atual.reclassificados} /> : undefined,
+          )}
+          {secao(
+            "liquidez",
+            liquidez,
+            <KpiPainel
+              className={colunasRestantes(liquidez.length)}
+              titulo="Cobertura de curto prazo na data-base"
+              subtitulo={`Consolidado · ${fmtDate(db)}${atual.dataCaixa && !caixaNaData ? ` · caixa de ${fmtDate(atual.dataCaixa)}` : ""} · R$`}
+              rota="/c02-cronograma"
+              origem="C02 · Vencimentos"
+              rodape={`Aplicações não circulantes, fora da cobertura: ${fmtCompact(atual.aplicacoes - atual.aplicacoesCirculantes)}`}
+            >
+              <KpiPonte
+                base={Math.max((atual.caixa ?? 0) + atual.aplicacoesCirculantes, atual.circulante, atual.principal12m + atual.juros12m)}
+                linhas={[
+                  { rotulo: `Caixa${atual.dataCaixa && !caixaNaData ? ` (${fmtDate(atual.dataCaixa)})` : ""}`, valor: atual.caixa ?? 0, cor: "#758ca4" },
+                  { rotulo: "(+) Aplicações circulantes (valor contábil)", valor: atual.aplicacoesCirculantes, cor: "#0070f2" },
+                  { rotulo: "Caixa + aplicações circulantes", valor: (atual.caixa ?? 0) + atual.aplicacoesCirculantes, cor: CHART_SEMANTIC.good, forte: true },
+                  {
+                    rotulo: `Dívida circulante${atual.reclassificados.length ? " (com reclassificação CPC 26)" : ""}`,
+                    valor: atual.circulante,
+                    cor: "#df1278",
+                    forte: true,
+                  },
+                  { rotulo: "Serviço da dívida – próximos 12 meses", valor: atual.principal12m + atual.juros12m, cor: CHART_SEMANTIC.critical },
+                ]}
+              />
+            </KpiPainel>,
+          )}
+        </>
       )}
     </ReportPage>
   );
@@ -1345,128 +1517,75 @@ function BarraFatias({ fatias, resto = [] }: { fatias: Fatia[]; resto?: Fatia[] 
 }
 
 // ---------------------------------------------------------------------------
-// Scorecard
+// Folga dos covenants (cartão auxiliar da seção 4)
 // ---------------------------------------------------------------------------
 
-function Scorecard({
-  kpis,
-  resumo,
-  visao,
-  onVisao,
-  onIr,
-  ultimoDado,
-}: {
-  kpis: ResultadoKpi[];
-  resumo: ResumoKpis;
-  visao: Visao;
-  onVisao: (v: Visao) => void;
-  onIr: (id: string) => void;
-  ultimoDado: string;
-}) {
-  const alertas = kpis.filter((k) => k.status !== null && k.status !== "ok").sort((a, b) => a.prioridade - b.prioridade);
-  const segmentos: { rotulo: string; n: number; cor: string; nota?: string }[] = [
-    { rotulo: "Na meta", n: resumo.ok, cor: COR_SEMAFORO.ok },
-    { rotulo: "Em atenção", n: resumo.atencao, cor: COR_SEMAFORO.atencao },
-    {
-      rotulo: "Fora da meta ou do limite",
-      n: resumo.fora,
-      cor: COR_SEMAFORO.excedido,
-      nota: resumo.comWaiver ? `${resumo.comWaiver} com waiver` : undefined,
-    },
-  ];
-  const COR_VALOR: Record<ValueState, string> = {
-    positive: "#256f3a",
-    critical: "#b44f00",
-    negative: "#aa0808",
-    information: "#0070f2",
-    neutral: "#1d2d3e",
-  };
+const COR_ESTADO: Record<ValueState, string> = {
+  positive: "#30914c",
+  critical: "#e26300",
+  negative: "#f53232",
+  information: "#0070f2",
+  neutral: "#758ca4",
+};
 
+const COR_TEXTO: Record<ValueState, string> = {
+  positive: "#256f3a",
+  critical: "#b44f00",
+  negative: "#aa0808",
+  information: "#0070f2",
+  neutral: "#1d2d3e",
+};
+
+/** Folga de cada covenant em % do limite, com a marca do início da faixa de atenção */
+function PainelFolgaCovenants({ kpis, dataBase, className }: { kpis: ResultadoKpi[]; dataBase: string; className?: string }) {
+  const prox = proximasApuracoes(dataBase);
+  const linhas = kpis
+    .filter((k) => k.apuracao && k.limite !== undefined && k.atencao !== undefined)
+    .map((k) => {
+      const lim = k.limite!;
+      const folgaRel = (k.folga ?? 0) / Math.abs(lim);
+      const atencaoRel = Math.abs(k.atencao! - lim) / Math.abs(lim);
+      return { k, folgaRel, atencaoRel };
+    });
+  const escala = Math.max(1, ...linhas.map((l) => l.folgaRel));
   return (
-    <Card
-      title="Scorecard"
-      subtitle={`${resumo.comMeta} KPIs com meta ou limite · ${resumo.informativos} informativos`}
-      actions={
-        <SegmentedButton
-          value={visao}
-          onChange={onVisao}
-          items={[
-            { value: "cartoes", label: "Cartões", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
-            { value: "tabela", label: "Tabela", icon: <Table2 className="w-3.5 h-3.5" /> },
-          ]}
-        />
-      }
+    <KpiPainel
+      className={className}
+      titulo="Folga dos covenants"
+      subtitulo="Distância até o limite contratual, em % do limite · última apuração · marca = início da faixa de atenção"
+      rota="/c04-covenants"
+      origem="C04 · Covenants"
+      rodape={`Próximas apurações: trimestral em ${fmtDate(prox.trimestral)} · anual em ${fmtDate(prox.anual)}`}
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] gap-x-10 gap-y-5">
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[2.5rem] leading-none font-light tabular" style={{ color: COR_VALOR[resumo.estado] }}>
-              {resumo.ok}
-            </span>
-            <span className="text-xl font-light text-label tabular">/ {resumo.comMeta}</span>
-            <span className="text-sm text-label ml-1">KPIs na meta</span>
-          </div>
-          <div className="flex h-2.5 rounded-full overflow-hidden bg-[#e5e5e5] gap-0.5 mt-3" aria-hidden>
-            {segmentos
-              .filter((s) => s.n > 0)
-              .map((s) => (
-                <div key={s.rotulo} style={{ width: `${(s.n / Math.max(1, resumo.comMeta)) * 100}%`, backgroundColor: s.cor }} />
-              ))}
-          </div>
-          <ul className="mt-2.5 space-y-1 text-[13px]">
-            {segmentos.map((s) => (
-              <li key={s.rotulo} className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 text-text min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.cor }} />
-                  <span className="truncate">{s.rotulo}</span>
-                  {s.nota && <span className="text-xs text-label whitespace-nowrap">({s.nota})</span>}
+      <ul className="space-y-3">
+        {linhas.map(({ k, folgaRel, atencaoRel }) => (
+          <li key={k.def.id} className="min-w-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[13px]">
+              <span className="min-w-0 truncate">
+                <span className="font-semibold text-text">{k.def.sigla}</span>
+                <span className="text-label"> · {k.def.periodicidade === "Anual" ? k.referencia.slice(0, 4) : fmtQuarter(k.referencia)}</span>
+              </span>
+              <span className="tabular whitespace-nowrap">
+                <span className="text-label">
+                  {fmtValor(k.def.unidade, k.valor)} · limite {fmtLimite(k.def, k.limite!)}
+                </span>{" "}
+                <span className="font-semibold" style={{ color: COR_TEXTO[k.estado] }}>
+                  {folgaRel < 0 ? "−" : "+"}
+                  {fmtDec(Math.abs(folgaRel) * 100, 0)}%
                 </span>
-                <span className="font-semibold tabular text-text">{fmtInt(s.n)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="min-w-0">
-          <div className="text-[13px] font-semibold text-text mb-1">Pontos de atenção</div>
-          {alertas.length === 0 ? (
-            <div className="flex items-center gap-2 px-3 py-3 rounded-lg bg-positive-bg text-positive text-[13px] font-semibold">
-              <CheckCircle2 className="w-4 h-4 shrink-0" /> Todos os KPIs com meta ou limite estão dentro do esperado
+              </span>
             </div>
-          ) : (
-            <ul className="divide-y divide-line-soft -mx-2">
-              {alertas.map((k) => (
-                <li key={k.def.id}>
-                  <button
-                    type="button"
-                    onClick={() => onIr(k.def.id)}
-                    className="w-full flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-3 gap-y-1 px-2 py-2 rounded-lg text-left hover:bg-hover"
-                  >
-                    <span className="min-w-0 flex-1 basis-[13rem]">
-                      <span className="block text-sm font-semibold text-text truncate">{k.def.nome}</span>
-                      <span className="block text-xs text-label truncate">
-                        {fmtValor(k.def.unidade, k.valor)} · {k.def.tipo === "covenant" ? "limite" : "meta"} {fmtLimite(k.def, k.limite!)} ·{" "}
-                        {ROTULO_TIPO[k.def.tipo]}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1 shrink-0">
-                      <ObjectStatus state={k.estado} inverted>
-                        {k.statusTexto}
-                      </ObjectStatus>
-                      <ChevronRight className="w-4 h-4 text-label hidden sm:block" />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-      <p className="text-xs text-label mt-4 pt-3 border-t border-line-soft leading-relaxed">
-        Metas internas fictícias (ambiente de demonstração) e limites de covenant conforme escrituras e contratos (C04). Séries com as premissas
-        importadas do SAP; vencimentos e serviço da dívida projetados com o último dado disponível ({fmtDate(ultimoDado)}).
-      </p>
-    </Card>
+            <div className="mt-1 relative h-2 rounded-full bg-[#eef0f2]">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{ width: `${folgaRel > 0 ? Math.max(1.5, (folgaRel / escala) * 100) : 1.5}%`, backgroundColor: COR_ESTADO[k.estado] }}
+              />
+              <div className="absolute -top-0.5 -bottom-0.5 w-0.5 rounded bg-[#1d2d3e]" style={{ left: `${Math.min(100, (atencaoRel / escala) * 100)}%` }} aria-hidden />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </KpiPainel>
   );
 }
 
@@ -1507,164 +1626,5 @@ function FaixaCovenant({ caso, dataBase, reclassificados }: { caso: ApuracaoCove
         Ver C04
       </Link>
     </MessageStrip>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Visão em tabela
-// ---------------------------------------------------------------------------
-
-function CelulaTendencia({ k }: { k: ResultadoKpi }) {
-  const t = tendenciaDe(k);
-  if (!t) return <span className="text-label">—</span>;
-  const Seta = t.direcao === "up" ? ArrowUpRight : t.direcao === "down" ? ArrowDownRight : ArrowRight;
-  const cor = t.favoravel === null || t.direcao === "flat" ? "text-label" : t.favoravel ? "text-positive" : "text-negative";
-  return (
-    <span className={clsx("inline-flex items-center gap-1 whitespace-nowrap text-[13px]", cor)}>
-      <Seta className="w-4 h-4 shrink-0" aria-hidden />
-      {t.texto}
-    </span>
-  );
-}
-
-function CelulaMeta({ k }: { k: ResultadoKpi }) {
-  if (k.limite === undefined)
-    return (
-      <div className="leading-snug whitespace-nowrap">
-        <div className="text-label">—</div>
-        <div className="text-xs text-label">sem meta · informativo</div>
-      </div>
-    );
-  return (
-    <div className="leading-snug whitespace-nowrap">
-      <div className="font-semibold text-text">{fmtLimite(k.def, k.limite)}</div>
-      <div className="text-xs text-label">{ROTULO_TIPO[k.def.tipo]}</div>
-    </div>
-  );
-}
-
-function LinkFonte({ k }: { k: ResultadoKpi }) {
-  return (
-    <Link to={k.def.rota} className="text-[13px] text-link hover:underline inline-flex items-center gap-0.5 whitespace-nowrap">
-      {k.def.origem} · {NOME_ORIGEM[k.def.origem]}
-      <ChevronRight className="w-3.5 h-3.5" />
-    </Link>
-  );
-}
-
-function TabelaKpis({ kpis }: { kpis: ResultadoKpi[] }) {
-  const ordemStatus = (k: ResultadoKpi) => (k.status === null ? -1 : k.status === "ok" ? 0 : k.status === "atencao" ? 1 : 2);
-  const colunas: Column<ResultadoKpi>[] = [
-    {
-      key: "kpi",
-      header: "KPI",
-      minWidth: 230,
-      value: (k) => k.def.nome,
-      render: (k) => {
-        const s = SECOES_KPI.find((x) => x.id === k.def.secao)!;
-        return (
-          <div className="leading-snug py-0.5">
-            <div className="font-semibold text-text" title={k.def.formula}>
-              {k.def.nome}
-            </div>
-            <div className="text-xs text-label">
-              {s.numero}. {s.titulo} · {k.def.periodicidade.toLowerCase()}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: "valor",
-      header: "Valor",
-      align: "right",
-      value: (k) => k.valor,
-      render: (k) => (
-        <div className="leading-snug">
-          <div className="font-bold" style={{ color: k.estado === "neutral" || k.estado === "positive" ? undefined : k.estado === "negative" ? "#aa0808" : "#b44f00" }}>
-            {fmtValor(k.def.unidade, k.valor)}
-          </div>
-          <div className="text-xs text-label">{fmtDate(k.referencia)}</div>
-        </div>
-      ),
-    },
-    { key: "meta", header: "Meta / limite", value: (k) => k.limite ?? null, render: (k) => <CelulaMeta k={k} /> },
-    {
-      key: "desvio",
-      header: "Desvio",
-      align: "right",
-      headerTitle: "Desvio = valor − meta/limite (p.p. para percentuais)",
-      value: (k) => (k.desvio !== undefined && k.limite ? k.desvio / k.limite : null),
-      render: (k) =>
-        k.desvio === undefined ? (
-          <span className="text-label">—</span>
-        ) : (
-          <span className={clsx("font-semibold", k.status === "ok" ? "text-positive" : k.status === "atencao" ? "text-critical" : "text-negative")}>
-            {fmtDelta(k.def.unidade, k.desvio)}
-          </span>
-        ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      value: ordemStatus,
-      render: (k) => <ObjectStatus state={k.estado}>{k.statusTexto}</ObjectStatus>,
-    },
-    { key: "tendencia", header: "Tendência", render: (k) => <CelulaTendencia k={k} /> },
-    { key: "fonte", header: "Fonte", value: (k) => k.def.origem, render: (k) => <LinkFonte k={k} /> },
-  ];
-
-  return (
-    <Card
-      title={`Indicadores (${kpis.length})`}
-      subtitle="Valor na data-base ou na última apuração · meta/limite · desvio · status · tendência vs período anterior"
-      bodyClassName="px-0 pb-0"
-      className="min-w-0 overflow-hidden"
-    >
-      <div className="hidden lg:block">
-        <DataTable columns={colunas} rows={kpis} rowKey={(k) => k.def.id} />
-      </div>
-      {/* Pop-in (sap.m.Table responsiva): em telas estreitas as colunas descem para baixo do KPI */}
-      <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
-        {kpis.map((k) => (
-          <li key={k.def.id} className="px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-text">{k.def.nome}</div>
-                <div className="text-xs text-label">{k.def.subtitulo}</div>
-              </div>
-              <div className="shrink-0">
-                <ObjectStatus state={k.estado}>{k.statusTexto}</ObjectStatus>
-              </div>
-            </div>
-            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
-              <PopIn rotulo="Valor">
-                <span className="font-semibold">{fmtValor(k.def.unidade, k.valor)}</span>
-              </PopIn>
-              <PopIn rotulo="Meta / limite">{k.limite !== undefined ? fmtLimite(k.def, k.limite) : "—"}</PopIn>
-              <PopIn rotulo="Desvio">{k.desvio !== undefined ? fmtDelta(k.def.unidade, k.desvio) : "—"}</PopIn>
-              <PopIn rotulo="Fonte">
-                <LinkFonte k={k} />
-              </PopIn>
-              <div className="col-span-2 sm:col-span-4 min-w-0">
-                <dt className="text-xs text-label">Tendência</dt>
-                <dd>
-                  <CelulaTendencia k={k} />
-                </dd>
-              </div>
-            </dl>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function PopIn({ rotulo, children }: { rotulo: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-label">{rotulo}</dt>
-      <dd className="text-text tabular truncate">{children}</dd>
-    </div>
   );
 }

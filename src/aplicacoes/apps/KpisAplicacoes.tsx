@@ -1608,7 +1608,7 @@ export function KpisAplicacoes() {
             k.tabela?.meta ?? k.metaTexto,
             FONTE_META[k.def.fonte].texto,
             `${k.desvioRotulo} ${k.desvioTexto}`,
-            `${STATUS_TEXTO[k.state]} – ${k.statusTexto}`,
+            STATUS_TEXTO[k.state] === k.statusTexto ? k.statusTexto : `${STATUS_TEXTO[k.state]} – ${k.statusTexto}`,
             k.tendencia?.texto ?? "",
             k.def.consolidado ? "Consolidado" : escopoLabel,
             k.def.origem,
