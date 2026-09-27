@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { CheckCircle2, Lock, X } from "lucide-react";
+import { Lock, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Field } from "../../shared/components/fiori/Card";
@@ -13,7 +13,7 @@ import { FONTES_SAP, IMPORTACAO_SAP, ultimoDadoNaDataBase, type PremissasMercado
 import { EMPRESAS } from "../../shared/data/empresas";
 import { addMonths, fmtDate, fmtMonthLong, fmtMonthShort, lastMonthEnds, previousMonthEnd } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import { relatorioPorId } from "../data/catalogo";
 import type { ClassificacaoCPC48 } from "../data/carteira";
 import { PARAMETROS_TESOURO, TIPOS_TITULO, TITULOS, type TituloPublico } from "../data/tesouro";
@@ -37,12 +37,37 @@ const CPC48_STATE: Record<ClassificacaoCPC48, ValueState> = {
   "VJ por Resultado": "critical",
 };
 
+/** Rótulo exibido da classificação CPC 48 (mesma grafia em tags, cartões e exportação) */
+const ROTULO_CPC48: Record<ClassificacaoCPC48, string> = {
+  "Custo Amortizado": "Custo amortizado",
+  "VJ por ORA": "VJ por ORA",
+  "VJ por Resultado": "VJ por resultado",
+};
+
+const ROTULO_CUSTODIA = "Taxa de custódia (tabela B3/Tesouro Direto, parâmetro da planilha)";
+
 // ---------------------------------------------------------------------------
 // Helpers locais
 // ---------------------------------------------------------------------------
 
 function infoTipo(t: TituloPublico) {
   return TIPOS_TITULO.find((x) => x.tipo === t.tipo)!;
+}
+
+/** LFT: pós-fixada, reprecificada diariamente pela Selic – sem duration de taxa (só a do ágio/deságio) */
+const posFixada = (t: TituloPublico) => t.tipo === "LFT";
+
+/** Banco custodiante: para PJ, os títulos ficam custodiados no SELIC via banco custodiante */
+function custodianteTexto(t: TituloPublico): string {
+  if (/selic/i.test(t.custodiante)) return t.custodiante;
+  return `${t.custodiante.replace(/^B3\s*·\s*agente\s*/i, "")} · custódia no SELIC`;
+}
+
+/** Duration de taxa média ponderada pelo saldo a mercado, sem LFT (pós-fixada) */
+function durationMedia(xs: PosicaoTitulo[]): number | null {
+  const comTaxa = xs.filter((x) => !posFixada(x.t));
+  const m = comTaxa.reduce((s, x) => s + x.saldoMercado, 0);
+  return m > 0 ? comTaxa.reduce((s, x) => s + x.duration * x.saldoMercado, 0) / m : null;
 }
 
 /** Taxa indicativa de mercado (ANBIMA) no mesmo formato da taxa de compra */
@@ -104,7 +129,7 @@ export function R08Tesouro() {
     const soma = (fn: (x: PosicaoTitulo) => number) => posicoes.reduce((s, x) => s + fn(x), 0);
     const curva = soma((x) => x.saldoCurva);
     const mercado = soma((x) => x.saldoMercado);
-    const duration = mercado > 0 ? soma((x) => x.duration * x.saldoMercado) / mercado : 0;
+    const duration = durationMedia(posicoes);
     const ano = p.dataBase.slice(0, 4);
     const cuponsAno = eventos.filter((x) => x.e.tipo === "Cupom" && x.realizado && x.e.data >= `${ano}-01-01`);
     // Conferência com a Carteira-Mestre (base consolidada)
@@ -126,10 +151,16 @@ export function R08Tesouro() {
   }, [escopo, p, contratos]);
 
   const sel = d.posicoes.find((x) => x.t.id === selecionado) ?? null;
-  const concilia = Math.abs(d.mestre.curva - d.curva) < 1 && Math.abs(d.mestre.contabil - d.contabil) < 1 && d.mestre.qtd === d.posicoes.length;
+  const okCurva = Math.abs(d.mestre.curva - d.curva) < 1;
+  const okContabil = Math.abs(d.mestre.contabil - d.contabil) < 1;
+  const okQtd = d.mestre.qtd === d.posicoes.length;
+  const concilia = okCurva && okContabil && okQtd;
   const mesTaxas = fmtMonthLong(p.dataBase);
+  const alternar = (id: string) => setSelecionado(id === selecionado ? null : id);
+  const listaCelular = [...d.posicoes].sort((a, b) => a.t.id.localeCompare(b.t.id));
 
   const colunas: Column<PosicaoTitulo>[] = [
+    // identificação
     {
       key: "codigo",
       header: "Código",
@@ -155,6 +186,60 @@ export function R08Tesouro() {
             {x.t.tipo} · SELIC {infoTipo(x.t).codigoSelic}
           </div>
         </div>
+      ),
+    },
+    // saldo, valor contábil e resultado
+    { key: "curva", header: "Saldo curva", align: "right", value: (x) => x.saldoCurva, render: (x) => fmtNum(x.saldoCurva), total: (r) => fmtNum(r.reduce((s, x) => s + x.saldoCurva, 0)) },
+    { key: "mercado", header: "Saldo mercado", align: "right", value: (x) => x.saldoMercado, render: (x) => fmtNum(x.saldoMercado), total: (r) => fmtNum(r.reduce((s, x) => s + x.saldoMercado, 0)) },
+    {
+      key: "contabil",
+      header: "Valor contábil",
+      headerTitle: "Curva (custo amortizado) ou mercado (VJ por ORA / VJ por resultado)",
+      align: "right",
+      value: (x) => x.valorContabil,
+      render: (x) => (
+        <div>
+          <div className="font-semibold">{fmtNum(x.valorContabil)}</div>
+          <div className="text-xs text-label">{x.t.cpc48 === "Custo Amortizado" ? "curva" : "mercado"}</div>
+        </div>
+      ),
+      total: (r) => fmtNum(r.reduce((s, x) => s + x.valorContabil, 0)),
+    },
+    {
+      key: "mtm",
+      header: "MTM",
+      headerTitle: "Marcação a mercado: saldo a mercado − saldo na curva",
+      align: "right",
+      value: (x) => x.mtm,
+      render: (x) => (
+        <div>
+          <div className={clsx("font-semibold", corSinal(x.mtm))}>{comSinal(x.mtm, fmtNum)}</div>
+          <div className="text-xs text-label">{comSinal(x.saldoCurva ? x.mtm / x.saldoCurva : 0, (v) => fmtPct(v, 2))}</div>
+        </div>
+      ),
+      total: (r) => {
+        const v = r.reduce((s, x) => s + x.mtm, 0);
+        return <span className={corSinal(v)}>{comSinal(v, fmtNum)}</span>;
+      },
+    },
+    {
+      key: "liquido",
+      header: "Rendimento líquido",
+      headerTitle: "Saldo na curva + cupons recebidos − valor de compra − IOF − IR − custódia/agente",
+      align: "right",
+      value: (x) => x.rendimentoLiquido,
+      render: (x) => <span className="font-semibold">{fmtNum(x.rendimentoLiquido)}</span>,
+      total: (r) => fmtNum(r.reduce((s, x) => s + x.rendimentoLiquido, 0)),
+    },
+    // detalhes
+    {
+      key: "cpc",
+      header: "CPC 48",
+      value: (x) => x.t.cpc48,
+      render: (x) => (
+        <ObjectStatus inverted icon={false} state={CPC48_STATE[x.t.cpc48]}>
+          {ROTULO_CPC48[x.t.cpc48]}
+        </ObjectStatus>
       ),
     },
     {
@@ -198,25 +283,6 @@ export function R08Tesouro() {
     },
     { key: "puCurva", header: "PU curva", align: "right", value: (x) => x.puCurva, render: (x) => fmtDec(x.puCurva, 2) },
     { key: "puMercado", header: "PU mercado", align: "right", value: (x) => x.puMercado, render: (x) => fmtDec(x.puMercado, 2) },
-    { key: "curva", header: "Saldo curva", align: "right", value: (x) => x.saldoCurva, render: (x) => fmtNum(x.saldoCurva), total: (r) => fmtNum(r.reduce((s, x) => s + x.saldoCurva, 0)) },
-    { key: "mercado", header: "Saldo mercado", align: "right", value: (x) => x.saldoMercado, render: (x) => fmtNum(x.saldoMercado), total: (r) => fmtNum(r.reduce((s, x) => s + x.saldoMercado, 0)) },
-    {
-      key: "mtm",
-      header: "MTM",
-      headerTitle: "Marcação a mercado: saldo a mercado − saldo na curva",
-      align: "right",
-      value: (x) => x.mtm,
-      render: (x) => (
-        <div>
-          <div className={clsx("font-semibold", corSinal(x.mtm))}>{comSinal(x.mtm, fmtNum)}</div>
-          <div className="text-xs text-label">{comSinal(x.saldoCurva ? x.mtm / x.saldoCurva : 0, (v) => fmtPct(v, 2))}</div>
-        </div>
-      ),
-      total: (r) => {
-        const v = r.reduce((s, x) => s + x.mtm, 0);
-        return <span className={corSinal(v)}>{comSinal(v, fmtNum)}</span>;
-      },
-    },
     {
       key: "cupons",
       header: "Cupons recebidos",
@@ -245,50 +311,36 @@ export function R08Tesouro() {
     {
       key: "taxas",
       header: "Custódia + agente",
-      headerTitle: `Custódia B3 (${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a.) + taxa do agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.) acumuladas desde a compra`,
+      headerTitle: `${ROTULO_CUSTODIA}: ${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a. + taxa do agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.), acumuladas desde a compra`,
       align: "right",
       value: (x) => x.taxas,
       render: (x) => fmtNum(x.taxas),
       total: (r) => fmtNum(r.reduce((s, x) => s + x.taxas, 0)),
     },
     {
-      key: "liquido",
-      header: "Rendimento líquido",
-      headerTitle: "Saldo na curva + cupons recebidos − valor de compra − IOF − IR − custódia/agente",
-      align: "right",
-      value: (x) => x.rendimentoLiquido,
-      render: (x) => <span className="font-semibold">{fmtNum(x.rendimentoLiquido)}</span>,
-      total: (r) => fmtNum(r.reduce((s, x) => s + x.rendimentoLiquido, 0)),
-    },
-    {
-      key: "cpc",
-      header: "CPC 48",
-      value: (x) => x.t.cpc48,
-      render: (x) => (
-        <ObjectStatus inverted icon={false} state={CPC48_STATE[x.t.cpc48]}>
-          {x.t.cpc48}
-        </ObjectStatus>
-      ),
-    },
-    {
-      key: "contabil",
-      header: "Valor contábil",
-      headerTitle: "Curva (custo amortizado) ou mercado (VJ por ORA / VJ por resultado)",
-      align: "right",
-      value: (x) => x.valorContabil,
-      render: (x) => <span className="font-semibold">{fmtNum(x.valorContabil)}</span>,
-      total: (r) => fmtNum(r.reduce((s, x) => s + x.valorContabil, 0)),
-    },
-    {
       key: "duration",
       header: "Duration",
-      headerTitle: "Duration de Macaulay em anos (dias úteis ÷ 252) à taxa de mercado; total ponderado pelo saldo a mercado",
+      headerTitle:
+        "Duration de taxa (Macaulay, anos úteis ÷ 252) à taxa de mercado. LFT: pós-fixada, reprecificada diariamente pela Selic – sem risco de taxa; abaixo, a duration do ágio/deságio (spread). Total ponderado pelo saldo a mercado, sem LFT",
       align: "right",
       value: (x) => x.duration,
-      render: (x) => `${fmtDec(x.duration, 2)} anos`,
+      render: (x) =>
+        posFixada(x.t) ? (
+          <div className="whitespace-nowrap">
+            <div className="text-label">— (pós-fixada)</div>
+            <div className="text-xs text-label">spread {fmtDec(x.durationSpread, 2)} anos</div>
+          </div>
+        ) : (
+          `${fmtDec(x.duration, 2)} anos`
+        ),
       total: (r) => {
-        const m = r.reduce((s, x) => s + x.saldoMercado, 0);
-        return `${fmtDec(m ? r.reduce((s, x) => s + x.duration * x.saldoMercado, 0) / m : 0, 2)} anos`;
+        const dm = durationMedia(r);
+        return (
+          <div className="whitespace-nowrap">
+            <div>{dm === null ? "—" : `${fmtDec(dm, 2)} anos`}</div>
+            {r.some((x) => posFixada(x.t)) && <div className="text-xs text-label font-normal">sem LFT</div>}
+          </div>
+        );
       },
     },
     {
@@ -342,12 +394,13 @@ export function R08Tesouro() {
             { titulo: "IR retido nos cupons", tipo: "moeda" },
             { titulo: "IR total (retido + provisão)", tipo: "moeda" },
             { titulo: "IOF", tipo: "moeda" },
-            { titulo: "Custódia B3 + agente", tipo: "moeda" },
+            { titulo: "Custódia + agente", tipo: "moeda" },
             { titulo: "Rendimento bruto", tipo: "moeda" },
             { titulo: "Rendimento líquido", tipo: "moeda" },
             { titulo: "Classificação CPC 48", largura: 18 },
             { titulo: "Valor contábil", tipo: "moeda" },
-            { titulo: "Duration (anos)", tipo: "decimal", largura: 11 },
+            { titulo: "Duration de taxa (anos)", tipo: "decimal", largura: 11 },
+            { titulo: "Duration do spread – LFT (anos)", tipo: "decimal", largura: 12 },
             { titulo: "VNA na data-base", tipo: "decimal", largura: 14 },
             { titulo: "Custodiante", largura: 26 },
             { titulo: "Portfolio", largura: 14 },
@@ -382,11 +435,12 @@ export function R08Tesouro() {
             x.taxas,
             x.rendimentoBruto,
             x.rendimentoLiquido,
-            x.t.cpc48,
+            ROTULO_CPC48[x.t.cpc48],
             x.valorContabil,
-            x.duration,
+            posFixada(x.t) ? "" : x.duration,
+            posFixada(x.t) ? x.durationSpread : "",
             x.vna ?? "",
-            x.t.custodiante,
+            custodianteTexto(x.t),
             x.t.portfolio,
             x.proximoCupom?.data ?? "",
             x.proximoCupom?.tipo ?? "",
@@ -409,16 +463,16 @@ export function R08Tesouro() {
             d.soma((x) => x.rendimentoLiquido),
             "",
             d.contabil,
-            d.duration,
-            "", "", "", "", "", "",
+            d.duration ?? "",
+            "", "", "", "", "", "", "",
           ],
           notas: [
             "(i) Curva: PU à taxa de compra; mercado: PU à taxa indicativa ANBIMA do mês, importada do SAP (após a data-base, último dado disponível).",
             "(ii) MTM = saldo a mercado − saldo na curva. Valor contábil (CPC 48): curva no custo amortizado; mercado no VJ por ORA e no VJ por resultado.",
             "(iii) IR: IRRF retido na fonte sobre os cupons + provisão sobre o rendimento na curva (tabela regressiva; para PJ, antecipação compensável com o IRPJ).",
-            `(iv) Custódia B3 (${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a.) e taxa do agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.) acumuladas desde a compra.`,
+            `(iv) ${ROTULO_CUSTODIA}: ${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a., e taxa do agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.), acumuladas desde a compra. Para PJ, os títulos ficam custodiados no SELIC via banco custodiante; o parâmetro reproduz a planilha.`,
             "(v) Rendimento líquido = saldo na curva + cupons recebidos − valor de compra − IOF − IR − custódia/agente.",
-            "(vi) Duration de Macaulay em anos (dias úteis ÷ 252) à taxa de mercado; total ponderado pelo saldo a mercado.",
+            "(vi) Duration de taxa (Macaulay, anos úteis ÷ 252) à taxa de mercado; total ponderado pelo saldo a mercado, sem LFT. LFT: pós-fixada, reprecificada diariamente pela Selic (sem duration de taxa); informada a duration do ágio/deságio (spread).",
             "(vii) Taxa ANBIMA da LFT: ágio/deságio sobre a Selic; NTN-B e NTN-B Principal: taxa real sobre o IPCA; LTN e NTN-F: taxa prefixada.",
             `(viii) Conferência: saldo na curva ${fmtBRL(d.mestre.curva, true)} e valor contábil ${fmtBRL(d.mestre.contabil, true)} na Carteira-Mestre.`,
           ],
@@ -456,7 +510,7 @@ export function R08Tesouro() {
       onExport={exportar}
       kpis={
         <>
-          <HeaderKpi label="Saldo na curva" value={fmtCompact(d.curva)} sub={`${d.posicoes.length} título(s)`} />
+          <HeaderKpi label="Saldo na curva" value={fmtCompact(d.curva)} sub={plural(d.posicoes.length, "título", "títulos")} />
           <HeaderKpi label="Saldo a mercado" value={fmtCompact(d.mercado)} sub="taxas ANBIMA" />
           <HeaderKpi
             label="Ajuste MTM"
@@ -465,13 +519,23 @@ export function R08Tesouro() {
             sub={`${comSinal(d.curva ? d.mtm / d.curva : 0, (v) => fmtPct(v, 2))} s/ curva`}
           />
           <HeaderKpi label="Valor contábil" value={fmtCompact(d.contabil)} sub="CPC 48" />
-          <HeaderKpi label="Duration média" value={fmtDec(d.duration, 2)} unit="anos" sub="pond. pelo mercado" />
-          <HeaderKpi label="Cupons recebidos no ano" value={fmtCompact(d.cuponsAno.bruto)} sub={`bruto · ${d.cuponsAno.qtd} pagamento(s) em ${d.ano}`} />
+          <HeaderKpi
+            label="Duration média (risco de taxa)"
+            value={d.duration === null ? "—" : fmtDec(d.duration, 2)}
+            unit={d.duration === null ? undefined : "anos"}
+            sub={d.posicoes.some((x) => posFixada(x.t)) ? "sem LFT (pós-fixada) · pond. pelo mercado" : "pond. pelo mercado"}
+          />
+          <HeaderKpi
+            label="Cupons recebidos no ano"
+            value={fmtCompact(d.cuponsAno.bruto)}
+            sub={`bruto · ${plural(d.cuponsAno.qtd, "pagamento", "pagamentos")} em ${d.ano}`}
+          />
         </>
       }
-      headerExtra={
-        <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-6 no-print">
-          <FilterField label="Empresa" className="w-full sm:w-80 shrink-0">
+    >
+      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <FilterField label="Empresa">
             <Select
               value={escopo}
               onChange={(v) => {
@@ -481,41 +545,97 @@ export function R08Tesouro() {
               options={ESCOPOS}
             />
           </FilterField>
-          <p className="text-[13px] text-label sm:ml-auto sm:text-right leading-snug">
-            Títulos públicos federais · custódia B3 · PU e taxas indicativas ANBIMA de {mesTaxas} · valores em R$
-          </p>
+          <div className="sm:col-span-2 text-[13px] text-label sm:text-right leading-snug">
+            Títulos públicos federais custodiados no SELIC via banco custodiante · PU e taxas indicativas ANBIMA de {mesTaxas} · valores em R$
+          </div>
         </div>
-      }
-    >
+      </div>
+
       <div className={clsx("grid gap-5", sel ? "lg:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1")}>
         <Card
           title={`Títulos públicos (${d.posicoes.length})`}
-          subtitle="Clique em uma linha para ver o detalhe do título, a evolução do PU e o fluxo de caixa"
+          subtitle="Clique em um título para ver o detalhe, a evolução do PU e o fluxo de caixa"
           bodyClassName="px-0 pb-0"
           className="min-w-0 overflow-hidden"
         >
-          <DataTable
-            columns={colunas}
-            rows={d.posicoes}
-            rowKey={(x) => x.t.id}
-            onRowClick={(x) => setSelecionado(x.t.id === selecionado ? null : x.t.id)}
-            selectedKey={selecionado}
-            showTotals
-            defaultSort={{ key: "codigo", dir: "asc" }}
-            emptyText="Nenhum título público ativo nesta empresa na data-base"
-          />
+          <div className="hidden lg:block">
+            <DataTable
+              columns={colunas}
+              rows={d.posicoes}
+              rowKey={(x) => x.t.id}
+              onRowClick={(x) => alternar(x.t.id)}
+              selectedKey={selecionado}
+              showTotals
+              defaultSort={{ key: "codigo", dir: "asc" }}
+              emptyText="Nenhum título público ativo nesta empresa na data-base"
+            />
+          </div>
+          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            {listaCelular.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum título público ativo nesta empresa na data-base</li>}
+            {listaCelular.map((x) => (
+              <li key={x.t.id}>
+                <button
+                  type="button"
+                  onClick={() => alternar(x.t.id)}
+                  className={clsx("w-full text-left px-4 py-3", x.t.id === selecionado ? "bg-selected" : "hover:bg-[#f2f4f6]")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-text leading-snug">
+                        <span className="text-link tabular">{x.t.id}</span> · {x.t.nome}
+                      </div>
+                      <div className="text-xs text-label leading-snug mt-0.5">
+                        {x.t.tipo} · {taxaTituloTexto(x.t)} · venc. {fmtDate(x.t.vencimento)}
+                      </div>
+                    </div>
+                    <ObjectStatus inverted icon={false} state={CPC48_STATE[x.t.cpc48]} className="shrink-0">
+                      {ROTULO_CPC48[x.t.cpc48]}
+                    </ObjectStatus>
+                  </div>
+                  <ValoresCelular
+                    itens={[
+                      { rotulo: "Saldo a mercado", valor: fmtNum(x.saldoMercado) },
+                      { rotulo: `Valor contábil (${x.t.cpc48 === "Custo Amortizado" ? "curva" : "mercado"})`, valor: fmtNum(x.valorContabil), forte: true },
+                      { rotulo: "MTM", valor: comSinal(x.mtm, fmtNum), cor: corSinal(x.mtm) },
+                      { rotulo: "Rendimento líquido", valor: fmtNum(x.rendimentoLiquido) },
+                    ]}
+                  />
+                </button>
+              </li>
+            ))}
+            {listaCelular.length > 0 && (
+              <li className="px-4 py-3 bg-[#f5f6f7]">
+                <div className="text-sm font-bold text-text">Total · {plural(listaCelular.length, "título", "títulos")}</div>
+                <ValoresCelular
+                  itens={[
+                    { rotulo: "Saldo a mercado", valor: fmtNum(d.mercado) },
+                    { rotulo: "Valor contábil", valor: fmtNum(d.contabil), forte: true },
+                    { rotulo: "MTM", valor: comSinal(d.mtm, fmtNum), cor: corSinal(d.mtm) },
+                    { rotulo: "Rendimento líquido", valor: fmtNum(d.soma((x) => x.rendimentoLiquido)) },
+                  ]}
+                />
+              </li>
+            )}
+          </ul>
         </Card>
         {sel && <DetalheTitulo pos={sel} p={p} onClose={() => setSelecionado(null)} />}
       </div>
 
-      <MessageStrip design={concilia ? "positive" : "negative"}>
-        <span className="inline-flex flex-wrap gap-x-5 gap-y-1">
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Saldo na curva igual ao da Carteira-Mestre: <strong>{fmtBRL(d.mestre.curva)}</strong>
+      <MessageStrip design={concilia ? "positive" : "critical"}>
+        <span className="flex flex-wrap gap-x-5 gap-y-1">
+          <span>
+            Saldo na curva {okCurva ? "igual à" : "diverge da"} Carteira-Mestre: <strong className="whitespace-nowrap">{fmtBRL(d.mestre.curva)}</strong>
+            {!okCurva && <span className="whitespace-nowrap"> (R08: {fmtBRL(d.curva)})</span>}
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Valor contábil igual ao da Carteira-Mestre: <strong>{fmtBRL(d.mestre.contabil)}</strong>
+          <span>
+            Valor contábil {okContabil ? "igual à" : "diverge da"} Carteira-Mestre: <strong className="whitespace-nowrap">{fmtBRL(d.mestre.contabil)}</strong>
+            {!okContabil && <span className="whitespace-nowrap"> (R08: {fmtBRL(d.contabil)})</span>}
           </span>
+          {!okQtd && (
+            <span>
+              Quantidade de títulos diverge da Carteira-Mestre: {plural(d.mestre.qtd, "título", "títulos")} (R08: {d.posicoes.length})
+            </span>
+          )}
         </span>
       </MessageStrip>
 
@@ -578,7 +698,7 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
           <ObjectStatus inverted icon={false} state={CPC48_STATE[t.cpc48]}>
-            {t.cpc48}
+            {ROTULO_CPC48[t.cpc48]}
           </ObjectStatus>
           <Tag color={COR_MERCADO}>{t.tipo}</Tag>
           <Tag>Soberano</Tag>
@@ -597,17 +717,17 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
             <div className="border-t border-line-soft pt-1.5">
               <Linha label="Cupons recebidos (bruto)" valor={fmtBRL(pos.cuponsRecebidos, true)} />
             </div>
-            <Linha label="Rendimento bruto (curva + cupons − compra)" valor={fmtBRL(pos.rendimentoBruto, true)} cor="text-positive" />
-            <Linha label="IOF" valor={`− ${fmtBRL(pos.iof, true)}`} />
+            <Linha label="Rendimento bruto (curva + cupons − compra)" valor={fmtBRL(pos.rendimentoBruto, true)} cor={corSinal(pos.rendimentoBruto)} />
+            <Linha label={pos.iof > 0 ? "(−) IOF" : "(−) IOF – isento após 30 dias"} valor={fmtBRL(pos.iof, true)} />
             <Linha
               label={
                 pos.irCupons > 0
-                  ? `IR (retido ${fmtBRL(pos.irCupons, true)} + provisão)`
-                  : `IR – provisão (${fmtPct(aliquotaIR(pos.diasCorridos, "Regressivo"), 1)})`
+                  ? `(−) IR (retido ${fmtBRL(pos.irCupons, true)} + provisão)`
+                  : `(−) IR – provisão (${fmtPct(aliquotaIR(pos.diasCorridos, "Regressivo"), 1)})`
               }
-              valor={`− ${fmtBRL(pos.ir, true)}`}
+              valor={fmtBRL(pos.ir, true)}
             />
-            <Linha label="Custódia B3 + agente" valor={`− ${fmtBRL(pos.taxas, true)}`} />
+            <Linha label="(−) Custódia + agente" valor={fmtBRL(pos.taxas, true)} />
             <div className="border-t border-line-soft pt-1.5">
               <Linha label="Rendimento líquido" valor={fmtBRL(pos.rendimentoLiquido, true)} forte />
             </div>
@@ -622,16 +742,29 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
             <Field label="Transação SAP">{t.transacao}</Field>
             <Field label="Tipo / código SELIC">{`${t.tipo} · ${tipo.codigoSelic}`}</Field>
             <Field label="Portfolio">{t.portfolio}</Field>
-            <Field label="Custodiante" className="col-span-2">
-              {t.custodiante}
+            <Field label="Banco custodiante" className="col-span-2">
+              {custodianteTexto(t)}
             </Field>
             <Field label="Taxa de compra">{taxaTituloTexto(t)}</Field>
             <Field label="Taxa ANBIMA (data-base)">{taxaMercadoTexto(t, pos.taxaMercado)}</Field>
             <Field label="Data de compra">{fmtDate(t.dataCompra)}</Field>
             <Field label="Vencimento">{fmtDate(t.vencimento)}</Field>
             <Field label="Dias úteis até o vencimento">{fmtInt(pos.duUteis)}</Field>
-            <Field label="Duration (Macaulay)">{`${fmtDec(pos.duration, 2)} anos`}</Field>
+            {posFixada(t) ? (
+              <>
+                <Field label="Duration de taxa">— (pós-fixada)</Field>
+                <Field label="Duration do spread (ágio/deságio)">{`${fmtDec(pos.durationSpread, 2)} anos`}</Field>
+              </>
+            ) : (
+              <Field label="Duration (Macaulay)">{`${fmtDec(pos.duration, 2)} anos`}</Field>
+            )}
           </div>
+          {posFixada(t) && (
+            <p className="text-xs text-label leading-relaxed mt-3">
+              LFT: pós-fixada – o VNA acompanha a Selic diária, então alta da Selic não desvaloriza o título (sem risco de taxa). O PU só
+              oscila com o ágio/deságio de mercado (spread), com duration de {fmtDec(pos.durationSpread, 2)} anos.
+            </p>
+          )}
           <p className="text-xs text-label leading-relaxed mt-3">{tipo.descricao}.</p>
         </section>
 
@@ -644,12 +777,9 @@ function DetalheTitulo({ pos, p, onClose }: { pos: PosicaoTitulo; p: PremissasMe
                 <Field label={`VNA na compra (${fmtDate(t.dataCompra)})`}>{fmtBRL(vnaCompra, true)}</Field>
               </div>
               <p className="text-xs text-label leading-relaxed mt-2">
-                {t.tipo === "LFT"
-                  ? "VNA corrigido diariamente pela Selic (base 252). "
-                  : "VNA corrigido pelo IPCA (pro rata por dia corrido). "}
-                Âncora importada do SAP: {fmtBRL(t.tipo === "LFT" ? PARAMETROS_TESOURO.vnaLFT : PARAMETROS_TESOURO.vnaNTNB, true)} em{" "}
-                {fmtDate(PARAMETROS_TESOURO.dataVNA)} (Tesouro Nacional / ANBIMA). Variação desde a compra:{" "}
-                {fmtPct(pos.vna / vnaCompra - 1, 2)}.
+                {t.tipo === "LFT" ? "VNA corrigido diariamente pela Selic (base 252)" : "VNA corrigido pelo IPCA (pro rata por dia corrido)"}:{" "}
+                {fmtBRL(pos.vna, true)} na data-base (Tesouro Nacional / ANBIMA); o histórico vem das séries {t.tipo === "LFT" ? "da Selic" : "do IPCA"}{" "}
+                importadas do SAP. Variação desde a compra: {fmtPct(pos.vna / vnaCompra - 1, 2)}.
               </p>
             </div>
           ) : (
@@ -742,6 +872,20 @@ function Linha({ label, valor, forte, cor }: { label: string; valor: string; for
       <dt className="text-label">{label}</dt>
       <dd className={clsx("tabular whitespace-nowrap", forte ? "font-bold text-text text-sm" : "text-text", cor)}>{valor}</dd>
     </div>
+  );
+}
+
+/** Valores de um título na lista em cartões (celular) */
+function ValoresCelular({ itens }: { itens: { rotulo: string; valor: string; forte?: boolean; cor?: string }[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 text-[13px]">
+      {itens.map((x) => (
+        <div key={x.rotulo} className="min-w-0">
+          <dt className="text-xs text-label truncate">{x.rotulo}</dt>
+          <dd className={clsx("tabular truncate", x.forte ? "font-bold" : "font-semibold", x.cor ?? "text-text")}>{x.valor}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -883,7 +1027,7 @@ function Cronograma({ eventos, p }: { eventos: EventoCarteira[]; p: PremissasMer
         </div>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-        <Resumo rotulo="Cupons" valor={fmtCompact(d.cupons.valor)} sub={`${d.cupons.qtd} pagamento(s)`} cor={COR_CUPOM} />
+        <Resumo rotulo="Cupons" valor={fmtCompact(d.cupons.valor)} sub={plural(d.cupons.qtd, "pagamento", "pagamentos")} cor={COR_CUPOM} />
         <Resumo
           rotulo="Vencimentos"
           valor={fmtCompact(d.vencs.valor)}
@@ -942,10 +1086,10 @@ const TRATAMENTO: { cpc: ClassificacaoCPC48; titulo: string; item: string; mensu
   },
   {
     cpc: "VJ por Resultado",
-    titulo: "Valor justo por resultado",
+    titulo: "Valor justo por resultado (VJR)",
     item: "CPC 48, item 4.1.4",
     mensuracao: "Mercado (taxa ANBIMA); juros e MTM no resultado.",
-    mtm: "MTM no resultado financeiro do período (ganho ou perda não realizado).",
+    mtm: "MTM no resultado financeiro do período (ganho ou perda não realizado), com IR/CS diferido: o ganho de AVJ só é tributado na realização (Lei 12.973/2014, art. 13, controle em subconta).",
   },
 ];
 
@@ -957,6 +1101,7 @@ function lancamentos(cpc: ClassificacaoCPC48, mtm: number): Lancamento[] {
     debito: "Títulos públicos federais (ativo)",
     credito: "Receita financeira – juros de títulos públicos",
   };
+  const irDiferido = `IR/CS diferido (${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)})`;
   if (cpc === "Custo Amortizado")
     return [juros, { evento: "Avaliação a mercado", transacao: "TPM1", texto: "Sem lançamento contábil – valor justo divulgado em nota", valor: mtm }];
   if (cpc === "VJ por ORA")
@@ -966,15 +1111,23 @@ function lancamentos(cpc: ClassificacaoCPC48, mtm: number): Lancamento[] {
         ? { evento: "Ajuste a valor justo", transacao: "TPM1", debito: "Títulos públicos – ajuste a valor justo", credito: "Ajuste de avaliação patrimonial (ORA)", valor: mtm }
         : { evento: "Ajuste a valor justo", transacao: "TPM1", debito: "Ajuste de avaliação patrimonial (ORA)", credito: "Títulos públicos – ajuste a valor justo", valor: -mtm },
       ganho
-        ? { evento: "IR/CS diferido (34%)", transacao: "FI-GL", debito: "Ajuste de avaliação patrimonial (ORA)", credito: "IR/CS diferido (passivo)", valor: mtm * ALIQUOTA_IRPJ_CSLL }
-        : { evento: "IR/CS diferido (34%)", transacao: "FI-GL", debito: "IR/CS diferido (ativo)", credito: "Ajuste de avaliação patrimonial (ORA)", valor: -mtm * ALIQUOTA_IRPJ_CSLL },
-      { evento: "Venda – reciclagem do ORA", transacao: "TS01 / TPM10", debito: "Ajuste de avaliação patrimonial (ORA)", credito: "Receita financeira – resultado na alienação" },
+        ? { evento: irDiferido, transacao: "FI-GL", debito: "Ajuste de avaliação patrimonial (ORA)", credito: "IR/CS diferido passivo", valor: mtm * ALIQUOTA_IRPJ_CSLL }
+        : { evento: irDiferido, transacao: "FI-GL", debito: "IR/CS diferido ativo", credito: "Ajuste de avaliação patrimonial (ORA)", valor: -mtm * ALIQUOTA_IRPJ_CSLL },
+      {
+        evento: "Venda – reciclagem do ORA",
+        transacao: "TS01 (venda) + TBB1 (lançamento; reciclagem do ORA)",
+        debito: "Ajuste de avaliação patrimonial (ORA)",
+        credito: "Receita financeira – resultado na alienação",
+      },
     ];
   return [
     juros,
     ganho
       ? { evento: "Ajuste a valor justo", transacao: "TPM1", debito: "Títulos públicos – ajuste a valor justo", credito: "Receita financeira – ganho de marcação a mercado", valor: mtm }
       : { evento: "Ajuste a valor justo", transacao: "TPM1", debito: "Despesa financeira – perda de marcação a mercado", credito: "Títulos públicos – ajuste a valor justo", valor: -mtm },
+    ganho
+      ? { evento: irDiferido, transacao: "FI-GL", debito: "Despesa de IR/CS diferido", credito: "IR/CS diferido passivo", valor: mtm * ALIQUOTA_IRPJ_CSLL }
+      : { evento: irDiferido, transacao: "FI-GL", debito: "IR/CS diferido ativo", credito: "Receita de IR/CS diferido", valor: -mtm * ALIQUOTA_IRPJ_CSLL },
   ];
 }
 
@@ -1011,9 +1164,9 @@ function TratamentoContabil({ posicoes }: { posicoes: PosicaoTitulo[] }) {
               <div className="text-[13px] text-text leading-relaxed">
                 <p>{g.mensuracao}</p>
                 <p className="text-label mt-1">{g.mtm}</p>
-                {g.cpc === "VJ por ORA" && xs.length > 0 && (
+                {g.cpc !== "Custo Amortizado" && xs.length > 0 && (
                   <p className="text-label mt-1">
-                    Efeito no PL líquido de IR/CS diferido ({fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}):{" "}
+                    Efeito {g.cpc === "VJ por ORA" ? "no PL" : "no resultado"} líquido de IR/CS diferido ({fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}):{" "}
                     <strong className={corSinal(mtm)}>{comSinal(mtm * (1 - ALIQUOTA_IRPJ_CSLL), fmtBRL)}</strong>
                   </p>
                 )}
@@ -1050,8 +1203,10 @@ function TratamentoContabil({ posicoes }: { posicoes: PosicaoTitulo[] }) {
       <p className="text-xs text-label leading-relaxed mt-4">
         No SAP TRM, a apropriação de juros pela curva (taxa efetiva) roda no fechamento pela TPM44 (apropriação/diferimento) e a
         avaliação a mercado pela TPM1 (avaliação), com a taxa indicativa ANBIMA importada como dado de mercado; a classe de
-        avaliação da posição (CPC 48) define se o ajuste vai para o resultado, para ORA ou apenas para a divulgação em nota. O IR/CS
-        diferido sobre o ORA é lançado no FI-GL (CPC 32).
+        avaliação da posição (CPC 48) define se o ajuste vai para o resultado, para ORA ou apenas para a divulgação em nota. Na venda,
+        a operação é registrada na TS01 e contabilizada pela TBB1, que também recicla o ORA para o resultado. O IR/CS diferido
+        ({fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}) sobre o ajuste a valor justo – em ORA e no VJR – é lançado no FI-GL (CPC 32): o ganho de AVJ
+        controlado em subconta só é tributado na realização (Lei 12.973/2014, art. 13).
       </p>
     </Card>
   );
@@ -1068,38 +1223,47 @@ function Parametros({ posicoes, p }: { posicoes: PosicaoTitulo[]; p: PremissasMe
   const cupomNTNF = P.valorFace * (Math.pow(1 + P.cupomNTNF, 0.5) - 1);
   const cupomNTNB = Math.pow(1 + P.cupomNTNB, 0.5) - 1;
 
-  // Sensibilidade a +100 bps: duration modificada = Macaulay ÷ (1 + taxa de mercado)
+  // Sensibilidade a +100 bps: duration modificada = Macaulay ÷ (1 + taxa de mercado). A LFT tem duration de taxa zero
+  // (pós-fixada: o choque na Selic entra no VNA diariamente); o risco dela é o do ágio/deságio (duration do spread).
   const sens = useMemo(() => {
     const linhas = posicoes.map((x) => {
       const durMod = x.duration / (1 + x.taxaMercado);
       return {
         id: x.t.id,
+        lft: posFixada(x.t),
         cpc: x.t.cpc48,
         destino: x.t.cpc48 === "Custo Amortizado" ? "nota" : x.t.cpc48 === "VJ por ORA" ? "ORA" : "resultado",
         durMod,
         impacto: -durMod * x.saldoMercado * 0.01,
+        spread10: posFixada(x.t) ? -(x.durationSpread / (1 + x.taxaMercado)) * x.saldoMercado * 0.001 : 0,
       };
     });
     const por = (c: ClassificacaoCPC48) => linhas.filter((l) => l.cpc === c).reduce((s, l) => s + l.impacto, 0);
+    const lfts = linhas.filter((l) => l.lft);
     return {
       linhas,
       total: linhas.reduce((s, l) => s + l.impacto, 0),
       porDestino: { nota: por("Custo Amortizado"), ora: por("VJ por ORA"), resultado: por("VJ por Resultado") },
+      lft: lfts.length ? { ids: lfts.map((l) => l.id).join(", "), spread10: lfts.reduce((s, l) => s + l.spread10, 0) } : null,
     };
   }, [posicoes]);
 
   const itens: { rotulo: string; valor: string; fonte: ReactNode }[] = [
-    { rotulo: "Custódia B3", valor: `${fmtPct(P.custodiaB3)} a.a.`, fonte: "Sobre o saldo, cobrada semestralmente (tabela de tarifas B3)" },
+    {
+      rotulo: ROTULO_CUSTODIA,
+      valor: `${fmtPct(P.custodiaB3)} a.a.`,
+      fonte: "Sobre o saldo, cobrada semestralmente. Para PJ, os títulos ficam custodiados no SELIC via banco custodiante; o parâmetro reproduz a planilha",
+    },
     { rotulo: "Taxa do agente de custódia", valor: `${fmtPct(P.taxaAgente)} a.a.`, fonte: "Tarifa do banco agente sobre o saldo custodiado" },
     {
       rotulo: "VNA da LFT",
       valor: fmtBRL(vnaLFT(p.dataBase, p), true),
-      fonte: `Na data-base; âncora ${fmtBRL(P.vnaLFT, true)} em ${fmtDate(P.dataVNA)} (Tesouro Nacional / ANBIMA), corrigida pela Selic diária`,
+      fonte: `Em ${fmtDate(p.dataBase)} (Tesouro Nacional / ANBIMA), corrigido pela Selic diária; histórico das séries importadas do SAP`,
     },
     {
       rotulo: "VNA da NTN-B",
       valor: fmtBRL(vnaNTNB(p.dataBase, p), true),
-      fonte: `Na data-base; âncora ${fmtBRL(P.vnaNTNB, true)} em ${fmtDate(P.dataVNA)} (ANBIMA), corrigida pelo IPCA`,
+      fonte: `Em ${fmtDate(p.dataBase)} (ANBIMA), corrigido pelo IPCA; histórico das séries importadas do SAP`,
     },
     { rotulo: "Cupom da NTN-F", valor: `${fmtPct(P.cupomNTNF, 0)} a.a.`, fonte: `Semestral (jan/jul): ${fmtBRL(cupomNTNF, true)} por título` },
     { rotulo: "Cupom da NTN-B", valor: `${fmtPct(P.cupomNTNB, 0)} a.a.`, fonte: `Semestral: ${fmtPct(cupomNTNB, 4)} do VNA por título` },
@@ -1192,10 +1356,14 @@ function Parametros({ posicoes, p }: { posicoes: PosicaoTitulo[]; p: PremissasMe
                 <span className="min-w-0 truncate">
                   <span className="font-semibold text-text">{x.id}</span> <span className="text-label">{x.destino}</span>
                 </span>
-                <span className="tabular whitespace-nowrap">
-                  <span className="text-label">{fmtDec(x.durMod, 2)} · </span>
-                  <span className="font-semibold text-negative">{fmtNum(x.impacto)}</span>
-                </span>
+                {x.lft ? (
+                  <span className="text-label whitespace-nowrap">— (pós-fixada)</span>
+                ) : (
+                  <span className="tabular whitespace-nowrap">
+                    <span className="text-label">{fmtDec(x.durMod, 2)} · </span>
+                    <span className="font-semibold text-negative">{fmtNum(x.impacto)}</span>
+                  </span>
+                )}
               </li>
             ))}
             <li className="py-1.5 flex items-center justify-between gap-3 text-[13px] font-bold">
@@ -1203,17 +1371,26 @@ function Parametros({ posicoes, p }: { posicoes: PosicaoTitulo[]; p: PremissasMe
               <span className="tabular text-negative">{fmtNum(sens.total)}</span>
             </li>
           </ul>
-          <p className="text-xs text-label leading-relaxed mt-2">
-            Efeito contábil do choque:{" "}
-            {[
-              sens.porDestino.resultado ? `${fmtBRL(sens.porDestino.resultado)} no resultado (VJR)` : "",
-              sens.porDestino.ora ? `${fmtBRL(sens.porDestino.ora)} em ORA` : "",
-              sens.porDestino.nota ? `${fmtBRL(sens.porDestino.nota)} apenas na nota (custo amortizado)` : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            .
-          </p>
+          {sens.lft && (
+            <p className="text-xs text-label leading-relaxed mt-2">
+              <strong className="text-text">LFT fora ({sens.lft.ids}):</strong> o choque na Selic é repassado ao VNA diariamente, sem
+              perda de marcação a mercado; o risco é o do ágio/deságio – spread +10 bps ⇒{" "}
+              <strong className="text-negative whitespace-nowrap">{fmtBRL(sens.lft.spread10)}</strong> (duration do spread).
+            </p>
+          )}
+          {sens.linhas.some((x) => !x.lft) && (
+            <p className="text-xs text-label leading-relaxed mt-2">
+              Efeito contábil do choque:{" "}
+              {[
+                sens.porDestino.resultado ? `${fmtBRL(sens.porDestino.resultado)} no resultado (VJR)` : "",
+                sens.porDestino.ora ? `${fmtBRL(sens.porDestino.ora)} em ORA` : "",
+                sens.porDestino.nota ? `${fmtBRL(sens.porDestino.nota)} apenas na nota (custo amortizado)` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              .
+            </p>
+          )}
         </div>
       </Card>
     </div>

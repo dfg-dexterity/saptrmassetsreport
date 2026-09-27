@@ -12,8 +12,8 @@ import { ESCOPOS, useMestre, type Escopo } from "../context/useDados";
 import { fmtDate } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { FAIXAS_PRAZO } from "../lib/finance";
-import { MOEDAS, TIPOS_CONTRATO, type ContratoMestre, type Moeda, type TipoContrato } from "../lib/carteiraMestre";
-import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtMi, fmtNum, fmtPct } from "../../shared/lib/format";
+import { COR_MOEDA, MOEDAS, TIPOS_CONTRATO, type ContratoMestre, type Moeda, type TipoContrato } from "../lib/carteiraMestre";
+import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtMi, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import {
   avaliarPolitica,
   classificarHHI,
@@ -32,8 +32,6 @@ const rel = relatorioPorId("r07");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
 const COR_TIPO = Object.fromEntries(TIPOS_CONTRATO.map((t) => [t.tipo, t.cor])) as Record<TipoContrato, string>;
-const CURTO_TIPO = Object.fromEntries(TIPOS_CONTRATO.map((t) => [t.tipo, t.curto])) as Record<TipoContrato, string>;
-const COR_MOEDA: Record<Moeda, string> = { BRL: CHART_COLORS[0], USD: CHART_COLORS[2], EUR: CHART_COLORS[3] };
 const SIMBOLO_MOEDA: Record<Moeda, string> = { BRL: "R$", USD: "US$", EUR: "€" };
 
 const corSemaforo = (s: ResultadoRegra["status"]) => (s === "ok" ? CHART_SEMANTIC.good : s === "atencao" ? CHART_SEMANTIC.critical : CHART_SEMANTIC.bad);
@@ -48,14 +46,24 @@ const folgaRegra = (r: ResultadoRegra) => (r.tipo === "max" ? r.limite - r.share
 
 const fmtPP = (v: number) => `${v >= 0 ? "+" : ""}${fmtDec(v * 100, 1)} p.p.`;
 
+/** Grupo sem limite na política (risco soberano – Tesouro Nacional) */
+const semLimite = (g: GrupoExposicao) => g.limite >= 1;
+
+const TEXTO_LIMITES = Object.entries(LIMITE_POR_RATING)
+  .map(([r, l]) => `${r} ${l >= 1 ? "sem limite" : fmtPct(l, 0)}`)
+  .join(" · ");
+
 export function R07Concentracao() {
   const [escopo, setEscopo] = useState<Escopo>("todas");
   const { premissas: p, contratos } = useMestre(escopo);
 
   const d = useMemo(() => {
+    // cotas de fundos ficam fora dos grupos econômicos (patrimônio segregado – CVM 175; limite próprio na regra "fundos")
     const grupos = concentracaoPorGrupo(contratos);
     const indice = hhi(grupos.map((g) => g.share));
     const total = totalMestre(contratos);
+    const fundos = contratos.filter((c) => c.tipo === "Fundo de investimento");
+    const valorFundos = fundos.reduce((s, c) => s + c.saldoCurva, 0);
     const moeda = distribuicaoMestre(contratos, (x) => x.moeda, MOEDAS).filter((f) => f.qtd > 0);
     const saldoME = new Map<string, number>();
     for (const c of contratos) saldoME.set(c.moeda, (saldoME.get(c.moeda) ?? 0) + c.saldoME);
@@ -72,6 +80,12 @@ export function R07Concentracao() {
     });
     return {
       grupos,
+      totalGrupos: grupos.reduce((s, g) => s + g.valor, 0),
+      shareGrupos: grupos.reduce((s, g) => s + g.share, 0),
+      opsGrupos: grupos.reduce((s, g) => s + g.operacoes, 0),
+      qtdFundos: fundos.length,
+      valorFundos,
+      shareFundos: total > 0 ? valorFundos / total : 0,
       indice,
       classe: classificarHHI(indice),
       tipo: distribuicaoMestre(
@@ -97,6 +111,12 @@ export function R07Concentracao() {
   const totalRegras = d.politica.length + d.grupos.length;
   const emAtencao = d.politica.filter((r) => r.status === "atencao").length + d.grupos.filter((g) => g.status === "atencao").length;
   const escopoRotulo = ESCOPOS.find((e) => e.value === escopo)!.label;
+  const regraFundos = d.politica.find((r) => r.id === "fundos");
+  const limiteFundos = regraFundos ? fmtPct(regraFundos.limite, 0) : "20%";
+  const notaFundos =
+    `Cotas de fundos de investimento (${plural(d.qtdFundos, "fundo", "fundos")}, ${fmtCompact(d.valorFundos)} – ${fmtPct(d.shareFundos, 1)} da carteira) ficam fora dos limites por grupo econômico: ` +
+    `o fundo é patrimônio segregado (Resolução CVM 175) e o risco está nos ativos da carteira do fundo, não no gestor nem no administrador. ` +
+    `Elas têm limite próprio de ${limiteFundos} na regra “Fundos de investimento” da política.`;
 
   const colunas: Column<GrupoExposicao>[] = [
     {
@@ -111,7 +131,7 @@ export function R07Concentracao() {
           <div className="text-xs text-label">{g.contrapartes.join(", ")}</div>
         </div>
       ),
-      total: () => <span>Total ({d.grupos.length} grupos)</span>,
+      total: () => <span>Total ({plural(d.grupos.length, "grupo", "grupos")})</span>,
     },
     { key: "rating", header: "Rating", value: (g) => g.rating, render: (g) => <Tag>{g.rating}</Tag> },
     {
@@ -123,7 +143,7 @@ export function R07Concentracao() {
         <div className="flex gap-1">
           {TIPOS_CONTRATO.filter((t) => g.tipos.includes(t.tipo)).map((t) => (
             <Tag key={t.tipo} color={t.cor}>
-              {t.curto}
+              {t.tipo}
             </Tag>
           ))}
         </div>
@@ -131,19 +151,32 @@ export function R07Concentracao() {
     },
     { key: "ops", header: "Contratos", align: "right", value: (g) => g.operacoes, total: (r) => fmtInt(r.reduce((s, g) => s + g.operacoes, 0)) },
     { key: "valor", header: "Exposição (R$)", align: "right", value: (g) => g.valor, render: (g) => fmtNum(g.valor), total: (r) => fmtNum(r.reduce((s, g) => s + g.valor, 0)) },
-    { key: "share", header: "% carteira", align: "right", value: (g) => g.share, render: (g) => <span className="font-semibold">{fmtPct(g.share, 1)}</span>, total: () => "100,0%" },
-    { key: "limite", header: "Limite política", align: "right", value: (g) => g.limite, render: (g) => (g.limite >= 1 ? "Sem limite" : fmtPct(g.limite, 0)) },
+    {
+      key: "share",
+      header: "% carteira",
+      headerTitle: "Participação no total da carteira consolidada (inclusive fundos)",
+      align: "right",
+      value: (g) => g.share,
+      render: (g) => <span className="font-semibold">{fmtPct(g.share, 1)}</span>,
+      total: () => fmtPct(d.shareGrupos, 1),
+    },
+    { key: "limite", header: "Limite política", align: "right", value: (g) => g.limite, render: (g) => (semLimite(g) ? "Sem limite" : fmtPct(g.limite, 0)) },
     {
       key: "uso",
       header: "Utilização do limite",
-      value: (g) => g.utilizacao,
+      value: (g) => (semLimite(g) ? -1 : g.utilizacao),
       minWidth: 200,
-      render: (g) => (
-        <div className="flex items-center gap-2">
-          <MicroBar value={g.utilizacao} max={1.2} marker={1} className="flex-1 h-2" color={corSemaforo(g.status)} />
-          <span className="tabular text-[13px] w-12 text-right">{fmtPct(g.utilizacao, 0)}</span>
-        </div>
-      ),
+      render: (g) =>
+        semLimite(g) ? (
+          <span className="text-label" title="Risco soberano: sem limite na política">
+            —
+          </span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <MicroBar value={g.utilizacao} max={1.2} marker={1} className="flex-1 h-2" color={corSemaforo(g.status)} />
+            <span className="tabular text-[13px] w-12 text-right">{fmtPct(g.utilizacao, 0)}</span>
+          </div>
+        ),
     },
     {
       key: "status",
@@ -198,7 +231,7 @@ export function R07Concentracao() {
         {
           nome: "Por grupo econômico",
           titulo: "R07 – Concentração da carteira consolidada: exposição por grupo econômico",
-          subtitulo: `${escopoRotulo} · Carteira-Mestre (renda fixa bancária, Tesouro Direto, fundos e time deposits)`,
+          subtitulo: `${escopoRotulo} · Carteira-Mestre sem cotas de fundos (renda fixa bancária, Tesouro Direto e time deposits) · % sobre o total da carteira`,
           colunas: [
             { titulo: "Grupo econômico", largura: 24 },
             { titulo: "Contrapartes", largura: 40 },
@@ -221,16 +254,15 @@ export function R07Concentracao() {
             g.operacoes,
             g.valor,
             g.share,
-            g.limite >= 1 ? "Sem limite" : g.limite,
-            g.limite >= 1 ? null : g.utilizacao,
+            semLimite(g) ? "Sem limite" : g.limite,
+            semLimite(g) ? null : g.utilizacao,
             SEMAFORO_TEXTO[g.status],
           ]),
-          total: ["TOTAL", "", "", "", d.grupos.reduce((s, g) => s + g.operacoes, 0), d.total, 1, "", "", ""],
+          total: ["TOTAL", "", "", "", d.opsGrupos, d.totalGrupos, d.shareGrupos, "", "", ""],
           notas: [
-            `Índice HHI: ${fmtInt(d.indice)} (${d.classe.rotulo}) – soma dos quadrados das participações por grupo econômico (0–10.000).`,
-            `Limites por rating: ${Object.entries(LIMITE_POR_RATING)
-              .map(([r, l]) => `${r} ${l >= 1 ? "sem limite" : fmtPct(l, 0)}`)
-              .join(" · ")}.`,
+            `Índice HHI: ${fmtInt(d.indice)} (${d.classe.rotulo}) – soma dos quadrados das participações por grupo econômico (0–10.000), sem as cotas de fundos.`,
+            `Limites por rating: ${TEXTO_LIMITES}. Tesouro Nacional (risco soberano) sem limite – sem utilização.`,
+            notaFundos,
             "Exposição = saldo bruto em R$ na data-base: curva na renda fixa e nos títulos públicos, valor da cota nos fundos e saldo em moeda × PTAX nos time deposits.",
           ],
         },
@@ -342,9 +374,9 @@ export function R07Concentracao() {
             label="Maior exposição"
             value={d.grupos[0] ? fmtPct(d.grupos[0].share, 1) : "—"}
             state={d.grupos[0] ? semaforoState(d.grupos[0].status) : "neutral"}
-            sub={d.grupos[0] ? `${d.grupos[0].grupo} · limite ${d.grupos[0].limite >= 1 ? "livre" : fmtPct(d.grupos[0].limite, 0)}` : undefined}
+            sub={d.grupos[0] ? `${d.grupos[0].grupo} · ${semLimite(d.grupos[0]) ? "sem limite" : `limite ${fmtPct(d.grupos[0].limite, 0)}`}` : undefined}
           />
-          <HeaderKpi label="Grupos econômicos" value={String(d.grupos.length)} sub={`${contratos.length} contratos · ${fmtCompact(d.total)}`} />
+          <HeaderKpi label="Grupos econômicos" value={String(d.grupos.length)} sub={`${plural(d.opsGrupos, "contrato", "contratos")} · ${fmtCompact(d.totalGrupos)} · sem fundos`} />
           <HeaderKpi
             label="Enquadramento"
             value={`${regrasOk}/${totalRegras}`}
@@ -359,18 +391,68 @@ export function R07Concentracao() {
           <FilterField label="Empresa">
             <Select value={escopo} onChange={setEscopo} options={ESCOPOS} />
           </FilterField>
-          <div className="sm:col-span-2 text-[13px] text-label sm:text-right">
-            Limites por rating: {Object.entries(LIMITE_POR_RATING).map(([r, l]) => `${r} ${l >= 1 ? "sem limite" : fmtPct(l, 0)}`).join(" · ")}
+          <div className="sm:col-span-2 text-[13px] text-label sm:text-right leading-snug">
+            Limites por grupo econômico (rating): {TEXTO_LIMITES}
+            <br />
+            Cotas de fundos: limite próprio de {limiteFundos} da carteira (patrimônio segregado – CVM 175)
           </div>
         </div>
       </div>
 
       <Card
         title="Exposição por grupo econômico (limite por rating)"
-        subtitle="Carteira consolidada (Carteira-Mestre) · saldo bruto em R$ na data-base: curva, valor da cota ou saldo em moeda × PTAX"
+        subtitle="Renda fixa bancária, Tesouro Direto e time deposits (cotas de fundos fora) · saldo bruto em R$ na data-base (curva ou saldo em moeda × PTAX) · % sobre o total da carteira consolidada"
         bodyClassName="px-0 pb-0"
       >
-        <DataTable columns={colunas} rows={d.grupos} rowKey={(g) => g.grupo} showTotals defaultSort={{ key: "valor", dir: "desc" }} />
+        <div className="hidden lg:block">
+          <DataTable columns={colunas} rows={d.grupos} rowKey={(g) => g.grupo} showTotals defaultSort={{ key: "valor", dir: "desc" }} />
+        </div>
+        {/* Celular e tablet: lista em cartões */}
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {d.grupos.map((g) => (
+            <li key={g.grupo} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-text">{g.grupo}</span>
+                    <Tag>{g.rating}</Tag>
+                  </div>
+                  <div className="text-xs text-label leading-snug mt-0.5">
+                    {g.contrapartes.join(", ")} · {plural(g.operacoes, "contrato", "contratos")}
+                  </div>
+                </div>
+                <ObjectStatus state={semaforoState(g.status)}>{SEMAFORO_TEXTO[g.status]}</ObjectStatus>
+              </div>
+              <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+                <ValorCartao rotulo="Exposição" valor={fmtCompact(g.valor)} />
+                <ValorCartao rotulo="% carteira" valor={fmtPct(g.share, 1)} />
+                <ValorCartao rotulo="Limite" valor={semLimite(g) ? "Sem limite" : fmtPct(g.limite, 0)} direita />
+              </dl>
+              {semLimite(g) ? (
+                <div className="text-xs text-label mt-1.5">Risco soberano: sem utilização de limite</div>
+              ) : (
+                <div className="flex items-center gap-2 mt-2">
+                  <MicroBar value={g.utilizacao} max={1.2} marker={1} className="flex-1 h-2" color={corSemaforo(g.status)} />
+                  <span className="tabular text-xs text-label whitespace-nowrap">{fmtPct(g.utilizacao, 0)} do limite</span>
+                </div>
+              )}
+            </li>
+          ))}
+          <li className="px-4 py-3 bg-[#f5f6f7]">
+            <div className="text-sm font-bold text-text">
+              Total · {plural(d.grupos.length, "grupo", "grupos")} · {plural(d.opsGrupos, "contrato", "contratos")}
+            </div>
+            <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+              <ValorCartao rotulo="Exposição" valor={fmtCompact(d.totalGrupos)} forte />
+              <ValorCartao rotulo="% carteira" valor={fmtPct(d.shareGrupos, 1)} forte />
+            </dl>
+          </li>
+        </ul>
+        <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
+          {notaFundos} Por isso o total dos grupos soma {fmtPct(d.shareGrupos, 1)} da carteira
+          {regraFundos ? ` (fundos: ${fmtPct(regraFundos.share, 1)} × limite de ${limiteFundos} – ${SEMAFORO_TEXTO[regraFundos.status].toLowerCase()})` : ""}. Tesouro Nacional (risco
+          soberano) sem limite: sem utilização.
+        </p>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -399,7 +481,7 @@ export function R07Concentracao() {
             {tiposPresentes.map((t) => (
               <span key={t.tipo} className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: t.cor }} />
-                {t.curto}
+                {t.tipo}
               </span>
             ))}
           </div>
@@ -411,10 +493,10 @@ export function R07Concentracao() {
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} unit=" mi" tickFormatter={(v: number) => fmtDec(v, 0)} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  formatter={(v: number, n: string) => [fmtBRL(v * 1e6), CURTO_TIPO[n as TipoContrato] ?? n]}
+                  formatter={(v: number, n: string) => [fmtBRL(v * 1e6), n]}
                   labelFormatter={(_l, payload) => {
                     const x = payload?.[0]?.payload as { total: number; share: number; qtd: number } | undefined;
-                    return x ? `${_l} · ${fmtCompact(x.total)} (${fmtPct(x.share, 1)}) · ${x.qtd} contratos` : String(_l);
+                    return x ? `${_l} · ${fmtCompact(x.total)} (${fmtPct(x.share, 1)}) · ${plural(x.qtd, "contrato", "contratos")}` : String(_l);
                   }}
                 />
                 {tiposPresentes.map((t, i) => (
@@ -453,7 +535,25 @@ export function R07Concentracao() {
           subtitle="Participação na carteira consolidada × limite · semáforo: amarelo ≥ 80% do limite máximo (ou ≤ 120% do mínimo) · vermelho desenquadrado"
           bodyClassName="px-0 pb-0"
         >
-          <DataTable<ResultadoRegra> columns={colunasPolitica} rows={d.politica} rowKey={(r) => r.id} />
+          <div className="hidden lg:block">
+            <DataTable<ResultadoRegra> columns={colunasPolitica} rows={d.politica} rowKey={(r) => r.id} />
+          </div>
+          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            {d.politica.map((r) => (
+              <li key={r.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-sm font-semibold text-text leading-snug min-w-0">{r.regra}</span>
+                  <ObjectStatus state={semaforoState(r.status)}>{SEMAFORO_TEXTO[r.status]}</ObjectStatus>
+                </div>
+                <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+                  <ValorCartao rotulo="Limite" valor={`${r.tipo === "max" ? "máx." : "mín."} ${fmtPct(r.limite, 0)}`} />
+                  <ValorCartao rotulo="Participação" valor={fmtPct(r.share, 1)} />
+                  <ValorCartao rotulo="Folga" valor={fmtPP(folgaRegra(r))} cor={folgaRegra(r) < 0 ? "text-negative" : undefined} direita />
+                </dl>
+                <MicroBar value={r.share} max={escala} marker={r.limite} className="h-2 mt-2" color={corSemaforo(r.status)} />
+              </li>
+            ))}
+          </ul>
         </Card>
         <Card title="Índice Herfindahl-Hirschman" subtitle="Soma dos quadrados das participações por grupo econômico">
           <div className="text-4xl font-light tabular" style={{ color: d.classe.status === "ok" ? "#256f3a" : d.classe.status === "atencao" ? "#b44f00" : "#aa0808" }}>
@@ -500,11 +600,20 @@ export function R07Concentracao() {
           </dl>
           <p className="text-xs text-label mt-4 leading-relaxed">
             HHI &lt; 1.500: baixa concentração · 1.500–2.500: moderada · &gt; 2.500: alta. Calculado sobre as participações por grupo econômico
-            (0–10.000); o Tesouro Nacional (risco soberano) entra como um grupo.
+            (0–10.000); o Tesouro Nacional (risco soberano) entra como um grupo e as cotas de fundos ficam fora (patrimônio segregado – CVM 175).
           </p>
         </Card>
       </div>
     </ReportPage>
+  );
+}
+
+function ValorCartao({ rotulo, valor, forte, cor, direita }: { rotulo: string; valor: string; forte?: boolean; cor?: string; direita?: boolean }) {
+  return (
+    <div className={direita ? "min-w-0 text-right" : "min-w-0"}>
+      <dt className="text-xs text-label truncate">{rotulo}</dt>
+      <dd className={`tabular truncate ${forte ? "font-bold" : "font-semibold"} ${cor ?? "text-text"}`}>{valor}</dd>
+    </div>
   );
 }
 

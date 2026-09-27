@@ -272,6 +272,7 @@ export function R09Fundos() {
   const semAntecipacao = (l: LinhaFundo) => (l.rendimentoLiquido + custoLiq(l)) / l.f.valorAplicado;
 
   const colunas: Column<LinhaFundo>[] = [
+    // identificação
     {
       key: "fundo",
       header: "Fundo",
@@ -308,6 +309,62 @@ export function R09Fundos() {
         </div>
       ),
     },
+    // saldo e resultado
+    {
+      key: "saldo",
+      header: "Saldo (R$)",
+      align: "right",
+      headerTitle: "Valor da cota × quantidade de cotas na data-base",
+      value: (l) => l.saldo,
+      render: (l) =>
+        l.resgate ? (
+          <div>
+            <div className="text-label">–</div>
+            <div className="text-xs text-label">resgate bruto {fmtNum(l.resgate.bruto)}</div>
+          </div>
+        ) : (
+          <span className="font-semibold">{fmtNum(l.saldo)}</span>
+        ),
+      total: somaAtivos((l) => l.saldo),
+    },
+    {
+      key: "rl",
+      header: "Rend. líquido",
+      align: "right",
+      headerTitle: "Rendimento bruto − IOF − IR total (come-cotas + complementar)",
+      value: (l) => l.rendimentoLiquido,
+      render: (l) => (
+        <div>
+          <div className={clsx("font-semibold", l.rendimentoLiquido < 0 && "text-negative")}>{fmtNum(l.rendimentoLiquido)}</div>
+          {l.resgate && <div className="text-xs text-label">líquido creditado {fmtNum(l.resgate.liquido)}</div>}
+        </div>
+      ),
+      total: somaAtivos((l) => l.rendimentoLiquido),
+    },
+    {
+      key: "rentab",
+      header: "Rentab. bruta / líq.",
+      align: "right",
+      headerTitle: "Desde a aplicação: rendimento bruto e rendimento líquido ÷ valor aplicado",
+      value: (l) => l.rentabLiquida,
+      render: (l) => (
+        <div>
+          <div className={l.rentabBruta < 0 ? "text-negative" : ""}>{fmtPct(l.rentabBruta)}</div>
+          <div className="text-xs text-label">líq. {fmtPct(l.rentabLiquida)}</div>
+        </div>
+      ),
+      total: (rows) => {
+        const at = rows.filter((l) => l.status === "Ativo");
+        const ap = soma((l) => l.f.valorAplicado, at);
+        return (
+          <div>
+            <div>{fmtPct(ap > 0 ? soma((l) => l.rendimentoBruto, at) / ap : 0)}</div>
+            <div className="text-xs text-label font-normal">líq. {fmtPct(ap > 0 ? soma((l) => l.rendimentoLiquido, at) / ap : 0)}</div>
+          </div>
+        );
+      },
+    },
+    // detalhes
     {
       key: "classe",
       header: "Classe / regime de IR",
@@ -370,23 +427,6 @@ export function R09Fundos() {
         ),
     },
     {
-      key: "saldo",
-      header: "Saldo (R$)",
-      align: "right",
-      headerTitle: "Valor da cota × quantidade de cotas na data-base",
-      value: (l) => l.saldo,
-      render: (l) =>
-        l.resgate ? (
-          <div>
-            <div className="text-label">–</div>
-            <div className="text-xs text-label">resgate bruto {fmtNum(l.resgate.bruto)}</div>
-          </div>
-        ) : (
-          <span className="font-semibold">{fmtNum(l.saldo)}</span>
-        ),
-      total: somaAtivos((l) => l.saldo),
-    },
-    {
       key: "rb",
       header: "Rend. bruto",
       align: "right",
@@ -426,43 +466,6 @@ export function R09Fundos() {
       value: (l) => l.iof,
       render: (l) => (l.iof > 0 ? <span className="text-critical font-semibold">{fmtNum(l.iof)}</span> : <span className="text-label">–</span>),
       total: somaAtivos((l) => l.iof),
-    },
-    {
-      key: "rl",
-      header: "Rend. líquido",
-      align: "right",
-      headerTitle: "Rendimento bruto − IOF − IR total (come-cotas + complementar)",
-      value: (l) => l.rendimentoLiquido,
-      render: (l) => (
-        <div>
-          <div className={clsx("font-semibold", l.rendimentoLiquido < 0 && "text-negative")}>{fmtNum(l.rendimentoLiquido)}</div>
-          {l.resgate && <div className="text-xs text-label">líquido creditado {fmtNum(l.resgate.liquido)}</div>}
-        </div>
-      ),
-      total: somaAtivos((l) => l.rendimentoLiquido),
-    },
-    {
-      key: "rentab",
-      header: "Rentab. bruta / líq.",
-      align: "right",
-      headerTitle: "Desde a aplicação: rendimento bruto e rendimento líquido ÷ valor aplicado",
-      value: (l) => l.rentabLiquida,
-      render: (l) => (
-        <div>
-          <div className={l.rentabBruta < 0 ? "text-negative" : ""}>{fmtPct(l.rentabBruta)}</div>
-          <div className="text-xs text-label">líq. {fmtPct(l.rentabLiquida)}</div>
-        </div>
-      ),
-      total: (rows) => {
-        const at = rows.filter((l) => l.status === "Ativo");
-        const ap = soma((l) => l.f.valorAplicado, at);
-        return (
-          <div>
-            <div>{fmtPct(ap > 0 ? soma((l) => l.rendimentoBruto, at) / ap : 0)}</div>
-            <div className="text-xs text-label font-normal">líq. {fmtPct(ap > 0 ? soma((l) => l.rendimentoLiquido, at) / ap : 0)}</div>
-          </div>
-        );
-      },
     },
     {
       key: "bmk",

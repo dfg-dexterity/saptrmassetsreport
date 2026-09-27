@@ -45,7 +45,8 @@ import { diffDays, fmtDate, fmtMonthShort, lastMonthEnds, previousMonthEnd } fro
 import { analiseFiscal, consolidarRentabilidade, posicoesEm, rentabilidade } from "../lib/finance";
 import { historicoFundo, posicaoFundo } from "../lib/fundos";
 import { posicaoTimeDeposit } from "../lib/timeDeposit";
-import { fmtCompact, fmtDec, fmtInt, fmtMi, fmtPct, fmtX } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtMi, fmtPct, fmtX, plural } from "../../shared/lib/format";
+import { resumoConciliacao } from "../lib/conciliacao";
 import {
   apurarCovenants,
   avaliarPolitica,
@@ -65,6 +66,9 @@ import {
 const NIVEL: Record<Semaforo, number> = { ok: 0, atencao: 1, excedido: 2 };
 
 const COR_SEMAFORO: Record<Semaforo, string> = { ok: "#30914c", atencao: "#e26300", excedido: "#f53232" };
+
+/** KPIs do Painel de KPIs (/kpis); o tile do Launchpad resume os 6 KPIs-chave */
+const TOTAL_KPIS_PAINEL = 22;
 
 /** Rótulos curtos dos tipos de contrato no rodapé do tile da Carteira-Mestre */
 const ROTULO_TIPO: Record<TipoContrato, [string, string]> = {
@@ -203,12 +207,11 @@ export function Launchpad() {
       { id: "credito", rotulo: "Crédito priv.", status: credito.status },
     ];
 
-    // R12 – roll-forward do mês da data-base: SF = SI + aplicações + rendimentos − resgates brutos − come-cotas
-    const mov = movimentacaoMestre(previousMonthEnd(p.dataBase), p.dataBase, p).total;
+    // R12 – fechamento do mês: contas TRM × FI-GL, extratos, pendências e aprovação (mesmo motor do R12) e o
+    // roll-forward do mês (SF = SI + aplicações + rendimentos − resgates brutos − come-cotas) no micrográfico
     const r12 = {
-      mov,
-      diferenca: mov.saldoInicial + mov.aplicacoes + mov.rendimentos - mov.resgatesBrutos - mov.comeCotas - mov.saldoFinal,
-      diferencaMestre: mov.saldoFinal - total,
+      mov: movimentacaoMestre(previousMonthEnd(p.dataBase), p.dataBase, p).total,
+      conc: resumoConciliacao(p.dataBase, p),
     };
 
     // Covenants contratuais da dívida: mesma apuração da carteira de captações
@@ -246,14 +249,16 @@ export function Launchpad() {
     };
   }, [p, cadastro]);
 
-  const limitesAlerta = d.grupos.filter((g) => g.status !== "ok").length + d.politica.filter((r) => r.status !== "ok").length;
+  // Limites por grupo econômico + regras da política: excedidos × em atenção (R07)
+  const contarLimites = (s: Semaforo) => d.grupos.filter((g) => g.status === s).length + d.politica.filter((r) => r.status === s).length;
+  const limitesExcedidos = contarLimites("excedido");
+  const limitesAtencao = contarLimites("atencao");
   const covDescumpridos = d.covenants.filter((c) => c.status === "excedido");
   const covSemWaiver = covDescumpridos.filter((c) => c.reclassifica).length;
   const covAtencao = d.covenants.filter((c) => c.status === "atencao").length;
   const dlEbitda = d.covenants.find((c) => c.cov.id === "dlEbitda");
   const rotuloDl = dlEbitda ? rotuloCovenant(dlEbitda) : null;
   // Rodapé curto (cabe no tile 1×1)
-  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
   const rodapeCov: { texto: string; state: ValueState } = covSemWaiver
     ? { texto: plural(covSemWaiver, "covenant descumprido", "descumpridos"), state: "negative" }
     : covDescumpridos.length
@@ -266,7 +271,16 @@ export function Launchpad() {
   const kpisAtencao = d.kpis.filter((k) => k.status === "atencao").length;
   const kpisFora = d.kpis.filter((k) => k.status === "excedido").length;
   const mesBase = fmtMonthShort(p.dataBase);
-  const r12Fechado = Math.abs(d.r12.diferenca) < 0.005 && Math.abs(d.r12.diferencaMestre) < 0.005;
+  const conc = d.r12.conc;
+  const pendR12 = conc.pendencias.length;
+  const rodapeR12: { texto: string; state: ValueState } = pendR12
+    ? { texto: `${plural(pendR12, "pendência", "pendências")} · aprovação pendente`, state: "negative" }
+    : !conc.aprovada
+      ? { texto: "Sem pendências · aprovação pendente", state: "critical" }
+      : {
+          texto: `Conciliado e aprovado · roll-forward ${fmtBRL(conc.diferencaRollforward < 0.005 ? 0 : conc.diferencaRollforward, true)}`,
+          state: "positive",
+        };
   const sinal = (v: number) => (v > 0.5 ? "+" : "");
 
   const tiles: Record<string, Parameters<typeof GenericTile>[0]> = {
@@ -279,9 +293,9 @@ export function Launchpad() {
     },
     benchmark: {
       title: "Benchmark de rentabilidade",
-      subtitle: "BMK · % do CDI",
+      subtitle: "Efetivo (mix das regras)",
       value: fmtDec(d.bmk.pct * 100, 1),
-      unit: "% do CDI (carteira)",
+      unit: "% do CDI · 12 meses",
       footer: `Realizado 12m: ${fmtDec(d.bmk.realizado * 100, 1)}%`,
       footerState: SITUACAO_STATE[d.bmk.situacao],
     },
@@ -337,8 +351,12 @@ export function Launchpad() {
       value: fmtInt(d.indiceHHI),
       unit: d.hhiClasse.rotulo,
       state: semaforoState(d.hhiClasse.status),
-      footer: limitesAlerta ? `${limitesAlerta} limite(s) em atenção` : "Carteira enquadrada",
-      footerState: limitesAlerta ? "critical" : "positive",
+      footer: limitesExcedidos
+        ? plural(limitesExcedidos, "limite excedido", "limites excedidos")
+        : limitesAtencao
+          ? plural(limitesAtencao, "limite em atenção", "limites em atenção")
+          : "Carteira enquadrada",
+      footerState: limitesExcedidos ? "negative" : limitesAtencao ? "critical" : "positive",
     },
     r05: {
       title: "Evolução Mensal",
@@ -364,12 +382,19 @@ export function Launchpad() {
     },
     r03: {
       title: "Rentabilidade Realizada e Real",
-      subtitle: "R03 · Renda fixa bancária",
-      value: fmtDec(d.rentRF.pctCDIBruto * 100, 1),
-      unit: "% do CDI bruto 12m",
-      footer: `Benchmark ${fmtDec(d.bmkRF.pct * 100, 1)}%`,
+      subtitle: "R03 · Carteira consolidada",
+      value: fmtDec(d.bmk.realizado * 100, 1),
+      unit: `% CDI bruto · bmk ${fmtDec(d.bmk.pct * 100, 1)}%`,
+      state: d.bmk.situacao === "abaixo" ? "critical" : d.bmk.situacao === "acima" ? "positive" : "neutral",
+      // renda fixa bancária (quadro por operação do R03): cor pela situação × benchmark da própria renda fixa
+      footer: (
+        <span
+          title={`Renda fixa bancária: ${fmtDec(d.rentRF.pctCDIBruto * 100, 1)}% do CDI bruto em 12 meses · benchmark efetivo ${fmtDec(d.bmkRF.pct * 100, 1)}%`}
+        >
+          Renda fixa {fmtDec(d.rentRF.pctCDIBruto * 100, 1)}% do CDI
+        </span>
+      ),
       footerState: SITUACAO_STATE[d.bmkRF.situacao],
-      state: d.bmkRF.situacao === "abaixo" ? "critical" : d.bmkRF.situacao === "acima" ? "positive" : "neutral",
     },
     r04: {
       title: "Eficiência Fiscal por Prazo",
@@ -393,7 +418,7 @@ export function Launchpad() {
     },
     kpis: {
       title: "Painel de KPIs",
-      subtitle: `${d.kpis.length} KPIs-chave · metas da política`,
+      subtitle: `${d.kpis.length} KPIs-chave (de ${TOTAL_KPIS_PAINEL}) · metas da política`,
       value: `${kpisNaMeta}/${d.kpis.length}`,
       unit: "KPIs-chave na meta",
       state: kpisFora ? "negative" : kpisAtencao ? "critical" : "positive",
@@ -413,20 +438,18 @@ export function Launchpad() {
     },
     r12: {
       title: "Conciliação de Fim de Mês",
-      subtitle: `R12 · Roll-forward de ${mesBase} · DU−1 a DU+3`,
-      value: fmtDec(Math.abs(d.r12.diferenca) < 0.005 ? 0 : d.r12.diferenca, 2),
-      unit: "R$ · diferença do roll-forward",
-      state: r12Fechado ? "positive" : "negative",
-      footer: r12Fechado
-        ? `Fecha: saldo final ${fmtCompact(d.r12.mov.saldoFinal)} = Carteira-Mestre`
-        : `Diferença × Carteira-Mestre: ${fmtCompact(d.r12.diferencaMestre)}`,
-      footerState: r12Fechado ? "positive" : "negative",
+      subtitle: `R12 · Fechamento de ${mesBase} · DU−1 a DU+3`,
+      value: `${conc.contasConciliadas}/${conc.contas}`,
+      unit: "contas TRM × FI-GL conciliadas",
+      state: pendR12 ? "negative" : conc.aprovada ? "positive" : "critical",
+      footer: rodapeR12.texto,
+      footerState: rodapeR12.state,
       wide: true,
       chart: <MiniRollForward mov={d.r12.mov} />,
     },
     r02: {
       title: "Movimentação – Nota Explicativa",
-      subtitle: "R02 · CPC 40 / CVM 475",
+      subtitle: "R02 · CPC 40 (R1)",
       value: fmtMi(d.contabil),
       unit: "R$ milhões (contábil)",
       footer: `Controladora: ${fmtCompact(d.controladoraContabil)}`,
@@ -503,7 +526,7 @@ export function Launchpad() {
               <KpiCard
                 label="% CDI bruto 12m"
                 value={`${fmtDec(d.bmk.realizado * 100, 1)}%`}
-                sub={`Benchmark ${fmtDec(d.bmk.pct * 100, 1)}% · líquido ${fmtDec(d.rent.pctCDILiquido * 100, 1)}%`}
+                sub={`Benchmark efetivo ${fmtDec(d.bmk.pct * 100, 1)}% (mix das regras) · líquido ${fmtDec(d.rent.pctCDILiquido * 100, 1)}%`}
                 color={d.bmk.situacao === "abaixo" ? "#b44f00" : d.bmk.situacao === "acima" ? "#256f3a" : undefined}
               />
               <KpiCard label="Rentabilidade real 12m" value={fmtPct(d.rent.rentabReal)} sub={`Líquida · IPCA 12m ${fmtPct(p.ipca12m)}`} color="#049f9a" />
@@ -556,7 +579,7 @@ export function Launchpad() {
             <SectionTitle
               extra={
                 <span className="text-xs text-label whitespace-nowrap">
-                  {alertas.length} alerta(s) na data-base
+                  {plural(alertas.length, "alerta", "alertas")} na data-base
                 </span>
               }
             >
@@ -603,22 +626,28 @@ export function Launchpad() {
                 actions={<VerMais onClick={() => navigate("/r07-concentracao")} />}
               >
                 <ul className="space-y-2.5">
-                  {d.grupos.slice(0, 5).map((g) => (
-                    <li key={g.grupo}>
-                      <div className="flex items-center justify-between text-[13px] mb-1">
-                        <span className="text-text font-semibold truncate">{g.grupo}</span>
-                        <span className="tabular text-label">
-                          {fmtPct(g.share, 1)} / {fmtPct(g.limite, 0)}
-                        </span>
-                      </div>
-                      <MicroBar
-                        value={g.utilizacao}
-                        max={1.2}
-                        marker={1}
-                        color={g.status === "ok" ? "#30914c" : g.status === "atencao" ? "#e26300" : "#f53232"}
-                      />
-                    </li>
-                  ))}
+                  {d.grupos.slice(0, 5).map((g) =>
+                    g.rating === "Soberano" ? (
+                      // risco soberano (Tesouro Nacional): sem limite de concentração na política
+                      <li key={g.grupo}>
+                        <div className="flex items-center justify-between gap-2 text-[13px]">
+                          <span className="text-text font-semibold truncate">{g.grupo}</span>
+                          <span className="tabular text-label whitespace-nowrap">{fmtPct(g.share, 1)} · sem limite</span>
+                        </div>
+                        <div className="text-xs text-label">Risco soberano</div>
+                      </li>
+                    ) : (
+                      <li key={g.grupo}>
+                        <div className="flex items-center justify-between gap-2 text-[13px] mb-1">
+                          <span className="text-text font-semibold truncate">{g.grupo}</span>
+                          <span className="tabular text-label whitespace-nowrap">
+                            {fmtPct(g.share, 1)} / {fmtPct(g.limite, 0)}
+                          </span>
+                        </div>
+                        <MicroBar value={g.utilizacao} max={1.2} marker={1} color={COR_SEMAFORO[g.status]} />
+                      </li>
+                    ),
+                  )}
                 </ul>
               </Card>
 
@@ -740,7 +769,7 @@ export function Launchpad() {
               <Destaque
                 icon={<ShieldCheck className="w-5 h-5 text-[#8b47d7]" />}
                 titulo="Normas contábeis"
-                texto="CPC 48 (custo amortizado × valor justo), CPC 02 (variação cambial), nota CPC 40 / CVM 475, IRRF (Lei 11.033), IOF (Dec. 6.306) e come-cotas (Lei 14.754)."
+                texto="CPC 48 (custo amortizado × valor justo), CPC 02 (variação cambial), nota CPC 40 (R1), IRRF (Lei 11.033), IOF (Dec. 6.306; câmbio de 1,10% na remessa para investimento – Decreto 12.499/2025) e come-cotas (Lei 14.754)."
               />
             </div>
           </section>
@@ -841,7 +870,7 @@ function MiniComeCotas({ dados }: { dados: { data: string; ir: number; projetado
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={linhas} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={8}>
-        <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={14} />
+        <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={18} />
         <YAxis hide domain={[0, "dataMax"]} />
         <Bar dataKey="ir" radius={[3, 3, 0, 0]} isAnimationActive={false}>
           {linhas.map((x) => (
@@ -880,14 +909,13 @@ function MiniRollForward({ mov }: { mov: { saldoInicial: number; aplicacoes: num
     { n: "Resg", v: [e, c], cor: "#e26300" },
     { n: "SF", v: [0, mov.saldoFinal], cor: "#1d2d3e" },
   ];
-  const lo = Math.min(a, e, mov.saldoFinal);
+  // eixo a partir de zero: as barras de saldo ficam proporcionais (sem eixo truncado)
   const hi = Math.max(a, b, c, mov.saldoFinal);
-  const folga = (hi - lo) * 0.25 || hi * 0.02;
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={dados} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={4}>
-        <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={14} />
-        <YAxis hide domain={[Math.max(0, lo - folga), hi]} allowDataOverflow />
+        <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#556b82" }} tickLine={false} axisLine={false} interval={0} height={18} />
+        <YAxis hide domain={[0, hi]} />
         <Bar dataKey="v" radius={2} isAnimationActive={false}>
           {dados.map((x) => (
             <Cell key={x.n} fill={x.cor} />

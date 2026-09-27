@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { CheckCircle2, Copy, XCircle } from "lucide-react";
+import { Copy } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -30,7 +30,7 @@ import {
 } from "../lib/carteiraMestre";
 import { posicaoTimeDeposit, resgateTimeDeposit } from "../lib/timeDeposit";
 import { arredondarTabela, ratear } from "../../captacoes/lib/arredondamento";
-import { fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 
 const rel = relatorioPorId("r02");
 
@@ -110,7 +110,7 @@ function remuneracao(cs: ContratoMestre[]): string {
     g.taxa += taxa * peso;
     grupos.set(k, g);
   };
-  if (cs[0].tipo === "Fundo de investimento") return `Variação das cotas (${cs.length} fundo${cs.length > 1 ? "s" : ""})`;
+  if (cs[0].tipo === "Fundo de investimento") return `Variação das cotas (${plural(cs.length, "fundo", "fundos")})`;
   for (const c of cs) {
     if (c.tipo === "Renda fixa bancária") {
       const op = OPS.get(c.id);
@@ -142,6 +142,8 @@ interface MovNota {
   mtmFim: number;
   contabilIni: number;
   contabilFim: number;
+  /** saldo contábil inicial + movimentação do saldo bruto + variação do MTM − Σ valor contábil da Carteira-Mestre no fim (R$) */
+  difContabil: number;
   /** valores inteiros em R$ mil que fecham */
   k: {
     contabilIni: number;
@@ -182,6 +184,7 @@ function movNota(inicio: string, fim: string, p: PremissasMercado, escopo: strin
     brutoFim - brutoIni,
   );
   const [resgatesLiquidos, irrfResgates, iof] = ratear([mil(mv.resgatesLiquidos), mil(mv.irrf - mv.comeCotas), mil(mv.iof)], -resg);
+  const difContabil = contabilIni + mv.aplicacoes + mv.rendimentos - mv.resgatesBrutos - mv.comeCotas + (mtmFim - mtmIni) - contabilFim;
   return {
     mv,
     vc,
@@ -189,6 +192,7 @@ function movNota(inicio: string, fim: string, p: PremissasMercado, escopo: strin
     mtmFim,
     contabilIni,
     contabilFim,
+    difContabil,
     k: {
       contabilIni: kCi,
       brutoIni,
@@ -311,6 +315,7 @@ export function R02Movimentacao() {
         brutoCons: Math.abs(cons.mv.saldoFinal - somaMestre(c1, "saldoCurva")),
         brutoCtrl: Math.abs(ctrl.mv.saldoFinal - somaMestre(c1Ctrl, "saldoCurva")),
         brutoIni: Math.abs(cons.mv.saldoInicial - somaMestre(c0, "saldoCurva")),
+        contabil: Math.max(Math.abs(cons.difContabil), Math.abs(ctrl.difContabil)),
       },
     };
   }, [p, inicio]);
@@ -319,7 +324,10 @@ export function R02Movimentacao() {
   const grupoK = (id: GrupoNota) => d.composicao.find((l) => l.id === id)?.valores[2] ?? 0;
   const circ = d.circTotais[0] ?? 0;
   const naoCirc = d.circTotais[1] ?? 0;
-  const okConc = d.checagens.brutoCons < 0.01 && d.checagens.brutoCtrl < 0.01 && d.checagens.brutoIni < 0.01;
+  const difBruto = Math.max(d.checagens.brutoCons, d.checagens.brutoCtrl, d.checagens.brutoIni);
+  const okBruto = difBruto < TOL_CHECAGEM;
+  const okContabil = d.checagens.contabil < TOL_CHECAGEM;
+  const okConc = okBruto && okContabil;
 
   const linhasMov = (x: MovNota): number[] => [
     x.k.contabilIni,
@@ -343,12 +351,13 @@ export function R02Movimentacao() {
     { rotulo: `Saldo em ${fmtDate(inicio)}`, estilo: "saldo" },
     { rotulo: "Saldo bruto (curva, cota e ME × PTAX)", estilo: "dosQuais" },
     { rotulo: "Ajuste a valor justo (MTM)", estilo: "dosQuais" },
-    { rotulo: "(+) Aplicações" },
-    { rotulo: "(+) Rendimentos (juros, cupons e cotas)" },
-    { rotulo: "(±) Variação cambial – time deposits" },
-    { rotulo: "(−) Resgates, vencimentos e cupons (brutos)" },
-    { rotulo: "(−) Come-cotas (IRRF por redução de cotas)" },
-    { rotulo: "(±) Ajuste a valor justo (MTM) no período" },
+    // convenção de nota explicativa: reduções entre parênteses no valor, sem (+)/(−) no rótulo
+    { rotulo: "Aplicações" },
+    { rotulo: "Rendimentos (juros, cupons e cotas)" },
+    { rotulo: "Variação cambial – time deposits" },
+    { rotulo: "Resgates, vencimentos e cupons (brutos)" },
+    { rotulo: "Come-cotas (IRRF por redução de cotas)" },
+    { rotulo: "Ajuste a valor justo (MTM) no período" },
     { rotulo: `Saldo em ${fmtDate(p.dataBase)}`, estilo: "saldo" },
     { rotulo: "Saldo bruto (curva, cota e ME × PTAX)", estilo: "dosQuais" },
     { rotulo: "Ajuste a valor justo (MTM)", estilo: "dosQuais" },
@@ -362,25 +371,25 @@ export function R02Movimentacao() {
   const tabelaMov: LinhaNota[] = rotulosMov.map((l, i) => ({ rotulo: l.rotulo, estilo: l.estilo, chave: `m${i}`, valores: l.estilo === "secao" ? [] : [vCtrl[i], vCons[i]] }));
 
   const k = cons.k;
-  const vcTxt = k.vc === 0 ? "sem efeito relevante" : `${k.vc > 0 ? "positiva" : "negativa"} em R$ ${fmtMil0(Math.abs(k.vc))} mil`;
+  const vcTxt = k.vc === 0 ? "sem efeito relevante" : `${k.vc > 0 ? "positiva" : "negativa"} em ${rsMil(Math.abs(k.vc))}`;
   const textoNota = [
     `Aplicações financeiras`,
     ``,
     `As aplicações financeiras da Companhia compreendem depósitos e títulos de renda fixa bancária (CDB, LCI/LCA, LF e operações compromissadas), crédito privado (debêntures, CRI e CRA), títulos públicos federais, cotas de fundos de investimento e depósitos a prazo no exterior (time deposits). São mensuradas ao custo amortizado, ao valor justo por meio de outros resultados abrangentes (VJORA) ou ao valor justo por meio do resultado (VJR), conforme o modelo de negócios e as características dos fluxos de caixa contratuais (CPC 48 / IFRS 9).`,
     ``,
-    `Em ${fmtDate(p.dataBase)}, o saldo consolidado de aplicações financeiras era de R$ ${fmtMil0(k.contabilFim)} mil (R$ ${fmtMil0(k.contabilIni)} mil em ${fmtDate(inicio)}), dos quais R$ ${fmtMil0(ctrl.k.contabilFim)} mil na Controladora. No período, as novas aplicações somaram R$ ${fmtMil0(k.aplicacoes)} mil e os resgates, vencimentos e cupons, R$ ${fmtMil0(-k.resgates)} mil pelo valor bruto (R$ ${fmtMil0(k.resgatesLiquidos)} mil líquidos de R$ ${fmtMil0(k.irrfResgates)} mil de IRRF e R$ ${fmtMil0(k.iof)} mil de IOF retidos na fonte). Os rendimentos apropriados totalizaram R$ ${fmtMil0(k.rendimentos + k.vc)} mil, incluída a variação cambial dos time deposits (${vcTxt}).`,
+    `Em ${fmtDate(p.dataBase)}, o saldo consolidado de aplicações financeiras era de ${rsMil(k.contabilFim)} (${rsMil(k.contabilIni)} em ${fmtDate(inicio)}), dos quais ${rsMil(ctrl.k.contabilFim)} na Controladora. No período, as novas aplicações somaram ${rsMil(k.aplicacoes)} e os resgates, vencimentos e cupons, ${rsMil(-k.resgates)} pelo valor bruto (${rsMil(k.resgatesLiquidos)} líquidos de ${rsMil(k.irrfResgates)} de IRRF e ${rsMil(k.iof)} de IOF retidos na fonte). Os rendimentos apropriados totalizaram ${rsMil(k.rendimentos + k.vc)}, incluída a variação cambial dos time deposits (${vcTxt}). O IRRF retido sobre os rendimentos das aplicações no país, inclusive o come-cotas, é antecipação do imposto de renda devido e é deduzido do IRPJ apurado no lucro real (Lei 8.981/1995, art. 76, I).`,
     ``,
     `As aplicações pós-fixadas em renda fixa bancária são remuneradas à média ponderada de ${fmtDec(d.mediaCDI * 100, 1)}% da variação do CDI.`,
     ``,
-    `Os títulos públicos federais (Tesouro Selic, Prefixado e IPCA+), no montante de R$ ${fmtMil0(grupoK("tpf"))} mil, são marcados a mercado pelas taxas indicativas divulgadas pela ANBIMA quando classificados a VJORA ou VJR; o ajuste a valor justo acumulado desses títulos era de R$ ${fmtMil0(d.mtmTpfORA)} mil em outros resultados abrangentes (VJORA) e de R$ ${fmtMil0(d.mtmTpfVJR)} mil no resultado (VJR). Os títulos classificados ao custo amortizado são apresentados pela curva de aquisição. O ajuste a valor justo total da carteira passou de R$ ${fmtMil0(k.mtmIni)} mil para R$ ${fmtMil0(k.mtmFim)} mil no período.`,
+    `Os títulos públicos federais (Tesouro Selic, Prefixado e IPCA+), no montante de ${rsMil(grupoK("tpf"))}, são marcados a mercado pelas taxas indicativas divulgadas pela ANBIMA quando classificados a VJORA ou VJR; o ajuste a valor justo acumulado desses títulos era de ${rsMil(d.mtmTpfORA)} em outros resultados abrangentes (VJORA) e de ${rsMil(d.mtmTpfVJR)} no resultado (VJR). Os títulos classificados ao custo amortizado são apresentados pela curva de aquisição. O ajuste a valor justo total da carteira passou de ${rsMil(k.mtmIni)} para ${rsMil(k.mtmFim)} no período.`,
     ``,
-    `As cotas de fundos de investimento (R$ ${fmtMil0(grupoK("fundos"))} mil) são mensuradas ao valor justo por meio do resultado pelo valor da cota divulgado pelo administrador. Nos fundos sujeitos ao come-cotas, o imposto de renda é antecipado em maio e novembro pela redução da quantidade de cotas, sem saída de caixa${-k.comeCotas > 0 ? `: R$ ${fmtMil0(-k.comeCotas)} mil no período` : "; não houve recolhimento no período"}.`,
+    `As cotas de fundos de investimento (${rsMil(grupoK("fundos"))}) são mensuradas ao valor justo por meio do resultado pelo valor da cota divulgado pelo administrador. Nos fundos sujeitos ao come-cotas, o imposto de renda é antecipado em maio e novembro pela redução da quantidade de cotas, sem saída de caixa${-k.comeCotas > 0 ? `: ${rsMil(-k.comeCotas)} no período` : "; não houve recolhimento no período"}.`,
     ``,
-    `As aplicações no exterior (time deposits em dólar e euro, R$ ${fmtMil0(grupoK("exterior"))} mil) são convertidas pela PTAX de fechamento da data-base, com a variação cambial reconhecida no resultado (CPC 02 / IAS 21), ${k.vc === 0 ? "sem efeito relevante no período" : `${k.vc > 0 ? "positiva" : "negativa"} em R$ ${fmtMil0(Math.abs(k.vc))} mil no período`}. Na remessa incide IOF câmbio de ${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio, 2)}, e os rendimentos auferidos no exterior são tributados pelo IRPJ/CSLL (${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}), sem retenção na fonte.`,
+    `As aplicações no exterior (time deposits em dólar e euro, ${rsMil(grupoK("exterior"))}) são convertidas pela PTAX de fechamento da data-base, com a variação cambial reconhecida no resultado (CPC 02 (R2) / IAS 21), ${k.vc === 0 ? "sem efeito relevante no período" : `${k.vc > 0 ? "positiva" : "negativa"} em ${rsMil(Math.abs(k.vc))} no período`}. Nas remessas para investimento no exterior incidem IOF câmbio de ${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio, 2)} (Decreto 6.306/2007, na redação do Decreto 12.499/2025) e tarifa bancária; os rendimentos auferidos no exterior não sofrem retenção na fonte e são tributados pelo IRPJ/CSLL (${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}) na apuração do lucro real (Lei 9.249/1995, art. 25).`,
     ``,
-    `Do saldo consolidado, R$ ${fmtMil0(circ)} mil estão classificados no ativo circulante e R$ ${fmtMil0(naoCirc)} mil no não circulante.`,
+    `Do saldo consolidado, ${rsMil(circ)} estão classificados no ativo circulante e ${rsMil(naoCirc)} no não circulante.`,
     ``,
-    `A exposição da Companhia a riscos de taxa de juros, de câmbio e de crédito e a análise de sensibilidade dos ativos financeiros estão divulgadas na nota explicativa de instrumentos financeiros (CPC 40).`,
+    `A exposição da Companhia a riscos de taxa de juros, de câmbio e de crédito e a análise de sensibilidade dos ativos financeiros estão divulgadas na nota explicativa de instrumentos financeiros (CPC 40 (R1)).`,
   ].join("\n");
 
   const colunasMovTipo = ["Saldo bruto inicial", "Aplicações", "Rendimentos", "Variação cambial", "Resgates brutos", "Come-cotas", "Saldo bruto final"];
@@ -456,7 +465,12 @@ export function R02Movimentacao() {
         <>
           <HeaderKpi label="Consolidado" value={fmtCompact(cons.contabilFim)} sub={`saldo contábil · ${fmtDate(p.dataBase)}`} />
           <HeaderKpi label="Controladora" value={fmtCompact(ctrl.contabilFim)} sub={`empresa ${EMPRESA_CONTROLADORA}`} />
-          <HeaderKpi label="Rendimentos no exercício" value={fmtCompact(cons.mv.rendimentos)} state="positive" sub="consolidado" />
+          <HeaderKpi
+            label="Rendimentos no exercício"
+            value={fmtCompact(cons.mv.rendimentos)}
+            state={cons.mv.rendimentos >= 0 ? "positive" : "negative"}
+            sub={k.vc === 0 ? "consolidado" : `consolidado · inclui variação cambial de ${fmtCompact(cons.vc)}`}
+          />
           <HeaderKpi label="Remuneração média" value={`${fmtDec(d.mediaCDI * 100, 1)}%`} sub="do CDI (pós-fixados)" />
         </>
       }
@@ -478,14 +492,30 @@ export function R02Movimentacao() {
       {aba === "mov" && (
         <>
           <MessageStrip design={okConc ? "positive" : "critical"}>
-            <span className="inline-flex flex-wrap gap-x-5 gap-y-1">
-              <Checagem ok={d.checagens.brutoCons < 0.01 && d.checagens.brutoIni < 0.01}>
-                Saldo bruto = Σ saldo da Carteira-Mestre (curva, cota, ME × PTAX) e saldo final do R05: <strong>R$ {fmtMil0(k.brutoFim)} mil</strong>
+            <ul className="space-y-0.5">
+              <Checagem ok={okBruto}>
+                {okBruto ? (
+                  <>
+                    Saldo bruto igual ao Σ saldo da Carteira-Mestre (curva, cota, ME × PTAX) e ao saldo final do R05: <strong>{rsMil(k.brutoFim)}</strong>
+                  </>
+                ) : (
+                  <>
+                    Saldo bruto diverge do Σ saldo da Carteira-Mestre (curva, cota, ME × PTAX): diferença de <strong>{fmtBRL(difBruto, true)}</strong>
+                  </>
+                )}
               </Checagem>
-              <Checagem ok>
-                Saldo contábil = Σ valor contábil da Carteira-Mestre: <strong>R$ {fmtMil0(k.contabilFim)} mil</strong>
+              <Checagem ok={okContabil}>
+                {okContabil ? (
+                  <>
+                    Saldo contábil inicial + movimentação + ajuste a valor justo igual ao Σ valor contábil da Carteira-Mestre: <strong>{rsMil(k.contabilFim)}</strong>
+                  </>
+                ) : (
+                  <>
+                    Saldo contábil da movimentação diverge do Σ valor contábil da Carteira-Mestre: diferença de <strong>{fmtBRL(d.checagens.contabil, true)}</strong>
+                  </>
+                )}
               </Checagem>
-            </span>
+            </ul>
           </MessageStrip>
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
             <Card
@@ -702,7 +732,7 @@ export function R02Movimentacao() {
         Valores em R$ mil, com arredondamento controlado (linhas e colunas fecham). Período do exercício: {fmtDate(inicio)} a{" "}
         {fmtDate(p.dataBase)}. Movimentação pelo saldo bruto da Carteira-Mestre (renda fixa, títulos públicos, fundos e time
         deposits), conciliada ao saldo contábil pelo ajuste a valor justo; resgates pelo valor bruto, com IRRF e IOF retidos nas
-        informações complementares; come-cotas em linha própria (CPC 02 / CPC 40 / CPC 48 / CVM 475).
+        informações complementares; come-cotas em linha própria (CPC 02 (R2) / CPC 40 (R1) / CPC 48).
       </MessageStrip>
     </ReportPage>
   );
@@ -713,18 +743,18 @@ function fmtK(v: number): string {
   return fmtNum(v, { parens: true, dash: true });
 }
 
-/** Valor em R$ mil para o texto da nota (sem parênteses) */
-function fmtMil0(v: number): string {
-  return fmtNum(v);
+/** Valor em R$ mil para o texto da nota: "R$ 1.234 mil" / "−R$ 1.234 mil" (sinal colado, sem parênteses) */
+function rsMil(v: number): string {
+  const r = Math.round(v) || 0;
+  return `${r < 0 ? "\u2212" : ""}R$ ${fmtNum(Math.abs(r))} mil`;
 }
 
+/** Tolerância das checagens de conferência (R$) */
+const TOL_CHECAGEM = 1;
+
+/** Item de checagem dentro da MessageStrip (o ícone é o da própria faixa): o texto já diz se confere ou diverge */
 function Checagem({ ok, children }: { ok: boolean; children: ReactNode }) {
-  const Icone = ok ? CheckCircle2 : XCircle;
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Icone className="w-3.5 h-3.5 shrink-0" /> <span>{children}</span>
-    </span>
-  );
+  return <li className={ok ? undefined : "text-negative"}>{children}</li>;
 }
 
 function RotuloOrigem({ tipo, origem, rota }: { tipo: string; origem: string; rota: string }) {

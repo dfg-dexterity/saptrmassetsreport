@@ -15,7 +15,7 @@ import { usePremissas } from "../../shared/context/MercadoContext";
 import { EMPRESAS } from "../../shared/data/empresas";
 import { addDays, fmtDate, lastMonthEnds } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import { useBenchmarks } from "../context/BenchmarkContext";
 import { ESCOPOS_BENCHMARK, PCT_MAXIMO, PCT_MINIMO, type Benchmark, type EscopoBenchmark } from "../data/benchmark";
 import { OPERACOES } from "../data/carteira";
@@ -91,7 +91,7 @@ const TIPO_DO_PRODUTO = new Map(PRODUTOS.map((x) => [x.produto, x.tipo]));
 
 function rotuloProduto(produto: string): string {
   const tipo = TIPO_DO_PRODUTO.get(produto);
-  return tipo && tipo !== produto ? `${produto} (${tipo})` : produto;
+  return tipo && tipo !== produto ? `${produto} (${INFO_TIPO[tipo].curto})` : produto;
 }
 
 const ROTULO_ESCOPO: Record<EscopoBenchmark, string> = {
@@ -243,6 +243,7 @@ export function BenchmarkApp() {
     () => (filtroTipo === "todos" ? d.carteira : compararCarteira(linhasTabela.map((l) => l.r), cadastro, p)),
     [filtroTipo, d.carteira, linhasTabela, cadastro, p],
   );
+  const listaOps = useMemo(() => [...linhasTabela].sort((a, b) => a.cmp.realizado - a.cmp.pct - (b.cmp.realizado - b.cmp.pct)), [linhasTabela]);
   const dadosGrafico = visaoGrafico === "tipo" ? d.porTipo : d.porProduto;
   // Escala do eixo em % do CDI com marcas redondas (inclui 0 e 100%; negativos quando algum realizado for negativo)
   const escala = useMemo(() => {
@@ -574,8 +575,8 @@ export function BenchmarkApp() {
       headerTitle: "Rendimento realizado − rendimento que o benchmark teria gerado sobre o mesmo capital, capitalizado dia a dia",
       align: "right",
       value: (l) => l.cmp.excesso,
-      render: (l) => <span className={corExcesso(l.cmp.excesso)}>{fmtNum(l.cmp.excesso, { parens: true })}</span>,
-      total: () => <span className={corExcesso(totalTabela.excesso)}>{fmtNum(totalTabela.excesso, { parens: true })}</span>,
+      render: (l) => <span className={corExcesso(l.cmp.excesso)}>{fmtNum(l.cmp.excesso)}</span>,
+      total: () => <span className={corExcesso(totalTabela.excesso)}>{fmtNum(totalTabela.excesso)}</span>,
     },
     {
       key: "sit",
@@ -602,18 +603,15 @@ export function BenchmarkApp() {
           >
             <span className="hidden sm:inline">Restaurar padrão</span>
           </Button>
-          <Button variant="emphasized" icon={<Plus className="w-4 h-4" />} onClick={novo} aria-label="Novo benchmark" title="Novo benchmark">
-            <span className="hidden sm:inline">Novo benchmark</span>
-          </Button>
         </>
       }
       kpis={
         <>
           <HeaderKpi
-            label="Benchmark da carteira"
+            label="Benchmark efetivo (mix das regras)"
             value={`${fmtDec(d.carteira.pct * 100, 1)}%`}
             unit="do CDI"
-            sub={`12 meses · regras ${fmtDec(d.carteira.pctRegra * 100, 1)}%`}
+            sub={`12 meses · média das regras ${fmtDec(d.carteira.pctRegra * 100, 1)}%`}
           />
           <HeaderKpi
             label="Realizado 12 meses"
@@ -655,15 +653,52 @@ export function BenchmarkApp() {
 
       <Card
         title="Regras de benchmark"
-        subtitle={`${cadastro.length} regra(s) · CDI vigente ${fmtPct(p.cdi)} a.a. (importado do SAP) · clique na linha para editar`}
+        subtitle={`${plural(cadastro.length, "regra", "regras")} · CDI vigente ${fmtPct(p.cdi)} a.a. (importado do SAP) · clique em uma regra para editar`}
         bodyClassName="px-0 pb-0"
         actions={
-          <Button size="sm" variant="transparent" icon={<Plus className="w-4 h-4" />} onClick={novo} title="Adicionar regra de benchmark">
-            Adicionar
+          <Button variant="default" icon={<Plus className="w-4 h-4" />} onClick={novo} title="Cadastrar regra de benchmark">
+            Novo benchmark
           </Button>
         }
       >
-        <DataTable columns={colunasCadastro} rows={ordenado} rowKey={(b) => b.id} onRowClick={editar} />
+        <div className="hidden lg:block">
+          <DataTable columns={colunasCadastro} rows={ordenado} rowKey={(b) => b.id} onRowClick={editar} />
+        </div>
+        {/* Celular e tablet: lista em cartões */}
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {ordenado.map((b) => {
+            const n = d.cobertura.get(b.id) ?? 0;
+            return (
+              <li key={b.id} className="px-4 py-3 cursor-pointer hover:bg-hover" onClick={() => editar(b)}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-sm font-semibold text-text">{b.descricao}</span>
+                      <Tag color={COR_ESCOPO[b.escopo]}>{ROTULO_ESCOPO[b.escopo]}</Tag>
+                    </div>
+                    <div className="text-[13px] text-text mt-1">
+                      <AplicaSeA b={b} />
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-base font-bold text-text tabular whitespace-nowrap">{fmtDec(b.pctCDI * 100, 1)}%</div>
+                    <div className="text-xs text-label whitespace-nowrap">{fmtPct(taxaEquivalenteBenchmark(b.pctCDI, p.cdi))} a.a.</div>
+                  </div>
+                </div>
+                {b.nota && <p className="text-xs text-label leading-snug mt-1">{b.nota}</p>}
+                <div className="flex items-center justify-between gap-2 mt-1.5">
+                  <span className="text-xs text-label">
+                    Vigência desde {fmtDate(b.vigenciaInicio)} · {n ? plural(n, "contrato ativo", "contratos ativos") : "nenhum contrato ativo"}
+                  </span>
+                  <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="transparent" icon={<Pencil className="w-4 h-4" />} aria-label={`Editar ${b.descricao}`} title="Editar" onClick={semPropagar(() => editar(b))} />
+                    <Button size="sm" variant="transparent" icon={<Trash2 className="w-4 h-4" />} aria-label={`Excluir ${b.descricao}`} title="Excluir" onClick={semPropagar(() => excluir(b))} />
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
@@ -795,7 +830,7 @@ export function BenchmarkApp() {
 
       <Card
         title="Rentabilidade × benchmark por contrato"
-        subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · ${linhasTabela.length} contrato(s) · rendimento ${fmtBRL(linhasTabela.reduce((s, l) => s + l.r.rendimento, 0))}${d.comVigenciaNoPeriodo ? ` · ${d.comVigenciaNoPeriodo} com mudança de regra no período` : ""}`}
+        subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · ${plural(linhasTabela.length, "contrato", "contratos")} · rendimento ${fmtBRL(linhasTabela.reduce((s, l) => s + l.r.rendimento, 0))}${d.comVigenciaNoPeriodo ? ` · ${d.comVigenciaNoPeriodo} com mudança de regra no período` : ""}`}
         bodyClassName="px-0 pb-0"
         actions={
           <Select
@@ -805,12 +840,53 @@ export function BenchmarkApp() {
             onChange={setFiltroTipo}
             options={[
               { value: "todos" as const, label: "Todos os tipos" },
-              ...TIPOS_CONTRATO.map((t) => ({ value: t.tipo, label: t.tipo })),
+              ...TIPOS_CONTRATO.map((t) => ({ value: t.tipo, label: t.curto })),
             ]}
           />
         }
       >
-        <DataTable columns={colunasOps} rows={linhasTabela} rowKey={(l) => l.r.codigo} showTotals maxHeight={560} defaultSort={{ key: "dif", dir: "asc" }} />
+        <div className="hidden lg:block">
+          <DataTable columns={colunasOps} rows={linhasTabela} rowKey={(l) => l.r.codigo} showTotals maxHeight={560} defaultSort={{ key: "dif", dir: "asc" }} />
+        </div>
+        {/* Celular e tablet: lista em cartões (maiores diferenças negativas primeiro, como na tabela) */}
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {listaOps.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum contrato no filtro selecionado</li>}
+          {listaOps.map((l) => (
+            <li key={l.r.codigo} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-sm font-semibold text-text">
+                      {l.r.produto} · {l.r.contraparte}
+                    </span>
+                    <Tag color={INFO_TIPO[l.r.tipo].cor}>{INFO_TIPO[l.r.tipo].curto}</Tag>
+                  </div>
+                  <div className="text-xs text-label leading-snug mt-0.5">
+                    {l.r.codigo} · {l.taxa} · {l.portfolio}
+                    {l.r.status === "Liquidada" && <span className="text-critical-strong"> · liquidada em {fmtDate(l.r.fim)}</span>}
+                  </div>
+                  <div className="text-xs text-label leading-snug">
+                    {l.regra ? `Regra: ${l.regra.descricao}` : "Sem regra (100% do CDI)"}
+                    {l.cmp.trechos.length > 1 && ` · ${descreverTrechos(l.cmp.trechos)}`}
+                  </div>
+                </div>
+                <ObjectStatus state={SITUACAO_STATE[l.cmp.situacao]}>{SITUACAO_TEXTO[l.cmp.situacao]}</ObjectStatus>
+              </div>
+              <ValoresOp bmk={l.cmp.pct} regra={l.cmp.pctRegra} realizado={l.cmp.realizado} excesso={l.cmp.excesso} />
+            </li>
+          ))}
+          {listaOps.length > 0 && (
+            <li className="px-4 py-3 bg-[#f5f6f7]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm font-bold text-text">
+                  {filtroTipo === "todos" ? "Carteira consolidada" : INFO_TIPO[filtroTipo].curto} · {plural(listaOps.length, "contrato", "contratos")}
+                </div>
+                <ObjectStatus state={SITUACAO_STATE[totalTabela.situacao]}>{SITUACAO_TEXTO[totalTabela.situacao]}</ObjectStatus>
+              </div>
+              <ValoresOp bmk={totalTabela.pct} regra={totalTabela.pctRegra} realizado={totalTabela.realizado} excesso={totalTabela.excesso} forte />
+            </li>
+          )}
+        </ul>
       </Card>
 
       {rascunho && (
@@ -845,6 +921,34 @@ function AplicaSeA({ b }: { b: Benchmark }) {
     );
   }
   return <span>{aplicaSeA(b)}</span>;
+}
+
+/** Valores do cartão de contrato no celular: benchmark, realizado, diferença e excesso */
+function ValoresOp({ bmk, regra, realizado, excesso, forte }: { bmk: number; regra: number; realizado: number; excesso: number; forte?: boolean }) {
+  const dd = clsx("tabular truncate", forte ? "font-bold" : "font-semibold");
+  return (
+    <dl className="grid grid-cols-4 gap-x-2 mt-2 text-[13px]">
+      <div className="min-w-0">
+        <dt className="text-xs text-label truncate">Benchmark</dt>
+        <dd className={clsx(dd, "text-text")}>{fmtDec(bmk * 100, 1)}%</dd>
+        <dd className="text-[11px] text-label truncate">regra {fmtDec(regra * 100, 1)}%</dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="text-xs text-label truncate">Realizado</dt>
+        <dd className={clsx(dd, "text-text")}>{fmtDec(realizado * 100, 1)}%</dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="text-xs text-label truncate">Diferença</dt>
+        <dd className={dd}>
+          <Diferenca v={realizado - bmk} />
+        </dd>
+      </div>
+      <div className="min-w-0 text-right">
+        <dt className="text-xs text-label truncate">Excesso</dt>
+        <dd className={clsx(dd, corExcesso(excesso))}>{fmtCompact(excesso)}</dd>
+      </div>
+    </dl>
+  );
 }
 
 function Diferenca({ v }: { v: number }) {

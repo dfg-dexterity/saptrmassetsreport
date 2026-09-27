@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "../../shared/components/fiori/Card";
@@ -11,13 +11,13 @@ import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { ptaxDoMes } from "../../shared/data/mercado";
 import { fmtDate, fmtMonthLong, fmtMonthShort, lastMonthEnds, previousMonthEnd } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import { ptaxNaData } from "../../shared/lib/taxas";
 import { relatorioPorId } from "../data/catalogo";
 import { FUNDOS, type Fundo } from "../data/fundos";
-import { TIME_DEPOSITS, type TimeDeposit } from "../data/timeDeposits";
+import { PARAMETROS_TIME_DEPOSIT, TIME_DEPOSITS, type TimeDeposit } from "../data/timeDeposits";
 import { ESCOPOS, useMestre, type Escopo } from "../context/useDados";
-import { MOEDAS, rentabilidadeMestre, TIPOS_CONTRATO, type ContratoMestre, type Moeda } from "../lib/carteiraMestre";
+import { COR_MOEDA, MOEDAS, rentabilidadeMestre, TIPOS_CONTRATO, type ContratoMestre, type Moeda } from "../lib/carteiraMestre";
 import { avaliarPolitica, SEMAFORO_TEXTO, type Semaforo } from "../lib/indicadores";
 import { posicaoTimeDeposit, ptaxTD, saldoME } from "../lib/timeDeposit";
 
@@ -31,7 +31,7 @@ type Periodo = "acumulado" | "mes";
 type MoedaEst = "USD" | "EUR";
 
 const MEDIDAS: { value: Medida; label: string; fn: (c: ContratoMestre) => number }[] = [
-  { value: "curva", label: "Saldo na curva", fn: (c) => c.saldoCurva },
+  { value: "curva", label: "Saldo bruto", fn: (c) => c.saldoCurva },
   { value: "mercado", label: "Saldo a mercado", fn: (c) => c.saldoMercado },
   { value: "contabil", label: "Valor contábil", fn: (c) => c.valorContabil },
   { value: "liquido", label: "Rendimento líquido", fn: (c) => c.rendimentoLiquido },
@@ -43,7 +43,6 @@ const VISOES: { value: Visao; label: string }[] = [
 ];
 
 const MOEDAS_EST: MoedaEst[] = ["USD", "EUR"];
-const MOEDA_COR: Record<Moeda, string> = { BRL: "#168eff", USD: "#75980b", EUR: "#5d36ff" };
 const MOEDA_NOME: Record<Moeda, string> = { BRL: "Real", USD: "Dólar americano", EUR: "Euro" };
 const SIMBOLO: Record<Moeda, string> = { BRL: "R$", USD: "US$", EUR: "€" };
 const CHOQUES = [-0.1, -0.05, 0.05, 0.1];
@@ -80,13 +79,16 @@ interface Resultado {
   bruto: number;
   juros: number;
   vc: number;
-  iof: number;
+  /** IOF câmbio realizado na remessa dos time deposits */
+  iofCambio: number;
+  /** IOF regressivo realizado em resgates com menos de 30 dias (renda fixa e fundos) */
+  iofRegressivo: number;
   ir: number;
   taxas: number;
   liquido: number;
 }
 
-const zeroRes = (): Resultado => ({ bruto: 0, juros: 0, vc: 0, iof: 0, ir: 0, taxas: 0, liquido: 0 });
+const zeroRes = (): Resultado => ({ bruto: 0, juros: 0, vc: 0, iofCambio: 0, iofRegressivo: 0, ir: 0, taxas: 0, liquido: 0 });
 
 /** Linha de resultado por contrato, com a variação cambial nas duas visões */
 interface LinhaRes {
@@ -97,7 +99,8 @@ interface LinhaRes {
   vcContrato: number;
   /** variação cambial na exposição econômica (time deposits + fundo cambial) */
   vcExposicao: number;
-  iof: number;
+  iofCambio: number;
+  iofRegressivo: number;
   ir: number;
   taxas: number;
   liquido: number;
@@ -115,7 +118,8 @@ function agregar(linhas: LinhaRes[], v: Visao): PorMoeda<Resultado> {
       r.bruto += l.bruto;
       r.vc += vc;
       r.juros += l.bruto - vc;
-      r.iof += l.iof;
+      r.iofCambio += l.iofCambio;
+      r.iofRegressivo += l.iofRegressivo;
       r.ir += l.ir;
       r.taxas += l.taxas;
       r.liquido += l.liquido;
@@ -163,7 +167,9 @@ export function R11MoedaTipo() {
         bruto: c.rendimentoBruto,
         vcContrato,
         vcExposicao,
-        iof: c.iof,
+        // a Carteira-Mestre traz só IOF realizado: nos time deposits, o IOF câmbio da remessa
+        iofCambio: td ? c.iof : 0,
+        iofRegressivo: td ? 0 : c.iof,
         ir: c.ir,
         taxas: c.taxas,
         liquido: c.rendimentoLiquido,
@@ -197,7 +203,8 @@ export function R11MoedaTipo() {
         bruto: r.rendimento,
         vcContrato,
         vcExposicao,
-        iof: r.iof,
+        iofCambio: td ? r.iof : 0,
+        iofRegressivo: td ? 0 : r.iof,
         ir: r.ir,
         taxas: r.taxas,
         liquido: r.rendLiquido,
@@ -216,6 +223,14 @@ export function R11MoedaTipo() {
       else exp[m].fundo += me;
     }
     const expTotal = exp.USD.brl + exp.EUR.brl;
+    // Visão moeda do contrato: só contratos em moeda estrangeira (time deposits) – a mesma base do R10
+    const ctr = { USD: { brl: 0, me: 0 }, EUR: { brl: 0, me: 0 } };
+    for (const c of contratos) {
+      if (c.moeda === "BRL") continue;
+      ctr[c.moeda].brl += c.saldoCurva;
+      ctr[c.moeda].me += c.saldoME;
+    }
+    const ctrTotal = ctr.USD.brl + ctr.EUR.brl;
     const politica = avaliarPolitica(contratos).find((r) => r.id === "exterior")!;
     const vcMesEconomica = mes.reduce((s, l) => s + l.vcExposicao, 0);
     const vcMesTD = mes.reduce((s, l) => s + l.vcContrato, 0);
@@ -229,7 +244,7 @@ export function R11MoedaTipo() {
     }
     const fundosCambiais = contratos.filter((c) => FUNDO_CAMBIAL.has(c.codigo));
 
-    return { total, acumulado, mes, exp, expTotal, politica, vcMesEconomica, vcMesTD, tdME, fundosCambiais };
+    return { total, acumulado, mes, exp, expTotal, ctr, ctrTotal, politica, vcMesEconomica, vcMesTD, tdME, fundosCambiais };
   }, [contratos, p, escopo, inicioMes]);
 
   // Quadros que dependem da visão e da medida
@@ -291,17 +306,27 @@ export function R11MoedaTipo() {
   const ptaxAnterior = (m: MoedaEst) => ptaxNaData(m, inicioMes, p);
   const res = periodo === "acumulado" ? d.resAcumulado : d.resMes;
   const expShare = base.total > 0 ? base.expTotal / base.total : 0;
+  const ctrShare = base.total > 0 ? base.ctrTotal / base.total : 0;
+  const temFundoCambial = base.exp.USD.fundo > 0 || base.exp.EUR.fundo > 0;
+  // KPIs do cabeçalho seguem a visão: moeda do contrato = time deposits (mesma base do R10); exposição = + fundo cambial
+  const vcMesKpi = visao === "contrato" ? base.vcMesTD : base.vcMesEconomica;
+  const matrizOk = Math.abs(d.conferencia - d.totalCel.Total) < 0.005;
+  const linhaTD = d.matriz.find((l) => l.tipo === "Time deposit");
+  const tdOk = !!linhaTD && MOEDAS_EST.every((m) => Math.abs(linhaTD.me[m] - base.tdME[m]) < 0.005);
   const pol = base.politica;
   const utilizacao = pol.limite > 0 ? pol.share / pol.limite : 0;
   const medidaDonut = medida === "liquido" ? MEDIDAS[0] : med;
 
-  const linhasResultado: { rotulo: string; fn: (r: Resultado) => number; forte?: boolean; recuo?: boolean; sinal?: -1 }[] = [
+  // linhas "(−)" mostram o valor positivo (o sinal está no rótulo); IOF regressivo só aparece quando houver
+  const temIofRegressivo = [...MOEDAS, "Total" as const].some((k) => Math.round(d.resAcumulado[k].iofRegressivo) !== 0 || Math.round(d.resMes[k].iofRegressivo) !== 0);
+  const linhasResultado: { rotulo: string; fn: (r: Resultado) => number; forte?: boolean; recuo?: boolean }[] = [
     { rotulo: "Rendimento bruto", fn: (r) => r.bruto, forte: true },
     { rotulo: "Juros / rendimento", fn: (r) => r.juros, recuo: true },
     { rotulo: "Variação cambial", fn: (r) => r.vc, recuo: true },
-    { rotulo: "(−) IOF", fn: (r) => r.iof, sinal: -1 },
-    { rotulo: "(−) IR/IRRF · IRPJ/CSLL nos TDs", fn: (r) => r.ir, sinal: -1 },
-    { rotulo: "(−) Taxas e tarifas", fn: (r) => r.taxas, sinal: -1 },
+    { rotulo: "(−) IOF câmbio (remessa)", fn: (r) => r.iofCambio },
+    ...(temIofRegressivo ? [{ rotulo: "(−) IOF regressivo (resgate < 30 dias)", fn: (r: Resultado) => r.iofRegressivo }] : []),
+    { rotulo: "(−) IR/IRRF · IRPJ/CSLL nos TDs", fn: (r) => r.ir },
+    { rotulo: "(−) Taxas e tarifas", fn: (r) => r.taxas },
     { rotulo: "(=) Rendimento líquido", fn: (r) => r.liquido, forte: true },
   ];
 
@@ -346,7 +371,7 @@ export function R11MoedaTipo() {
         },
         {
           nome: "Matriz ME",
-          titulo: "R11 – Saldo em moeda original (saldo na curva)",
+          titulo: "R11 – Saldo em moeda original (saldo bruto)",
           subtitulo: sub,
           colunas: [{ titulo: "Tipo de contrato / indicador", largura: 34 }, { titulo: "USD", tipo: "decimal", largura: 18 }, { titulo: "EUR", tipo: "decimal", largura: 18 }],
           linhas: [
@@ -380,13 +405,14 @@ export function R11MoedaTipo() {
           colunas: [{ titulo: "Linha", largura: 36 }, { titulo: "BRL", tipo: "moeda" }, { titulo: "USD", tipo: "moeda" }, { titulo: "EUR", tipo: "moeda" }, { titulo: "Total", tipo: "moeda" }],
           linhas: [
             ["DESDE A APLICAÇÃO (até a data-base)"],
-            ...linhasResultado.map((l) => [l.rotulo, ...(["BRL", "USD", "EUR", "Total"] as const).map((k) => l.fn(d.resAcumulado[k]) * (l.sinal ?? 1))]),
+            ...linhasResultado.map((l) => [l.rotulo, ...(["BRL", "USD", "EUR", "Total"] as const).map((k) => l.fn(d.resAcumulado[k]))]),
             [],
             [`NO MÊS (${fmtMonthLong(p.dataBase)})`],
-            ...linhasResultado.map((l) => [l.rotulo, ...(["BRL", "USD", "EUR", "Total"] as const).map((k) => l.fn(d.resMes[k]) * (l.sinal ?? 1))]),
+            ...linhasResultado.map((l) => [l.rotulo, ...(["BRL", "USD", "EUR", "Total"] as const).map((k) => l.fn(d.resMes[k]))]),
           ],
           notas: [
             "Time deposits: juros convertidos pela PTAX da data-base e variação cambial sobre o principal (acumulada) ou sobre o saldo em moeda do fim do mês anterior (no mês); IR = provisão de IRPJ/CSLL (34%).",
+            `IOF câmbio (remessa) = IOF realizado de ${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio)} na remessa dos time deposits (Decreto 6.306/2007, art. 15-B, XXI-A, red. Decreto 12.499/2025). Linhas (−) em valor positivo; IR do mês negativo = reversão de provisão.`,
             "No mês: rendimento do período pelo motor de rentabilidade da Carteira-Mestre (inclui contratos liquidados no mês).",
           ],
         },
@@ -428,21 +454,57 @@ export function R11MoedaTipo() {
       onExport={exportar}
       kpis={
         <div className="flex flex-wrap gap-x-8 gap-y-3 xl:grid xl:grid-cols-3">
-          <HeaderKpi label="Carteira em R$" value={fmtCompact(base.total)} sub={`saldo na curva · ${contratos.length} contratos`} />
-          <HeaderKpi label="Exposição cambial" value={fmtCompact(base.expTotal)} sub={`${fmtPct(expShare, 1)} da carteira`} />
-          <HeaderKpi label="USD (ME)" value={fmtMECompacto(base.exp.USD.me, "USD")} sub={`PTAX ${fmtDec(p.ptaxUSD, 4)}${base.exp.USD.fundo > 0 ? " · inclui fundo cambial" : ""}`} />
-          <HeaderKpi label="EUR (ME)" value={fmtMECompacto(base.exp.EUR.me, "EUR")} sub={`PTAX ${fmtDec(p.ptaxEUR, 4)}`} />
+          <HeaderKpi
+            label="Carteira em R$"
+            value={fmtCompact(base.total)}
+            sub={`saldo bruto · ${plural(contratos.length, "contrato", "contratos")}`}
+          />
+          {visao === "contrato" ? (
+            <HeaderKpi
+              label="Contratos em moeda estrangeira"
+              value={fmtCompact(base.ctrTotal)}
+              sub={
+                base.expTotal !== base.ctrTotal
+                  ? `${fmtPct(ctrShare, 1)} da carteira · c/ fundo cambial: ${fmtCompact(base.expTotal)}`
+                  : `${fmtPct(ctrShare, 1)} da carteira · time deposits`
+              }
+            />
+          ) : (
+            <HeaderKpi
+              label="Exposição cambial"
+              value={fmtCompact(base.expTotal)}
+              sub={`${fmtPct(expShare, 1)} da carteira${temFundoCambial ? " · c/ fundo cambial" : ""}`}
+            />
+          )}
+          {MOEDAS_EST.map((m) => {
+            const me = visao === "contrato" ? base.ctr[m].me : base.exp[m].me;
+            const comFundo = visao === "exposicao" && base.exp[m].fundo > 0;
+            return (
+              <HeaderKpi
+                key={m}
+                label={`${m} (ME)`}
+                value={fmtMECompacto(me, m)}
+                sub={`PTAX ${fmtDec(ptaxDB(m, p), 4)}${comFundo ? " · inclui fundo cambial" : ""}`}
+              />
+            );
+          })}
           <HeaderKpi
             label="Variação cambial do mês"
-            value={fmtCompact(base.vcMesEconomica)}
-            state={Math.round(base.vcMesEconomica) < 0 ? "negative" : Math.round(base.vcMesEconomica) > 0 ? "positive" : "neutral"}
-            sub={fmtMonthLong(p.dataBase)}
+            value={fmtCompact(vcMesKpi)}
+            state={Math.round(vcMesKpi) < 0 ? "negative" : Math.round(vcMesKpi) > 0 ? "positive" : "neutral"}
+            sub={
+              Math.round(base.vcMesEconomica - base.vcMesTD) === 0
+                ? fmtMonthLong(p.dataBase)
+                : visao === "contrato"
+                  ? `exposição cambial (c/ fundo cambial): ${fmtCompact(base.vcMesEconomica)}`
+                  : `moeda do contrato (time deposits): ${fmtCompact(base.vcMesTD)}`
+            }
           />
           <HeaderKpi
             label="Uso do limite cambial"
             value={fmtPct(utilizacao, 0)}
             state={semaforoState(pol.status)}
-            sub={`${fmtPct(pol.share, 1)} da carteira · limite ${fmtPct(pol.limite, 0)}`}
+            sub={`política: ${fmtPct(pol.share, 1)} da carteira · limite ${fmtPct(pol.limite, 0)}`}
           />
         </div>
       }
@@ -507,7 +569,7 @@ export function R11MoedaTipo() {
                   {MOEDAS.map((m) => (
                     <Th key={m}>
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: MOEDA_COR[m] }} />
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COR_MOEDA[m] }} />
                         {m}
                       </span>
                     </Th>
@@ -543,13 +605,14 @@ export function R11MoedaTipo() {
               </tbody>
             </table>
           </div>
-          <Conferencia>
-            Total da matriz = Σ {med.label.toLowerCase()} da Carteira-Mestre: <strong>{fmtBRL(d.conferencia, true)}</strong>
-            {Math.abs(d.conferencia - d.totalCel.Total) < 0.005 ? " (diferença 0,00)" : ` (diferença ${fmtBRL(d.conferencia - d.totalCel.Total, true)})`}
+          <Conferencia ok={matrizOk}>
+            Total da matriz {matrizOk ? "igual à" : "diverge da"} Σ {med.label.toLowerCase()} da Carteira-Mestre:{" "}
+            <strong>{fmtBRL(d.conferencia, true)}</strong>
+            {matrizOk ? " (diferença 0,00)" : ` (diferença ${fmtBRL(d.conferencia - d.totalCel.Total, true)})`}
           </Conferencia>
         </Card>
 
-        <Card title="Matriz em moeda original" subtitle={`Saldo na curva em USD e EUR · ${visaoLabel.toLowerCase()}`} bodyClassName="px-0 pb-0" className="min-w-0">
+        <Card title="Matriz em moeda original" subtitle={`Saldo bruto em USD e EUR · ${visaoLabel.toLowerCase()}`} bodyClassName="px-0 pb-0" className="min-w-0">
           <div className="overflow-x-auto fiori-scroll">
             <table className="w-full text-sm border-separate border-spacing-0">
               <thead>
@@ -622,8 +685,9 @@ export function R11MoedaTipo() {
               </tbody>
             </table>
           </div>
-          <Conferencia>
-            Time deposits (R10): {fmtME(base.tdME.USD, "USD")} · {fmtME(base.tdME.EUR, "EUR")} = Σ saldo em moeda dos TDs
+          <Conferencia ok={tdOk}>
+            Linha Time deposit {tdOk ? "igual ao" : "diverge do"} R10 (Σ saldo em moeda dos TDs): {fmtME(base.tdME.USD, "USD")} ·{" "}
+            {fmtME(base.tdME.EUR, "EUR")}
             {visao === "exposicao" && base.exp.USD.fundo > 0 && <> · + fundo cambial {fmtME(base.exp.USD.fundo, "USD")}</>}
           </Conferencia>
         </Card>
@@ -666,7 +730,7 @@ export function R11MoedaTipo() {
               valor: contratos.filter((c) => moedaNaVisao(c, visao) === m).reduce((s, c) => s + medidaDonut.fn(c), 0),
             }))}
           />
-          {medida === "liquido" && <p className="text-xs text-label mt-3">Com a medida rendimento líquido, o gráfico mostra a composição do saldo na curva.</p>}
+          {medida === "liquido" && <p className="text-xs text-label mt-3">Com a medida rendimento líquido, o gráfico mostra a composição do saldo bruto.</p>}
           <div className="mt-4 pt-3 border-t border-line-soft">
             <div className="text-[13px] font-bold text-text">PTAX de fim de mês – 12 meses</div>
             <div className="text-xs text-label">Série importada do SAP (TCURR, tipo M) · R$ por unidade</div>
@@ -678,8 +742,8 @@ export function R11MoedaTipo() {
                   <YAxis tick={{ ...AXIS_STYLE, fontSize: 11 }} tickLine={false} axisLine={false} width={40} domain={[eixoPtax[0], eixoPtax[eixoPtax.length - 1]]} ticks={eixoPtax} tickFormatter={(v: number) => fmtDec(v, 1)} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtDec(v, 4), n]} />
                   <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
-                  <Line dataKey="USD" name="USD" stroke={MOEDA_COR.USD} strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line dataKey="EUR" name="EUR" stroke={MOEDA_COR.EUR} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line dataKey="USD" name="USD" stroke={COR_MOEDA.USD} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line dataKey="EUR" name="EUR" stroke={COR_MOEDA.EUR} strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -705,7 +769,7 @@ export function R11MoedaTipo() {
                   <tr key={x.moeda}>
                     <td className="pl-4 pr-3 py-2 border-b border-line-soft whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: MOEDA_COR[x.moeda] }} />
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COR_MOEDA[x.moeda] }} />
                         <span className="font-semibold text-text">{x.moeda}</span>
                         <span className="text-xs text-label">{x.qtd} contr.</span>
                       </span>
@@ -783,18 +847,18 @@ export function R11MoedaTipo() {
                       {l.rotulo}
                     </td>
                     {([...MOEDAS, "Total"] as const).map((k) => {
-                      const v = l.fn(res[k]) * (l.sinal ?? 1);
+                      const v = l.fn(res[k]);
+                      const cor = l.forte || (l.recuo && l.rotulo === "Variação cambial") ? corSinal(v) : undefined;
                       return (
                         <TdNum
                           key={k}
                           className={clsx(
                             (l.forte || k === "Total") && "bg-[#f5f6f7]",
                             k === "Total" && "pr-4 font-semibold",
-                            l.recuo && "text-label",
-                            (l.forte || (l.recuo && l.rotulo === "Variação cambial")) && corSinal(v),
+                            cor ?? (l.recuo && "text-label"),
                           )}
                         >
-                          {fmtNum(v, { parens: true, dash: true })}
+                          {fmtNum(v, { dash: true })}
                         </TdNum>
                       );
                     })}
@@ -806,7 +870,10 @@ export function R11MoedaTipo() {
           <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
             {periodo === "acumulado"
               ? "Time deposits: juros em moeda convertidos pela PTAX da data-base e variação cambial sobre o principal (PTAX da remessa → PTAX da data-base); IR = provisão de IRPJ/CSLL (34%) sobre o resultado positivo."
-              : `Rendimento de ${fmtDate(inicioMes)} a ${fmtDate(p.dataBase)} pelo motor de rentabilidade da Carteira-Mestre (inclui contratos liquidados no mês). Time deposits: variação cambial do mês sobre o saldo em moeda do fim do mês anterior.`}{" "}
+              : `Rendimento de ${fmtDate(inicioMes)} a ${fmtDate(p.dataBase)} pelo motor de rentabilidade da Carteira-Mestre (inclui contratos liquidados no mês). Time deposits: variação cambial do mês sobre o saldo em moeda do fim do mês anterior; IR do mês negativo = reversão de provisão.`}{" "}
+            IOF câmbio (remessa): IOF realizado de {fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio)} na remessa dos time deposits para investimento no exterior
+            {periodo === "mes" ? " feita no mês" : ""}
+            {temIofRegressivo ? "; IOF regressivo: realizado em resgates de renda fixa e fundos com menos de 30 dias" : ""}. Linhas (−) em valor positivo.{" "}
             {visao === "exposicao" && fundo ? "Fundo cambial: variação cambial estimada pela variação da PTAX sobre o saldo aplicado; o restante é o cupom cambial líquido da taxa de administração." : ""}
           </p>
         </Card>
@@ -838,7 +905,7 @@ export function R11MoedaTipo() {
                     <tr key={l.moeda}>
                       <td className="pl-4 pr-3 py-2 border-b border-line-soft whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: MOEDA_COR[l.moeda] }} />
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COR_MOEDA[l.moeda] }} />
                           <div>
                             <div className="font-semibold text-text">{l.moeda}</div>
                             <div className="text-xs text-label">
@@ -850,7 +917,7 @@ export function R11MoedaTipo() {
                       <TdNum>{fmtNum(l.brl, { dash: true })}</TdNum>
                       {l.efeitos.map((v, i) => (
                         <TdNum key={i} className={clsx(i === CHOQUES.length - 1 && "pr-4", corSinal(v))}>
-                          {fmtNum(v, { parens: true, dash: true })}
+                          {fmtNum(v, { dash: true })}
                         </TdNum>
                       ))}
                     </tr>
@@ -860,7 +927,7 @@ export function R11MoedaTipo() {
                     <TdNum className="bg-[#f5f6f7]">{fmtNum(sens.total.brl, { dash: true })}</TdNum>
                     {sens.total.efeitos.map((v, i) => (
                       <TdNum key={i} className={clsx("bg-[#f5f6f7]", i === CHOQUES.length - 1 && "pr-4", corSinal(v))}>
-                        {fmtNum(v, { parens: true, dash: true })}
+                        {fmtNum(v, { dash: true })}
                       </TdNum>
                     ))}
                   </tr>
@@ -911,8 +978,8 @@ export function R11MoedaTipo() {
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtBRL(v * 1e3), n]} />
                   <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="circle" iconSize={8} />
                   <ReferenceLine y={0} stroke="#a8b2bd" />
-                  <Bar dataKey="USD" name="USD" stackId="s" fill={MOEDA_COR.USD} maxBarSize={56} isAnimationActive={false} />
-                  <Bar dataKey="EUR" name="EUR" stackId="s" fill={MOEDA_COR.EUR} maxBarSize={56} isAnimationActive={false} />
+                  <Bar dataKey="USD" name="USD" stackId="s" fill={COR_MOEDA.USD} maxBarSize={56} isAnimationActive={false} />
+                  <Bar dataKey="EUR" name="EUR" stackId="s" fill={COR_MOEDA.EUR} maxBarSize={56} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -977,10 +1044,11 @@ function CelulaMatriz({ valor, total, forte, rodape }: { valor: number; total: n
   );
 }
 
-function Conferencia({ children }: { children: ReactNode }) {
+function Conferencia({ ok, children }: { ok: boolean; children: ReactNode }) {
+  const Icone = ok ? CheckCircle2 : AlertTriangle;
   return (
     <div className="px-4 py-2.5 border-t border-line-soft text-xs text-label flex items-start gap-1.5">
-      <CheckCircle2 className="w-3.5 h-3.5 text-positive shrink-0 mt-px" />
+      <Icone className={clsx("w-3.5 h-3.5 shrink-0 mt-px", ok ? "text-positive" : "text-negative")} />
       <span className="min-w-0">{children}</span>
     </div>
   );
@@ -1006,7 +1074,7 @@ function DonutMoeda({ fatias }: { fatias: { moeda: Moeda; valor: number }[] }) {
           <PieChart>
             <Pie data={visiveis} dataKey="valor" nameKey="moeda" innerRadius="58%" outerRadius="100%" paddingAngle={1.5} stroke="none" isAnimationActive={false}>
               {visiveis.map((f) => (
-                <Cell key={f.moeda} fill={MOEDA_COR[f.moeda]} />
+                <Cell key={f.moeda} fill={COR_MOEDA[f.moeda]} />
               ))}
             </Pie>
             <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [fmtCompact(v), n]} />
@@ -1017,7 +1085,7 @@ function DonutMoeda({ fatias }: { fatias: { moeda: Moeda; valor: number }[] }) {
         {fatias.map((f) => (
           <li key={f.moeda} className="text-[13px]">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: MOEDA_COR[f.moeda] }} />
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COR_MOEDA[f.moeda] }} />
               <span className="font-semibold text-text">{f.moeda}</span>
               <span className="text-label truncate flex-1">{MOEDA_NOME[f.moeda]}</span>
               <span className="tabular font-semibold text-text">{fmtPct(total !== 0 ? f.valor / total : 0, 1)}</span>

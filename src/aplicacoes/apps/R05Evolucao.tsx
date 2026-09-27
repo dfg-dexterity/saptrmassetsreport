@@ -1,5 +1,4 @@
 import clsx from "clsx";
-import { CheckCircle2, XCircle } from "lucide-react";
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -19,9 +18,11 @@ import {
   TIPOS_CONTRATO,
   type EventoMestre,
   type MesMestre,
+  type RentabContrato,
   type TipoContrato,
 } from "../lib/carteiraMestre";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
+import { PARAMETROS_TIME_DEPOSIT } from "../data/timeDeposits";
 import { useBenchmarks } from "../context/BenchmarkContext";
 import { compararCarteira, corExcesso, situacaoBenchmark, SITUACAO_STATE, type ComparacaoBenchmark, type SituacaoBenchmark } from "../lib/benchmark";
 
@@ -45,6 +46,8 @@ type MesR05 = MesMestre & {
   situacao: SituacaoBenchmark;
   /** SI + aplicações + rendimentos − resgates brutos − come-cotas − SF (deve ser 0,00) */
   diferenca: number;
+  /** IOF câmbio + tarifa pagos na remessa dos time deposits aplicados no mês (custo fora do saldo bruto) */
+  remessaTD: number;
 };
 
 /** Coluna "12 meses": mesmo método do R03 consolidado (capital base de cada contrato no início da janela) */
@@ -54,6 +57,11 @@ interface Total12m {
   bmk: ComparacaoBenchmark;
   /** identidade da janela: SI do 1º mês + fluxos − SF do último mês */
   diferenca: number;
+  /** IOF do período no R03 (retido nos resgates + IOF câmbio na remessa dos time deposits) */
+  iofR03: number;
+  /** IOF câmbio e tarifa na remessa dos time deposits aplicados na janela */
+  iofCambioTD: number;
+  tarifaTD: number;
 }
 
 const baseMedia = (m: MesMestre) => m.saldoInicial + 0.5 * (m.aplicacoes - m.resgatesBrutos);
@@ -75,7 +83,6 @@ interface LinhaDef {
   destaque?: boolean;
   /** linha "dos quais" (recuada, não soma) */
   recuo?: boolean;
-  sinal?: -1 | 1;
   /** total de 12 meses pelo método do R03 (nota ¹) */
   metodoR03?: boolean;
 }
@@ -88,9 +95,9 @@ const SECOES: { titulo: string; linhas: LinhaDef[] }[] = [
     linhas: [
       { rotulo: "Saldo inicial", valor: (m) => m.saldoInicial, total: (ms) => ms[0]?.saldoInicial ?? 0, destaque: true },
       { rotulo: "(+) Aplicações", valor: (m) => m.aplicacoes, total: somaMeses((m) => m.aplicacoes) },
-      { rotulo: "(−) Resgates brutos ²", valor: (m) => m.resgatesBrutos, total: somaMeses((m) => m.resgatesBrutos), sinal: -1 },
+      { rotulo: "(−) Resgates brutos ²", valor: (m) => m.resgatesBrutos, total: somaMeses((m) => m.resgatesBrutos) },
       { rotulo: "(+) Rendimentos brutos ³", valor: (m) => m.rendimentos, total: somaMeses((m) => m.rendimentos) },
-      { rotulo: "(−) Come-cotas ⁴", valor: (m) => m.comeCotas, total: somaMeses((m) => m.comeCotas), sinal: -1 },
+      { rotulo: "(−) Come-cotas ⁴", valor: (m) => m.comeCotas, total: somaMeses((m) => m.comeCotas) },
       { rotulo: "Saldo final", valor: (m) => m.saldoFinal, total: (ms) => ms[ms.length - 1]?.saldoFinal ?? 0, destaque: true },
       { rotulo: "Diferença (checagem)", valor: (m) => m.diferenca, total: (_, t) => t.diferenca, tipo: "check" },
     ],
@@ -98,10 +105,11 @@ const SECOES: { titulo: string; linhas: LinhaDef[] }[] = [
   {
     titulo: "Retenções na fonte e caixa",
     linhas: [
-      { rotulo: "(−) IRRF (inclui come-cotas)", valor: (m) => m.irrf, total: somaMeses((m) => m.irrf), sinal: -1 },
-      { rotulo: "dos quais come-cotas", valor: (m) => m.comeCotas, total: somaMeses((m) => m.comeCotas), sinal: -1, recuo: true },
-      { rotulo: "(−) IOF", valor: (m) => m.iof, total: somaMeses((m) => m.iof), sinal: -1 },
-      { rotulo: "(−) Resgates líquidos (caixa)", valor: (m) => m.resgatesLiquidos, total: somaMeses((m) => m.resgatesLiquidos), sinal: -1 },
+      { rotulo: "(−) IRRF (inclui come-cotas)", valor: (m) => m.irrf, total: somaMeses((m) => m.irrf) },
+      { rotulo: "dos quais come-cotas", valor: (m) => m.comeCotas, total: somaMeses((m) => m.comeCotas), recuo: true },
+      { rotulo: "(−) IOF", valor: (m) => m.iof, total: somaMeses((m) => m.iof) },
+      { rotulo: "(−) Resgates líquidos (caixa)", valor: (m) => m.resgatesLiquidos, total: somaMeses((m) => m.resgatesLiquidos) },
+      { rotulo: "IOF câmbio e tarifa na remessa (TDs) ⁵", valor: (m) => m.remessaTD, total: somaMeses((m) => m.remessaTD) },
     ],
   },
   {
@@ -116,8 +124,6 @@ const SECOES: { titulo: string; linhas: LinhaDef[] }[] = [
   },
 ];
 
-/** Valor exportado: fluxos negativos com sinal; percentuais em fração */
-const valorExport = (l: LinhaDef, v: number) => (l.tipo && l.tipo !== "check" ? v : v * (l.sinal ?? 1));
 
 export function R05Evolucao() {
   const [escopo, setEscopo] = useState<Escopo>("todas");
@@ -127,8 +133,11 @@ export function R05Evolucao() {
 
   const d = useMemo(() => {
     const fins = lastMonthEnds(p.dataBase, 13);
+    // IOF câmbio e tarifa dos time deposits: pagos na remessa, à parte do valor aplicado – no R03 e nos KPIs (IOF e taxas)
+    const remessa = (ls: RentabContrato[]) => ls.filter((l) => l.tipo === "Time deposit").reduce((s, l) => s + l.iof + l.taxas, 0);
     const meses: MesR05[] = evolucaoMestre(fins.slice(1), p, escopo).map((m) => {
-      const cmp = compararCarteira(rentabilidadeMestre(m.inicio, m.fim, p, escopo), cadastro, p);
+      const linhasMes = rentabilidadeMestre(m.inicio, m.fim, p, escopo);
+      const cmp = compararCarteira(linhasMes, cadastro, p);
       const b = baseMedia(m);
       const peso = b * m.cdiMes;
       const pctBmk = peso > 0 ? cmp.rendBenchmark / peso : cmp.pct;
@@ -140,12 +149,14 @@ export function R05Evolucao() {
         excesso: m.rendimentos - cmp.rendBenchmark,
         situacao: situacaoBenchmark(m.pctCDI, pctBmk),
         diferenca: identidade(m),
+        remessaTD: remessa(linhasMes),
       };
     });
     const linhas12 = rentabilidadeMestre(fins[0], p.dataBase, p, escopo);
     const rend12 = linhas12.reduce((s, l) => s + l.rendimento, 0);
     const peso12 = linhas12.reduce((s, l) => s + l.base * l.cdiPeriodo, 0);
     const soma = (fn: (m: MesR05) => number) => meses.reduce((s, m) => s + fn(m), 0);
+    const tds12 = linhas12.filter((l) => l.tipo === "Time deposit");
     const total12: Total12m = {
       rendimento: rend12,
       pctCDI: peso12 > 0 ? rend12 / peso12 : 0,
@@ -158,6 +169,9 @@ export function R05Evolucao() {
         comeCotas: soma((m) => m.comeCotas),
         saldoFinal: meses[meses.length - 1].saldoFinal,
       }),
+      iofR03: linhas12.reduce((s, l) => s + l.iof, 0),
+      iofCambioTD: tds12.reduce((s, l) => s + l.iof, 0),
+      tarifaTD: tds12.reduce((s, l) => s + l.taxas, 0),
     };
     return { meses, total12 };
   }, [p, escopo, cadastro]);
@@ -168,6 +182,7 @@ export function R05Evolucao() {
   const bmk12 = d.total12.bmk.pct;
   const sit12 = d.total12.bmk.situacao;
   const excessoMeses = soma((m) => m.excesso);
+  const iof12 = soma((m) => m.iof);
   const final = d.meses[d.meses.length - 1];
   const mes = d.meses.find((m) => m.fim === mesSel) ?? final;
 
@@ -236,19 +251,17 @@ export function R05Evolucao() {
             [s.titulo.toUpperCase()],
             ...s.linhas.map((l) => [
               l.recuo ? `   ${l.rotulo}` : l.rotulo,
-              ...d.meses.map((m) => valorExport(l, l.valor(m))),
-              l.total ? (() => {
-                const v = l.total(d.meses, d.total12);
-                return v === null ? "" : valorExport(l, v);
-              })() : "",
+              ...d.meses.map((m) => l.valor(m)),
+              l.total ? (l.total(d.meses, d.total12) ?? "") : "",
             ]),
           ]),
           notas: [
             "Identidade da movimentação: saldo final = saldo inicial + aplicações + rendimentos − resgates brutos − come-cotas (linha Diferença = 0,00).",
             "Saldo bruto: curva na renda fixa e nos títulos públicos, valor da cota nos fundos e saldo em moeda × PTAX nos time deposits.",
-            "Resgates brutos: resgates, vencimentos e cupons recebidos, antes de IRRF e IOF. Resgates líquidos = resgates brutos − IRRF (exceto come-cotas) − IOF.",
+            "Linhas (−): valores positivos, deduzidos conforme o rótulo. Resgates brutos: resgates, vencimentos e cupons recebidos, antes de IRRF e IOF. Resgates líquidos = resgates brutos − IRRF (exceto come-cotas) − IOF.",
             "Rendimentos brutos: juros, cupons, variação das cotas e variação cambial dos time deposits (CPC 02).",
             "Come-cotas: IRRF antecipado em maio e novembro pela redução da quantidade de cotas, sem saída de caixa.",
+            `IOF câmbio (${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio)}) e tarifa na remessa dos time deposits: custo da remessa, pago à parte do valor aplicado e fora do saldo bruto (12 meses: IOF câmbio ${fmtBRL(d.total12.iofCambioTD)} e tarifas ${fmtBRL(d.total12.tarifaTD)}). O R03 e o Painel de KPIs somam o IOF câmbio ao IOF do período: ${fmtBRL(iof12)} + ${fmtBRL(d.total12.iofCambioTD)} = ${fmtBRL(d.total12.iofR03)}.`,
             "Linhas de rentabilidade, CDI, % do CDI e benchmark expressas em fração (formatar como %).",
             "Benchmark do mês: rendimento que os contratos do mês teriam gerado no benchmark cadastrado, calculado dia a dia com a regra vigente em cada dia (capital base × (Π (1 + DI diário × % da regra) − 1)), expresso sobre o saldo médio do mês – mesma base do % do CDI do mês; excesso = rendimentos − rendimento do benchmark.",
             `Coluna 12 meses de % do CDI, benchmark e excesso: mesmo método do R03 (capital base de cada contrato no início da janela). A soma dos excessos mensais (${fmtBRL(excessoMeses)}) difere do excesso de 12 meses (${fmtBRL(d.total12.bmk.excesso)}) porque, mês a mês, o capital é recalculado com o rendimento realizado.`,
@@ -328,17 +341,39 @@ export function R05Evolucao() {
       </div>
 
       <MessageStrip design={okIdentidade && okMestre && okR03 ? "positive" : "critical"}>
-        <span className="inline-flex flex-wrap gap-x-5 gap-y-1">
+        <ul className="space-y-0.5">
           <Checagem ok={okMestre}>
-            Saldo final de {fmtMonthShort(final.fim)} = Carteira-Mestre: <strong>{fmtBRL(conc.mestre)}</strong> (diferença {fmtBRL(okMestre ? 0 : conc.dif, true)})
+            {okMestre ? (
+              <>
+                Saldo final de {fmtMonthShort(final.fim)} igual à Carteira-Mestre: <strong>{fmtBRL(conc.mestre)}</strong> (diferença {fmtBRL(0, true)})
+              </>
+            ) : (
+              <>
+                Saldo final de {fmtMonthShort(final.fim)} diverge da Carteira-Mestre ({fmtBRL(conc.mestre)}): diferença de <strong>{fmtBRL(conc.dif, true)}</strong>
+              </>
+            )}
           </Checagem>
           <Checagem ok={okIdentidade}>
-            Identidade SI + aplicações + rendimentos − resgates brutos − come-cotas = SF: diferença {fmtBRL(okIdentidade ? 0 : maxDifMes, true)} em todos os meses
+            {okIdentidade ? (
+              <>Identidade SI + aplicações + rendimentos − resgates brutos − come-cotas = SF fechada em todos os meses (diferença {fmtBRL(0, true)})</>
+            ) : (
+              <>
+                Identidade SI + aplicações + rendimentos − resgates brutos − come-cotas = SF não fecha: diferença de até <strong>{fmtBRL(maxDifMes, true)}</strong>
+              </>
+            )}
           </Checagem>
           <Checagem ok={okR03}>
-            Rendimentos 12m = R03 consolidado: <strong>{fmtBRL(d.total12.rendimento)}</strong>
+            {okR03 ? (
+              <>
+                Rendimentos 12m iguais ao R03 consolidado: <strong>{fmtBRL(d.total12.rendimento)}</strong>
+              </>
+            ) : (
+              <>
+                Rendimentos 12m ({fmtBRL(rend12)}) divergem do R03 consolidado: <strong>{fmtBRL(d.total12.rendimento)}</strong>
+              </>
+            )}
           </Checagem>
-        </span>
+        </ul>
       </MessageStrip>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -422,7 +457,8 @@ export function R05Evolucao() {
                       if (l.tipo === "pct") return fmtPct(v);
                       if (l.tipo === "cdi" || l.tipo === "bmk") return `${fmtDec(v * 100, 1)}%`;
                       if (l.tipo === "check") return fmtDec(Math.abs(v) < TOL ? 0 : v, 2);
-                      return fmtNum(v * (l.sinal ?? 1), { parens: true, dash: true });
+                      // linhas (−) mostram o valor positivo; negativos com "−" colado (sem parênteses)
+                      return fmtNum(v, { dash: true });
                     };
                     const corCheck = (v: number | null) => l.tipo === "check" && v !== null && (Math.abs(v) < TOL ? "text-positive" : "text-negative font-bold");
                     const tot = l.total ? l.total(d.meses, d.total12) : null;
@@ -480,7 +516,11 @@ export function R05Evolucao() {
             PTAX nos time deposits. <sup>2</sup> Resgates, vencimentos e cupons pelo valor bruto (antes de IRRF e IOF).{" "}
             <sup>3</sup> Juros, cupons, variação das cotas e variação cambial dos time deposits (CPC 02). <sup>4</sup> O come-cotas
             (maio e novembro) antecipa o IR dos fundos pela redução da quantidade de cotas, sem saída de caixa; também compõe o
-            IRRF. Resgates líquidos = resgates brutos − IRRF retido nos resgates e cupons − IOF.
+            IRRF. Resgates líquidos = resgates brutos − IRRF retido nos resgates e cupons − IOF. <sup>5</sup> Custo da remessa dos
+            time deposits (IOF câmbio de {fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio)} e tarifa bancária), pago à parte do valor aplicado:
+            fica fora do saldo bruto e da movimentação. O R03 e o Painel de KPIs somam o IOF câmbio ao IOF do período – em 12 meses,{" "}
+            {fmtBRL(iof12)} retidos nos resgates + {fmtBRL(d.total12.iofCambioTD)} de IOF câmbio = {fmtBRL(d.total12.iofR03)}; a tarifa (
+            {fmtBRL(d.total12.tarifaTD)}) entra nas taxas.
           </p>
           <p>
             Meses: % do CDI e benchmark sobre o saldo médio do mês (saldo inicial + ½ × (aplicações − resgates)); o benchmark é o
@@ -538,7 +578,7 @@ export function R05Evolucao() {
                           {t.origem}
                         </Link>
                       </span>
-                      <div className="text-xs text-label pl-[18px]">{t.contratos} contrato(s)</div>
+                      <div className="text-xs text-label pl-[18px]">{plural(t.contratos, "contrato", "contratos")}</div>
                     </td>
                     <td className="px-2 py-2 border-b border-line-soft text-right tabular whitespace-nowrap">{fmtNum(t.r05, { dash: true })}</td>
                     <td className="px-2 py-2 border-b border-line-soft text-right tabular whitespace-nowrap">{fmtNum(t.mestre, { dash: true })}</td>
@@ -556,9 +596,9 @@ export function R05Evolucao() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="pl-4 pr-2 py-2 border-b border-line-soft text-label">(+) Ajuste a valor justo (MTM)</td>
+                  <td className="pl-4 pr-2 py-2 border-b border-line-soft text-label">(±) Ajuste a valor justo (MTM)</td>
                   <td className="px-2 py-2 border-b border-line-soft" />
-                  <td className="px-2 py-2 border-b border-line-soft text-right tabular text-label whitespace-nowrap">{fmtNum(conc.mtm, { parens: true, dash: true })}</td>
+                  <td className="px-2 py-2 border-b border-line-soft text-right tabular text-label whitespace-nowrap">{fmtNum(conc.mtm, { dash: true })}</td>
                   <td className="pl-2 pr-4 py-2 border-b border-line-soft" />
                 </tr>
                 <tr className="font-semibold">
@@ -619,14 +659,14 @@ export function R05Evolucao() {
                           Math.round(v) < 0 && "text-negative",
                         )}
                       >
-                        {fmtNum(v, { parens: true, dash: true })}
+                        {fmtNum(v, { dash: true })}
                       </td>
                     );
                   })}
                   <td className="px-2.5 py-2 text-right tabular text-[13px] border-b border-line-soft bg-[#f5f6f7] font-bold whitespace-nowrap">
                     {fmtNum(
                       d.meses.reduce((s, m) => s + m.porTipo[t.tipo].rendimentos, 0),
-                      { parens: true, dash: true },
+                      { dash: true },
                     )}
                   </td>
                 </tr>
@@ -638,10 +678,10 @@ export function R05Evolucao() {
                     key={m.fim}
                     className={clsx("px-2.5 py-2.5 text-right tabular text-[13px] border-b border-[#a8b2bd] whitespace-nowrap", m.fim === mes.fim ? "bg-selected" : "bg-[#f5f6f7]")}
                   >
-                    {fmtNum(m.rendimentos, { parens: true, dash: true })}
+                    {fmtNum(m.rendimentos, { dash: true })}
                   </td>
                 ))}
-                <td className="px-2.5 py-2.5 text-right tabular text-[13px] border-b border-[#a8b2bd] bg-[#f5f6f7] whitespace-nowrap">{fmtNum(rend12, { parens: true })}</td>
+                <td className="px-2.5 py-2.5 text-right tabular text-[13px] border-b border-[#a8b2bd] bg-[#f5f6f7] whitespace-nowrap">{fmtNum(rend12)}</td>
               </tr>
             </tbody>
           </table>
@@ -653,7 +693,7 @@ export function R05Evolucao() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card title={`Aplicações – ${fmtMonthLong(mes.fim)}`} subtitle={`${aplicacoesMes.length} contrato(s) · ${fmtBRL(mes.aplicacoes)}`}>
+        <Card title={`Aplicações – ${fmtMonthLong(mes.fim)}`} subtitle={`${plural(aplicacoesMes.length, "contrato", "contratos")} · ${fmtBRL(mes.aplicacoes)}`}>
           <ListaMov
             itens={aplicacoesMes.map((e) => ({
               k: `${e.codigo}-${e.data}-${e.tipo}`,
@@ -666,7 +706,7 @@ export function R05Evolucao() {
         </Card>
         <Card
           title={`Resgates, vencimentos e cupons – ${fmtMonthLong(mes.fim)}`}
-          subtitle={`${saidasMes.length} evento(s) · bruto ${fmtBRL(mes.resgatesBrutos)} · líquido ${fmtBRL(mes.resgatesLiquidos)}`}
+          subtitle={`${plural(saidasMes.length, "evento", "eventos")} · bruto ${fmtBRL(mes.resgatesBrutos)} · líquido ${fmtBRL(mes.resgatesLiquidos)}`}
         >
           <ListaMov itens={saidasMes.map(itemSaida)} />
         </Card>
@@ -697,13 +737,9 @@ function itemSaida(e: EventoMestre) {
   };
 }
 
+/** Item de checagem dentro da MessageStrip (o ícone é o da própria faixa): o texto já diz se confere ou diverge */
 function Checagem({ ok, children }: { ok: boolean; children: ReactNode }) {
-  const Icone = ok ? CheckCircle2 : XCircle;
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Icone className="w-3.5 h-3.5 shrink-0" /> <span>{children}</span>
-    </span>
-  );
+  return <li className={ok ? undefined : "text-negative"}>{children}</li>;
 }
 
 function ListaMov({ itens }: { itens: { k: string; cor: string; titulo: string; sub: string; valor: string }[] }) {

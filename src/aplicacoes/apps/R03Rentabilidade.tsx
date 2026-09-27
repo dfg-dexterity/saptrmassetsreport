@@ -14,7 +14,10 @@ import { ESCOPOS, useCarteira, type Escopo } from "../context/useDados";
 import { diffDays, fmtDate, lastMonthEnds, previousYearEnd } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { consolidarRentabilidade, rentabilidade, taxaContratada, type RentabOp } from "../lib/finance";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
+import { PARAMETROS_TESOURO } from "../data/tesouro";
+import { PARAMETROS_TIME_DEPOSIT } from "../data/timeDeposits";
+import { ALIQUOTA_IRPJ_CSLL } from "../data/tributacao";
 import { useBenchmarks } from "../context/BenchmarkContext";
 import { compararCarteira, compararOperacao, corExcesso, SITUACAO_STATE, SITUACAO_TEXTO, type ComparacaoBenchmark } from "../lib/benchmark";
 import { consolidarPorTipo, rentabilidadeMestre, TIPOS_CONTRATO, type RentabContrato, type TipoContrato } from "../lib/carteiraMestre";
@@ -52,23 +55,23 @@ const ROTULO_STATUS: Record<FiltroStatus, string> = {
   Liquidada: "Somente liquidados",
 };
 
-/** Critério de cada tipo de contrato no consolidado (subtítulo da linha e nota) */
+/** Critério de cada tipo de contrato no consolidado (subtítulo da linha e nota) – IR por competência, IOF só realizado */
 const CRITERIO_TIPO: Record<TipoContrato, { linha: string; nota: string }> = {
   "Renda fixa bancária": {
     linha: "CDB, LF, LCI/LCA, compromissadas e crédito privado",
-    nota: "Rendimento na curva do papel; IOF regressivo até D+30 e IRRF pela tabela regressiva (pessoa jurídica: inclusive LCI/LCA/CRI/CRA; debênture incentivada a 15%) – mesmo motor da tabela por contrato.",
+    nota: "Rendimento na curva do papel. IR = variação da provisão acumulada pela tabela regressiva (pessoa jurídica: inclusive LCI/LCA/CRI/CRA; debênture incentivada a 15%), negativo quando a mudança de faixa reverte provisão; IOF regressivo só quando realizado (resgate antes de 30 dias) – mesmo motor da tabela por contrato.",
   },
   "Tesouro Direto": {
     linha: "Títulos públicos na curva + cupons",
-    nota: "Variação do saldo na curva + cupons e vencimentos pagos no período; IRRF regressivo; taxas = custódia B3 (0,20% a.a.) + agente (0,05% a.a.).",
+    nota: `Variação do saldo na curva + cupons e vencimentos pagos no período; IR = variação do IR acumulado (retido nos cupons + provisão regressiva sobre o rendimento ainda não tributado); sem IOF (títulos carregados além de 30 dias); taxas = custódia B3 (${fmtPct(PARAMETROS_TESOURO.custodiaB3)} a.a.) + agente (${fmtPct(PARAMETROS_TESOURO.taxaAgente)} a.a.).`,
   },
   "Fundo de investimento": {
     linha: "Cota líquida de taxas + come-cotas",
-    nota: "Rendimento pela variação da cota, já líquida das taxas de administração e performance, somado ao come-cotas recolhido (redução de cotas); o IR do período inclui o come-cotas (maio/novembro) e o complemento pela alíquota do prazo.",
+    nota: "Rendimento pela variação da cota, já líquida das taxas de administração e performance, somado ao come-cotas recolhido (redução de cotas); IR = variação do IR acumulado (come-cotas de maio/novembro + provisão pela alíquota do prazo, IR complementar no resgate); IOF só no resgate antes de 30 dias.",
   },
   "Time deposit": {
     linha: "Juros + variação cambial (PTAX)",
-    nota: "Rendimento em R$ = juros + variação cambial pela PTAX: fica negativo quando o real se aprecia. IOF câmbio de 0,38% e tarifa na remessa; IRPJ/CSLL (34%) estimado, sem retenção na fonte.",
+    nota: `Rendimento em R$ = juros + variação cambial pela PTAX: fica negativo quando o real se aprecia. IOF câmbio de ${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio)} e tarifa na remessa, no período da aplicação; IRPJ/CSLL (${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}) = variação da provisão sobre o resultado, sem retenção na fonte.`,
   },
 };
 
@@ -258,8 +261,8 @@ export function R03Rentabilidade() {
       total: () => fmtNum(total.capital),
     },
     { key: "rend", header: "Rend. bruto", align: "right", value: (t) => t.rendimento, render: (t) => semDados(t, fmtNum(t.rendimento)), total: () => fmtNum(total.rendimento) },
-    { key: "iof", header: "IOF", headerTitle: "IOF regressivo (renda fixa, títulos e fundos) e IOF câmbio na remessa (time deposits)", align: "right", value: (t) => t.iof, render: (t) => (t.iof ? <span className="text-critical">{fmtNum(t.iof)}</span> : <span className="text-label">–</span>), total: () => fmtNum(total.iof, { dash: true }) },
-    { key: "ir", header: "IR", headerTitle: "IRRF (renda fixa, títulos e fundos, inclusive come-cotas) e IRPJ/CSLL estimado (time deposits)", align: "right", value: (t) => t.ir, render: (t) => (t.ir ? fmtNum(t.ir) : <span className="text-label">–</span>), total: () => fmtNum(total.ir, { dash: true }) },
+    { key: "iof", header: "IOF", headerTitle: "IOF realizado: regressivo nos resgates antes de 30 dias (renda fixa e fundos) e IOF câmbio na remessa (time deposits)", align: "right", value: (t) => t.iof, render: (t) => (t.iof ? <span className="text-critical">{fmtNum(t.iof)}</span> : <span className="text-label">–</span>), total: () => fmtNum(total.iof, { dash: true }) },
+    { key: "ir", header: "IR", headerTitle: "IR do período = variação do IR acumulado (retido + provisão), por competência – negativo quando há reversão; inclui o come-cotas dos fundos e o IRPJ/CSLL estimado dos time deposits", align: "right", value: (t) => t.ir, render: (t) => (t.ir ? fmtNum(t.ir) : <span className="text-label">–</span>), total: () => fmtNum(total.ir, { dash: true }) },
     { key: "taxas", header: "Taxas/tarifas", headerTitle: "Custódia B3 e agente (Tesouro Direto) e tarifa bancária (time deposits); fundos já rendem líquidos das taxas", align: "right", value: (t) => t.taxas, render: (t) => (t.taxas ? fmtNum(t.taxas) : <span className="text-label">–</span>), total: () => fmtNum(total.taxas, { dash: true }) },
     {
       key: "liq",
@@ -364,9 +367,9 @@ export function R03Rentabilidade() {
     },
     { key: "base", header: "Capital base", align: "right", headerTitle: "Saldo no início do período ou valor aplicado, se posterior", value: (r) => r.base, render: (r) => fmtNum(r.base) },
     { key: "rend", header: "Rend. bruto", headerTitle: "Rendimento bruto no período", align: "right", value: (r) => r.rendimento, render: (r) => fmtNum(r.rendimento), total: () => fmtNum(cart.rendimento) },
-    { key: "iof", header: "IOF", align: "right", value: (r) => r.iof, render: (r) => (r.iof ? <span className="text-critical">{fmtNum(r.iof)}</span> : <span className="text-label">–</span>), total: () => fmtNum(cart.iof) },
-    { key: "ir", header: "IRRF", align: "right", value: (r) => r.ir, render: (r) => fmtNum(r.ir), total: () => fmtNum(cart.ir) },
-    { key: "liq", header: "Rend. líquido", headerTitle: "Rendimento líquido de IOF e IRRF", align: "right", value: (r) => r.rendLiquido, render: (r) => <span className="font-semibold">{fmtNum(r.rendLiquido)}</span>, total: () => fmtNum(cart.rendLiquido) },
+    { key: "iof", header: "IOF", headerTitle: "IOF realizado (resgate antes de 30 dias)", align: "right", value: (r) => r.iof, render: (r) => (r.iof ? <span className="text-critical">{fmtNum(r.iof)}</span> : <span className="text-label">–</span>), total: () => fmtNum(cart.iof) },
+    { key: "ir", header: "IR", headerTitle: "IR do período = variação da provisão acumulada pela tabela regressiva, por competência – negativo quando há reversão", align: "right", value: (r) => r.ir, render: (r) => fmtNum(r.ir), total: () => fmtNum(cart.ir) },
+    { key: "liq", header: "Rend. líquido", headerTitle: "Rendimento líquido de IOF e IR", align: "right", value: (r) => r.rendLiquido, render: (r) => <span className="font-semibold">{fmtNum(r.rendLiquido)}</span>, total: () => fmtNum(cart.rendLiquido) },
     { key: "rb", header: "Rentab. bruta", align: "right", value: (r) => r.rentabBruta, render: (r) => fmtPct(r.rentabBruta), total: () => fmtPct(cart.rentabBruta) },
     {
       key: "cdib",
@@ -417,7 +420,7 @@ export function R03Rentabilidade() {
         const c = cmpDe(r);
         return (
           <div className="whitespace-nowrap">
-            <div className={corExcesso(c.excesso)}>{fmtNum(c.excesso, { parens: true })}</div>
+            <div className={corExcesso(c.excesso)}>{fmtNum(c.excesso)}</div>
             <div className="text-xs text-label">
               {c.realizado - c.pct >= 0 ? "+" : ""}
               {fmtDec((c.realizado - c.pct) * 100, 1)} p.p.
@@ -425,7 +428,7 @@ export function R03Rentabilidade() {
           </div>
         );
       },
-      total: () => <span className={corExcesso(bmk.excesso)}>{fmtNum(bmk.excesso, { parens: true })}</span>,
+      total: () => <span className={corExcesso(bmk.excesso)}>{fmtNum(bmk.excesso)}</span>,
     },
   ];
 
@@ -444,7 +447,7 @@ export function R03Rentabilidade() {
             { titulo: "Capital médio", tipo: "moeda" },
             { titulo: "Rendimento bruto", tipo: "moeda" },
             { titulo: "IOF", tipo: "moeda" },
-            { titulo: "IR (IRRF / IRPJ-CSLL)", tipo: "moeda", largura: 16 },
+            { titulo: "IR (competência: IRRF / IRPJ-CSLL)", tipo: "moeda", largura: 18 },
             { titulo: "Taxas/tarifas", tipo: "moeda" },
             { titulo: "Rendimento líquido", tipo: "moeda" },
             { titulo: "Rentab. bruta", tipo: "pct" },
@@ -495,6 +498,7 @@ export function R03Rentabilidade() {
             `CDI do período: ${fmtPct(cart.cdiPeriodo)} · IPCA do período: ${fmtPct(cart.ipcaPeriodo)} (IPCA 12m das Premissas: ${fmtPct(p.ipca12m)}, projetado com o último dado disponível).`,
             "Capital médio = capital base de cada contrato (saldo no início do período ou valor aplicado) × dias no período ÷ dias do período; % do CDI = rendimento ÷ Σ (capital base × CDI do período do contrato).",
             ...TIPOS_CONTRATO.map((t) => `${t.tipo}: ${CRITERIO_TIPO[t.tipo].nota}`),
+            "IR do período = variação do IR acumulado (retido + provisão), por competência – negativo quando há reversão; IOF só quando realizado.",
             "Rentabilidade real = (1 + rentabilidade líquida) / (1 + IPCA do período) − 1.",
           ],
         },
@@ -511,7 +515,7 @@ export function R03Rentabilidade() {
             { titulo: "Capital base", tipo: "moeda" },
             { titulo: "Rendimento bruto", tipo: "moeda" },
             { titulo: "IOF", tipo: "moeda" },
-            { titulo: "IRRF", tipo: "moeda" },
+            { titulo: "IR (competência)", tipo: "moeda" },
             { titulo: "Rendimento líquido", tipo: "moeda" },
             { titulo: "Rentab. bruta", tipo: "pct" },
             { titulo: "% CDI bruto", tipo: "pct" },
@@ -529,6 +533,7 @@ export function R03Rentabilidade() {
           total: ["CARTEIRA", "", "", "", "", "", cart.rendimento, cart.iof, cart.ir, cart.rendLiquido, cart.rentabBruta, cart.pctCDIBruto, cart.pctCDILiquido, cart.rentabReal, bmk.pctRegra, bmk.pct, bmk.rendBenchmark, bmk.excesso],
           notas: [
             `CDI do período: ${fmtPct(cart.cdiPeriodo)} · IPCA do período: ${fmtPct(cart.ipcaPeriodo)} (IPCA 12m das Premissas: ${fmtPct(p.ipca12m)}).`,
+            "IR do período = variação da provisão acumulada pela tabela regressiva (competência); IOF só quando realizado (resgate antes de 30 dias).",
             "Rentabilidade real = (1 + rentabilidade líquida) / (1 + IPCA do período) − 1.",
             "Benchmark: rendimento = capital base × (Π (1 + DI diário × % do CDI da regra vigente no dia) − 1), DI diário = (1 + CDI do dia)^(1/252) − 1; benchmark no período (% CDI) = esse rendimento ÷ (capital base × CDI do período); excesso = rendimento bruto − rendimento do benchmark.",
           ],
@@ -537,12 +542,13 @@ export function R03Rentabilidade() {
       p.dataBase,
     );
 
+  // linhas "(−)" mostram a dedução em valor positivo (negativo só se houver reversão, ex.: IR revertido no período)
   const passos = [
     { rotulo: "Rentabilidade bruta", v: cart.rentabBruta, cor: "#0070f2" },
-    { rotulo: "(−) IOF", v: -(cart.iof / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
-    { rotulo: "(−) IRRF", v: -(cart.ir / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
+    { rotulo: "(−) IOF realizado", v: (cart.iof / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
+    { rotulo: "(−) IR (competência)", v: (cart.ir / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
     { rotulo: "Rentabilidade líquida", v: cart.rentabLiquida, cor: "#256f3a" },
-    { rotulo: "(−) Inflação (IPCA)", v: cart.rentabReal - cart.rentabLiquida, cor: "#aa0808" },
+    { rotulo: "(−) Inflação (IPCA)", v: cart.rentabLiquida - cart.rentabReal, cor: "#aa0808" },
     { rotulo: "Rentabilidade real", v: cart.rentabReal, cor: "#049f9a" },
   ];
   const maxPasso = Math.max(...passos.map((x) => Math.abs(x.v)), 0.0001);
@@ -596,7 +602,7 @@ export function R03Rentabilidade() {
 
       <Card
         title="Consolidado por tipo de contrato"
-        subtitle={`Carteira-Mestre: renda fixa bancária, Tesouro Direto, fundos e time deposits em R$ · ${total.contratos} contratos no período (${status === "todas" ? "inclusive liquidados" : ROTULO_STATUS[status].toLowerCase()}) · benchmark cadastrado capitalizado dia a dia`}
+        subtitle={`Carteira-Mestre: renda fixa bancária, Tesouro Direto, fundos e time deposits em R$ · ${plural(total.contratos, "contrato", "contratos")} no período (${status === "todas" ? "inclusive liquidados" : ROTULO_STATUS[status].toLowerCase()}) · benchmark cadastrado capitalizado dia a dia`}
         bodyClassName="px-0 pb-0"
       >
         <DataTable columns={colunasTipo} rows={tipos} rowKey={(t) => t.chave} showTotals />
@@ -671,6 +677,7 @@ export function R03Rentabilidade() {
           </ul>
           <MessageStrip className="mt-4">
             % do CDI = rendimento ÷ Σ (capital base × CDI do período de cada contrato); rentabilidade real = (1 + líquida sobre o capital médio) ÷ (1 + IPCA do período) − 1.
+            IR do período = variação do IR acumulado (retido + provisão), por competência – negativo quando há reversão; IOF só quando realizado.
           </MessageStrip>
         </Card>
       </div>

@@ -2,17 +2,17 @@ import { useMemo } from "react";
 import type { Alerta } from "../../shared/context/ProdutoContext";
 import type { PremissasMercado as Premissas } from "../../shared/data/mercado";
 import { OPERACOES } from "../data/carteira";
-import { fmtDate, fmtQuarter, lastMonthEnds } from "../../shared/lib/dates";
-import { fmtCompact, fmtDec, fmtPct, fmtX } from "../../shared/lib/format";
-import { analiseFiscal, posicoesEm, rentabilidade, type Posicao } from "../lib/finance";
-import { contratosMestre } from "../lib/carteiraMestre";
+import { diffDays, fmtDate, fmtQuarter, lastMonthEnds } from "../../shared/lib/dates";
+import { fmtCompact, fmtDec, fmtPct, fmtX, plural } from "../../shared/lib/format";
+import { analiseFiscal, posicoesEm, type Posicao } from "../lib/finance";
+import { contratosMestre, rentabilidadeMestre } from "../lib/carteiraMestre";
 import { FUNDOS } from "../data/fundos";
 import { historicoFundo, posicaoFundo } from "../lib/fundos";
 import { TIME_DEPOSITS } from "../data/timeDeposits";
 import { posicaoTimeDeposit } from "../lib/timeDeposit";
-import { diffDays } from "../../shared/lib/dates";
 import type { Benchmark } from "../data/benchmark";
 import { compararCarteira, compararOperacao } from "../lib/benchmark";
+import { resumoConciliacao } from "../lib/conciliacao";
 import { useBenchmarks } from "./BenchmarkContext";
 import {
   apurarCovenants,
@@ -51,36 +51,52 @@ export function useMestre(escopo: Escopo = "todas") {
 
 export type { Alerta } from "../../shared/context/ProdutoContext";
 
+/** Relatório de cada regra da política de investimentos (onde a exposição é detalhada) */
+function rotaRegraPolitica(id: string): string {
+  if (id === "exterior") return "/r11-moeda-tipo";
+  if (id === "fundos") return "/r09-fundos";
+  return "/r07-concentracao";
+}
+
 export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: Benchmark[]): Alerta[] {
   const out: Alerta[] = [];
+  const mestre = contratosMestre(p.dataBase, p);
 
-  // Rentabilidade × benchmark cadastrado (% do CDI, últimos 12 meses)
-  const linhas = rentabilidade(OPERACOES, lastMonthEnds(p.dataBase, 13)[0], p.dataBase, p);
+  // Rentabilidade × benchmark cadastrado (% do CDI, últimos 12 meses) – carteira consolidada (Carteira-Mestre)
+  const linhas = rentabilidadeMestre(lastMonthEnds(p.dataBase, 13)[0], p.dataBase, p);
   const carteira = compararCarteira(linhas, benchmarks, p);
   if (carteira.situacao === "abaixo") {
     out.push({
       id: "bmk-carteira",
       severidade: "critical",
       titulo: `Carteira abaixo do benchmark: ${fmtDec(carteira.realizado * 100, 1)}% vs ${fmtDec(carteira.pct * 100, 1)}% do CDI`,
-      descricao: `Rendimento de 12 meses ${fmtCompact(Math.abs(carteira.excesso))} abaixo do que o benchmark cadastrado teria gerado.`,
+      descricao: `Carteira consolidada, 12 meses: rendimento ${fmtCompact(Math.abs(carteira.excesso))} abaixo do que o benchmark efetivo (mix das regras) teria gerado.`,
       rota: "/benchmark",
     });
   }
-  const abaixo = linhas.filter((r) => r.status === "Ativa").map((r) => ({ r, c: compararOperacao(r, benchmarks, p) }))
+  const abaixo = linhas
+    .filter((r) => r.status === "Ativa")
+    .map((r) => ({ r, c: compararOperacao(r, benchmarks, p) }))
     .filter((x) => x.c.realizado - x.c.pct < -0.02);
   if (abaixo.length) {
-    const pior = abaixo.sort((a, b) => a.c.realizado - a.c.pct - (b.c.realizado - b.c.pct))[0];
+    const pior = [...abaixo].sort((a, b) => a.c.realizado - a.c.pct - (b.c.realizado - b.c.pct))[0];
+    // fundos: nome do fundo (gestora entre parênteses); títulos públicos: o emissor é sempre o Tesouro Nacional
+    const nome =
+      pior.r.tipo === "Fundo de investimento"
+        ? `${pior.r.produto} (${pior.r.contraparte})`
+        : pior.r.tipo === "Tesouro Direto"
+          ? pior.r.produto
+          : `${pior.r.produto} ${pior.r.contraparte}`;
     out.push({
       id: "bmk-operacoes",
       severidade: "information",
-      titulo: `${abaixo.length} aplicação(ões) mais de 2 p.p. abaixo do benchmark`,
-      descricao: `Maior diferença: ${pior.r.op.produto} ${pior.r.op.contraparte} com ${fmtDec(pior.c.realizado * 100, 1)}% vs ${fmtDec(pior.c.pct * 100, 1)}% do CDI (12 meses).`,
+      titulo: `${plural(abaixo.length, "contrato", "contratos")} mais de 2 p.p. abaixo do benchmark`,
+      descricao: `Maior diferença: ${nome} com ${fmtDec(pior.c.realizado * 100, 1)}% vs ${fmtDec(pior.c.pct * 100, 1)}% do CDI (12 meses).`,
       rota: "/benchmark",
     });
   }
 
   // Concentração por grupo econômico e política de investimentos (R07) – carteira consolidada
-  const mestre = contratosMestre(p.dataBase, p);
   for (const g of concentracaoPorGrupo(mestre)) {
     if (g.status === "ok") continue;
     out.push({
@@ -92,24 +108,18 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
     });
   }
   for (const r of avaliarPolitica(mestre)) {
-    if (r.status === "atencao" && r.id === "exterior") {
-      out.push({
-        id: `pol-${r.id}`,
-        severidade: "critical",
-        titulo: `Política: ${r.regra} perto do limite`,
-        descricao: `${fmtPct(r.share, 1)} da carteira vs limite máximo de ${fmtPct(r.limite, 0)}.`,
-        rota: "/r11-moeda-tipo",
-      });
-    }
-    if (r.status === "excedido") {
-      out.push({
-        id: `pol-${r.id}`,
-        severidade: "negative",
-        titulo: `Política: ${r.regra}`,
-        descricao: `${fmtPct(r.share, 1)} vs limite ${r.tipo === "max" ? "máximo" : "mínimo"} de ${fmtPct(r.limite, 0)}.`,
-        rota: "/r07-concentracao",
-      });
-    }
+    if (r.status === "ok") continue;
+    const max = r.tipo === "max";
+    out.push({
+      id: `pol-${r.id}`,
+      severidade: r.status === "excedido" ? "negative" : "critical",
+      titulo:
+        r.status === "excedido"
+          ? `Política: ${r.regra} – ${max ? "limite excedido" : "abaixo do mínimo"}`
+          : `Política: ${r.regra} – perto do ${max ? "limite" : "mínimo"}`,
+      descricao: `${fmtPct(r.share, 1)} da carteira vs limite ${max ? "máximo" : "mínimo"} de ${fmtPct(r.limite, 0)}.`,
+      rota: rotaRegraPolitica(r.id),
+    });
   }
 
   // Covenants contratuais da dívida (mesma apuração da carteira de captações) – R06
@@ -154,31 +164,46 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
     }
   }
 
-  // Vencimentos próximos (R01)
-  const vencendo = posicoes
-    .filter((x) => x.prazoRemanescente !== null && x.prazoRemanescente >= 0 && x.prazoRemanescente <= 30)
-    .sort((a, b) => a.prazoRemanescente! - b.prazoRemanescente!);
-  for (const v of vencendo) {
+  // Conciliação de fim de mês (R12): cada diferença pendente (TRM × FI-GL ou extrato) bloqueia a aprovação
+  for (const pd of resumoConciliacao(p.dataBase, p).pendencias) {
     out.push({
-      id: `venc-${v.op.transacao}`,
-      severidade: "information",
-      titulo: `Vencimento em ${v.prazoRemanescente} dias – ${v.op.produto} ${v.op.contraparte}`,
-      descricao: `${fmtCompact(v.valorBruto)} em ${fmtDate(v.op.dataVencimento)}. Planejar reinvestimento.`,
-      rota: "/r01-composicao",
+      id: `r12-${pd.id}`,
+      severidade: "critical",
+      titulo: `Conciliação: ${pd.titulo}`,
+      descricao: pd.descricao,
+      rota: "/r12-conciliacao",
     });
   }
 
-  // Títulos públicos e time deposits vencendo em até 30 dias (R08/R10)
-  for (const c of mestre) {
-    if (c.tipo === "Renda fixa bancária" || c.prazoRemanescente === null || c.prazoRemanescente < 0 || c.prazoRemanescente > 30) continue;
-    out.push({
-      id: `venc-${c.codigo}`,
-      severidade: "information",
-      titulo: `Vencimento em ${c.prazoRemanescente} dias – ${c.produto} ${c.contraparte}`,
-      descricao: `${fmtCompact(c.saldoCurva)} em ${fmtDate(c.vencimento)}${c.moeda !== "BRL" ? ` (${c.moeda} – PTAX do dia define o valor em R$)` : ""}. Planejar reinvestimento.`,
-      rota: c.rota,
+  // Vencimentos em até 30 dias – renda fixa bancária (R01), títulos públicos (R08) e time deposits (R10), por prazo
+  const vencimentos: { prazo: number; alerta: Alerta }[] = [];
+  for (const v of posicoes) {
+    if (v.prazoRemanescente === null || v.prazoRemanescente < 0 || v.prazoRemanescente > 30) continue;
+    vencimentos.push({
+      prazo: v.prazoRemanescente,
+      alerta: {
+        id: `venc-${v.op.transacao}`,
+        severidade: "information",
+        titulo: `Vencimento em ${plural(v.prazoRemanescente, "dia", "dias")} – ${v.op.produto} ${v.op.contraparte}`,
+        descricao: `${fmtCompact(v.valorBruto)} em ${fmtDate(v.op.dataVencimento)}. Planejar reinvestimento.`,
+        rota: "/r01-composicao",
+      },
     });
   }
+  for (const c of mestre) {
+    if (c.tipo === "Renda fixa bancária" || c.prazoRemanescente === null || c.prazoRemanescente < 0 || c.prazoRemanescente > 30) continue;
+    vencimentos.push({
+      prazo: c.prazoRemanescente,
+      alerta: {
+        id: `venc-${c.codigo}`,
+        severidade: "information",
+        titulo: `Vencimento em ${plural(c.prazoRemanescente, "dia", "dias")} – ${c.produto} ${c.contraparte}`,
+        descricao: `${fmtCompact(c.saldoCurva)} em ${fmtDate(c.vencimento)}${c.moeda !== "BRL" ? ` (${c.moeda} – PTAX do dia define o valor em R$)` : ""}. Planejar reinvestimento.`,
+        rota: c.rota,
+      },
+    });
+  }
+  for (const v of vencimentos.sort((a, b) => a.prazo - b.prazo)) out.push(v.alerta);
 
   // Come-cotas nos próximos 45 dias (R09)
   for (const f of FUNDOS) {
@@ -190,7 +215,7 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
     out.push({
       id: `cc-${f.id}`,
       severidade: "information",
-      titulo: `Come-cotas em ${dias} dias – ${f.nome}`,
+      titulo: `Come-cotas em ${plural(dias, "dia", "dias")} – ${f.nome}`,
       descricao: `Antecipação de IR estimada em ${fmtCompact(ev?.ir ?? 0)} em ${fmtDate(pos.proximoComeCotas)} (redução de cotas, sem saída de caixa).`,
       rota: "/r09-fundos",
     });
@@ -216,20 +241,21 @@ export function calcularAlertas(posicoes: Posicao[], p: Premissas, benchmarks: B
         id: `iof-${pos.op.transacao}`,
         severidade: "critical",
         titulo: `IOF de ${fmtPct(pos.aliqIOF, 0)} – ${pos.op.produto} ${pos.op.contraparte}`,
-        descricao: `Aplicada há ${pos.diasCorridos} dias; resgate antes de D+30 sofre IOF regressivo.`,
+        descricao: `Aplicada há ${plural(pos.diasCorridos, "dia", "dias")}; resgate antes de D+30 sofre IOF regressivo.`,
         rota: "/r04-prazo-fiscal",
       });
     } else if (a.recomendacao === "Aguardar próxima faixa") {
       out.push({
         id: `ir-${pos.op.transacao}`,
         severidade: "information",
-        titulo: `IR cai para ${fmtPct(a.proxima!.aliquota, 1)} em ${a.diasAteProxima} dias`,
+        titulo: `IR cai para ${fmtPct(a.proxima!.aliquota, 1)} em ${plural(a.diasAteProxima!, "dia", "dias")}`,
         descricao: `${pos.op.produto} ${pos.op.contraparte}: economia estimada de ${fmtCompact(a.economiaIR)} ao aguardar até ${fmtDate(a.dataProxima)}.`,
         rota: "/r04-prazo-fiscal",
       });
     }
   }
 
+  // Severidade primeiro; dentro dela, a ordem de inclusão (vencimentos já em ordem de prazo) – sort estável
   const ordem = { negative: 0, critical: 1, information: 2 };
   return out.sort((a, b) => ordem[a.severidade] - ordem[b.severidade]);
 }

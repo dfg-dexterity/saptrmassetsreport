@@ -20,7 +20,7 @@ import {
 import { Card, Field } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
 import { FilterField, Select } from "../../shared/components/fiori/Inputs";
-import { AXIS_STYLE, CHART_COLORS, CHART_SEMANTIC, HeaderKpi } from "../../shared/components/fiori/Kpi";
+import { AXIS_STYLE, CHART_SEMANTIC, HeaderKpi } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
@@ -40,13 +40,13 @@ import {
   yearOf,
 } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import { ptaxNaData } from "../../shared/lib/taxas";
 import { relatorioPorId } from "../data/catalogo";
 import { PARAMETROS_TIME_DEPOSIT as PARAM, TIME_DEPOSITS, type TimeDeposit } from "../data/timeDeposits";
 import { ALIQUOTA_IRPJ_CSLL } from "../data/tributacao";
 import { ESCOPOS, useMestre, type Escopo } from "../context/useDados";
-import { somaMestre, taxaTDTexto } from "../lib/carteiraMestre";
+import { COR_MOEDA, somaMestre, taxaTDTexto } from "../lib/carteiraMestre";
 import { posicaoTimeDeposit, resgateTimeDeposit, type PosicaoTimeDeposit } from "../lib/timeDeposit";
 
 const rel = relatorioPorId("r10");
@@ -58,7 +58,6 @@ const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily:
 
 type MoedaTD = TimeDeposit["moeda"];
 const MOEDAS_TD: MoedaTD[] = ["USD", "EUR"];
-const COR_MOEDA: Record<MoedaTD, string> = { USD: CHART_COLORS[0], EUR: CHART_COLORS[1] };
 const SIMBOLO: Record<MoedaTD, string> = { USD: "US$", EUR: "€" };
 const REFERENCIA: Record<MoedaTD, { nome: string; taxa: number }> = {
   USD: { nome: "SOFR", taxa: PARAM.sofr },
@@ -86,6 +85,16 @@ function fmtMECompacto(v: number, m: MoedaTD): string {
 }
 
 const fmtPtax = (v: number) => fmtDec(v, 4);
+
+/** IOF câmbio da remessa: 1,10% (investimento no exterior) a partir de 16/07/2025; antes, a alíquota geral de 0,38% */
+const aliquotaIof = (td: TimeDeposit) => (td.dataAplicacao >= PARAM.inicioIofInvestimento ? PARAM.iofCambio : PARAM.iofCambioGeral);
+
+/** Fundamento legal do IOF câmbio na remessa para investimento no exterior */
+const NORMA_IOF =
+  "Decreto 6.306/2007, art. 15-B, XXI-A, na redação do Decreto 12.499/2025 – eficácia restabelecida pelo STF em 16/07/2025";
+
+/** Nota fiscal comum: PIS/COFINS sobre receitas financeiras fora do modelo */
+const NOTA_PIS_COFINS = "PIS/COFINS sobre receitas financeiras (4,65% – Decreto 8.426/2015) não modelado nesta demo (visão gerencial).";
 
 /** Valor com sinal explícito (+1.234 / −1.234) */
 function comSinal(v: number, fmt: (x: number) => string = (x) => fmtNum(x)): string {
@@ -168,8 +177,9 @@ function resultadoTD(
   const juros = (res.valorME - td.principal) * res.ptax;
   const vc = td.principal * (res.ptax - td.ptaxAplicacao);
   const bruto = res.bruto - principalBRL;
-  const iof = principalBRL * PARAM.iofCambio;
-  const tarifa = PARAM.tarifaUSD * ptaxNaData("USD", td.dataAplicacao, p);
+  const iof = principalBRL * aliquotaIof(td);
+  // mesma regra do motor: tarifa em US$ pela PTAX da remessa (a do próprio contrato nos TDs em USD)
+  const tarifa = PARAM.tarifaUSD * (td.moeda === "USD" ? td.ptaxAplicacao : ptaxNaData("USD", td.dataAplicacao, p));
   const ir = Math.max(0, bruto - iof - tarifa) * ALIQUOTA_IRPJ_CSLL;
   return { principalBRL, juros, vc, saldoBRL: res.bruto, iof, tarifa, ir, bruto, liquido: bruto - iof - tarifa - ir };
 }
@@ -311,9 +321,14 @@ export function R10TimeDeposit() {
     });
     const remessas = linhas.filter((l) => l.td.dataAplicacao >= fins[0]);
     const valores = [...serie.flatMap((x) => [x.USD, x.EUR]), ...remessas.map((l) => l.td.ptaxAplicacao)];
-    const yMin = Math.floor((Math.min(...valores) - 0.05) * 10) / 10;
-    const yMax = Math.ceil((Math.max(...valores) + 0.05) * 10) / 10;
-    return { fins, antMes, serie, linhasPtax, remessas, yMin, yMax };
+    // eixo em passos redondos (0,25 ou 0,50) com domínio múltiplo do passo
+    const lo = Math.min(...valores) - 0.05;
+    const hi = Math.max(...valores) + 0.05;
+    const passoY = hi - lo > 2 ? 0.5 : 0.25;
+    const yMin = Math.floor(lo / passoY) * passoY;
+    const yMax = Math.ceil(hi / passoY) * passoY;
+    const yTicks = Array.from({ length: Math.round((yMax - yMin) / passoY) + 1 }, (_, i) => Math.round((yMin + i * passoY) * 100) / 100);
+    return { fins, antMes, serie, linhasPtax, remessas, yMin, yMax, yTicks };
   }, [db, p, linhas]);
 
   const varMesPtax = new Map(ptax.linhasPtax.map((x) => [x.moeda, x.varMes]));
@@ -388,22 +403,117 @@ export function R10TimeDeposit() {
       ),
     },
     {
-      key: "grupo",
-      header: "Grupo / rating",
-      value: (l) => l.td.grupo,
-      render: (l) => (
-        <div>
-          <div className="text-text whitespace-nowrap">{l.td.grupo}</div>
-          <div className="text-xs text-label">Rating {l.td.rating}</div>
-        </div>
-      ),
-    },
-    {
       key: "moeda",
       header: "Moeda",
       align: "center",
       value: (l) => l.td.moeda,
       render: (l) => <Tag color={COR_MOEDA[l.td.moeda]}>{l.td.moeda}</Tag>,
+    },
+    {
+      key: "saldoBRL",
+      header: "Saldo (R$)",
+      align: "right",
+      value: (l) => (l.liquidado ? 0 : l.pos.saldoBRL),
+      render: (l) =>
+        l.liquidado ? (
+          <div>
+            <div className="text-label">{fmtNum(l.resgate.bruto)}</div>
+            <div className="text-xs text-label">resgate bruto</div>
+          </div>
+        ) : (
+          <span className="font-semibold">{fmtNum(l.pos.saldoBRL)}</span>
+        ),
+      total: totalBRL((l) => l.pos.saldoBRL),
+    },
+    {
+      key: "liquido",
+      header: "Resultado líquido",
+      align: "right",
+      value: (l) => l.r.liquido,
+      render: (l) =>
+        l.liquidado ? (
+          <div>
+            <div className={clsx("font-semibold", corValor(l.r.liquido))}>{comSinal(l.r.liquido)}</div>
+            <div className="text-xs text-label">realizado</div>
+          </div>
+        ) : (
+          <span className={clsx("font-semibold", corValor(l.r.liquido))}>{comSinal(l.r.liquido)}</span>
+        ),
+      total: totalBRL((l) => l.r.liquido, true),
+    },
+    {
+      key: "vc",
+      header: "Var. cambial acumulada",
+      align: "right",
+      headerTitle: "Principal × (PTAX da data-base − PTAX da remessa); os juros são convertidos pela PTAX da data-base",
+      value: (l) => l.r.vc,
+      render: brl((l) => l.r.vc, true),
+      total: totalBRL((l) => l.r.vc, true),
+    },
+    {
+      key: "vcMes",
+      header: "Var. cambial do mês",
+      align: "right",
+      headerTitle: "Saldo em moeda do fim do mês anterior × (PTAX da data-base − PTAX do mês anterior)",
+      value: (l) => l.pos.variacaoCambialMes,
+      render: brl((l) => l.pos.variacaoCambialMes, true),
+      total: totalBRL((l) => l.pos.variacaoCambialMes, true),
+    },
+    {
+      key: "saldoME",
+      header: "Saldo (ME)",
+      align: "right",
+      value: (l) => l.pos.saldoME * l.pos.ptax,
+      render: (l) =>
+        l.liquidado ? (
+          <div>
+            <div className="text-label">{fmtME(l.resgate.valorME, l.td.moeda)}</div>
+            <div className="text-xs text-label">resgatado em {fmtDate(l.resgate.data)}</div>
+          </div>
+        ) : (
+          fmtME(l.pos.saldoME, l.td.moeda)
+        ),
+      total: totalPorMoeda((l) => l.pos.saldoME),
+    },
+    {
+      key: "jurosME",
+      header: "Juros (ME)",
+      align: "right",
+      value: (l) => l.pos.jurosBRL,
+      render: (l) => (l.liquidado ? <span className="text-label">–</span> : fmtME(l.pos.jurosME, l.td.moeda)),
+      total: totalPorMoeda((l) => l.pos.jurosME),
+    },
+    {
+      key: "jurosBRL",
+      header: "Juros (R$)",
+      align: "right",
+      value: (l) => l.r.juros,
+      render: brl((l) => l.r.juros),
+      total: totalBRL((l) => l.r.juros),
+    },
+    {
+      key: "iof",
+      header: "IOF câmbio",
+      align: "right",
+      value: (l) => l.r.iof,
+      render: brl((l) => l.r.iof),
+      total: totalBRL((l) => l.r.iof),
+    },
+    {
+      key: "tarifa",
+      header: "Tarifa",
+      align: "right",
+      value: (l) => l.r.tarifa,
+      render: brl((l) => l.r.tarifa),
+      total: totalBRL((l) => l.r.tarifa),
+    },
+    {
+      key: "ir",
+      header: "IRPJ/CSLL (34%)",
+      align: "right",
+      value: (l) => l.r.ir,
+      render: brl((l) => l.r.ir),
+      total: totalBRL((l) => l.r.ir),
     },
     {
       key: "principal",
@@ -498,123 +608,21 @@ export function R10TimeDeposit() {
       },
     },
     {
-      key: "saldoME",
-      header: "Saldo (ME)",
-      align: "right",
-      value: (l) => l.pos.saldoME * l.pos.ptax,
-      render: (l) =>
-        l.liquidado ? (
-          <div>
-            <div className="text-label">{fmtME(l.resgate.valorME, l.td.moeda)}</div>
-            <div className="text-xs text-label">resgatado em {fmtDate(l.resgate.data)}</div>
-          </div>
-        ) : (
-          fmtME(l.pos.saldoME, l.td.moeda)
-        ),
-      total: totalPorMoeda((l) => l.pos.saldoME),
-    },
-    {
-      key: "jurosME",
-      header: "Juros (ME)",
-      align: "right",
-      value: (l) => l.pos.jurosBRL,
-      render: (l) => (l.liquidado ? <span className="text-label">–</span> : fmtME(l.pos.jurosME, l.td.moeda)),
-      total: totalPorMoeda((l) => l.pos.jurosME),
-    },
-    {
-      key: "saldoBRL",
-      header: "Saldo (R$)",
-      align: "right",
-      value: (l) => (l.liquidado ? 0 : l.pos.saldoBRL),
-      render: (l) =>
-        l.liquidado ? (
-          <div>
-            <div className="text-label">{fmtNum(l.resgate.bruto)}</div>
-            <div className="text-xs text-label">resgate bruto</div>
-          </div>
-        ) : (
-          <span className="font-semibold">{fmtNum(l.pos.saldoBRL)}</span>
-        ),
-      total: totalBRL((l) => l.pos.saldoBRL),
-    },
-    {
-      key: "jurosBRL",
-      header: "Juros (R$)",
-      align: "right",
-      value: (l) => l.r.juros,
-      render: brl((l) => l.r.juros),
-      total: totalBRL((l) => l.r.juros),
-    },
-    {
-      key: "vc",
-      header: "Var. cambial acumulada",
-      align: "right",
-      headerTitle: "Principal × (PTAX da data-base − PTAX da remessa); os juros são convertidos pela PTAX da data-base",
-      value: (l) => l.r.vc,
-      render: brl((l) => l.r.vc, true),
-      total: totalBRL((l) => l.r.vc, true),
-    },
-    {
-      key: "vcMes",
-      header: "Var. cambial do mês",
-      align: "right",
-      headerTitle: "Saldo em moeda do fim do mês anterior × (PTAX da data-base − PTAX do mês anterior)",
-      value: (l) => l.pos.variacaoCambialMes,
-      render: brl((l) => l.pos.variacaoCambialMes, true),
-      total: totalBRL((l) => l.pos.variacaoCambialMes, true),
-    },
-    {
-      key: "iof",
-      header: "IOF câmbio",
-      align: "right",
-      value: (l) => l.r.iof,
-      render: brl((l) => l.r.iof),
-      total: totalBRL((l) => l.r.iof),
-    },
-    {
-      key: "tarifa",
-      header: "Tarifa",
-      align: "right",
-      value: (l) => l.r.tarifa,
-      render: brl((l) => l.r.tarifa),
-      total: totalBRL((l) => l.r.tarifa),
-    },
-    {
-      key: "ir",
-      header: "IRPJ/CSLL (34%)",
-      align: "right",
-      value: (l) => l.r.ir,
-      render: brl((l) => l.r.ir),
-      total: totalBRL((l) => l.r.ir),
-    },
-    {
-      key: "liquido",
-      header: "Resultado líquido",
-      align: "right",
-      value: (l) => l.r.liquido,
-      render: (l) =>
-        l.liquidado ? (
-          <div>
-            <div className={clsx("font-semibold", corValor(l.r.liquido))}>{comSinal(l.r.liquido)}</div>
-            <div className="text-xs text-label">realizado</div>
-          </div>
-        ) : (
-          <span className={clsx("font-semibold", corValor(l.r.liquido))}>{comSinal(l.r.liquido)}</span>
-        ),
-      total: totalBRL((l) => l.r.liquido, true),
+      key: "grupo",
+      header: "Grupo / rating",
+      value: (l) => l.td.grupo,
+      render: (l) => (
+        <div>
+          <div className="text-text whitespace-nowrap">{l.td.grupo}</div>
+          <div className="text-xs text-label">Rating {l.td.rating}</div>
+        </div>
+      ),
     },
     {
       key: "status",
       header: "Status",
       value: (l) => (l.liquidado ? 2 : l.pos.prazoRemanescente <= 30 ? 0 : 1),
-      render: (l) =>
-        l.liquidado ? (
-          <ObjectStatus state="neutral">Liquidado</ObjectStatus>
-        ) : l.pos.prazoRemanescente <= 30 ? (
-          <ObjectStatus state="critical">Vence em {l.pos.prazoRemanescente} dias</ObjectStatus>
-        ) : (
-          <ObjectStatus state="information">Ativo</ObjectStatus>
-        ),
+      render: (l) => <StatusTD l={l} />,
     },
   ];
 
@@ -718,8 +726,9 @@ export function R10TimeDeposit() {
             "(i) Juros simples na moeda original, base ACT/360, pagos no vencimento. Saldo (R$) = saldo em moeda × PTAX de venda (BCB) da data-base, importada do SAP (TCURR, tipo M).",
             "(ii) Variação cambial acumulada = principal × (PTAX da data-base − PTAX da remessa); juros (R$) = juros em moeda × PTAX da data-base. Juros + variação cambial = saldo (R$) − principal na remessa.",
             "(iii) Variação cambial do mês = saldo em moeda do fim do mês anterior × (PTAX da data-base − PTAX do mês anterior); remessas feitas no mês usam a PTAX da remessa como base.",
-            `(iv) IOF câmbio de ${fmtPct(PARAM.iofCambio)} sobre o valor da remessa; tarifa de US$ ${PARAM.tarifaUSD} por operação. IRPJ/CSLL de ${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)} provisionado sobre o resultado positivo (sem IRRF – rendimento no exterior compõe o lucro real).`,
-            "(v) Resgate no vencimento projetado com a PTAX da data-base (último dado disponível). Totais em R$ consideram somente as posições ativas; colunas em moeda original não são somadas entre moedas.",
+            `(iv) IOF câmbio de ${fmtPct(PARAM.iofCambio)} sobre o valor da remessa para investimento no exterior (${NORMA_IOF}; antes, alíquota geral de ${fmtPct(PARAM.iofCambioGeral)}); tarifa de US$ ${PARAM.tarifaUSD} por operação. IOF e tarifa são custos de transação (CPC 48, item 5.1.1): por simplificação da demo, reconhecidos no resultado na remessa (em produção, incorporados ao custo e apropriados pela taxa efetiva).`,
+            `(v) IRPJ/CSLL de ${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)} provisionado sobre o resultado positivo: rendimento de pessoa jurídica no exterior compõe o lucro real (Lei 9.249/1995, art. 25), sem IRRF no Brasil. ${NOTA_PIS_COFINS}`,
+            "(vi) Resgate no vencimento projetado com a PTAX da data-base (último dado disponível). Totais em R$ consideram somente as posições ativas; colunas em moeda original não são somadas entre moedas.",
           ],
         },
         {
@@ -741,7 +750,7 @@ export function R10TimeDeposit() {
             l.serie.map((s) => [l.td.id, l.td.moeda, s.data, s.evento, s.ptax, s.saldoME, s.saldoBRL, s.jurosMes ?? "", s.vcMes ?? ""]),
           ),
           notas: [
-            "Juros do mês convertidos pela PTAX do fim do mês; variação cambial do mês sobre o saldo em moeda (principal + juros) do fim do mês anterior.",
+            "Juros do mês convertidos pela PTAX do fim do mês (simplificação – o CPC 02, item 22, admite a taxa média do mês); variação cambial do mês sobre o saldo em moeda (principal + juros) do fim do mês anterior.",
             "Para cada TD, Σ juros do mês + Σ variação cambial do mês = saldo (R$) na data-base − principal na remessa (resultado bruto).",
           ],
         },
@@ -759,13 +768,66 @@ export function R10TimeDeposit() {
       db,
     );
 
+  const semTD = ativos.length === 0;
+  const kpi = (v: string) => (semTD ? "—" : v);
+  const linhasCartao = [...linhas].sort((a, b) => (b.liquidado ? 0 : b.pos.saldoBRL) - (a.liquidado ? 0 : a.pos.saldoBRL));
+  const alternar = (id: string) => setSelecionado(id === selecionado ? null : id);
+
   return (
     <ReportPage
       relatorio={rel}
       onExport={exportar}
-      headerExtra={
-        <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-6">
-          <FilterField label="Empresa" className="md:w-80 no-print">
+      kpis={
+        <>
+          <HeaderKpi
+            label="Saldo em R$"
+            value={kpi(fmtCompact(t.saldoBRL))}
+            sub={semTD ? "nenhum time deposit ativo" : `${plural(ativos.length, "time deposit", "time deposits")} · saldo ME × PTAX`}
+          />
+          <HeaderKpi
+            label="Juros (moeda original)"
+            value={kpi(fmtCompact(t.juros))}
+            state={!semTD && t.juros > 0 ? "positive" : "neutral"}
+            sub={t.porMoeda.length ? t.porMoeda.map((g) => fmtMECompacto(g.jurosME, g.moeda)).join(" · ") : undefined}
+          />
+          <HeaderKpi
+            label="Variação cambial acumulada"
+            value={kpi(fmtCompact(t.vc))}
+            state={semTD ? "neutral" : estadoValor(t.vc)}
+            sub={semTD ? undefined : "principal × Δ PTAX desde a remessa"}
+          />
+          <HeaderKpi
+            label="Variação cambial do mês"
+            value={kpi(fmtCompact(t.vcMes))}
+            state={semTD ? "neutral" : estadoValor(t.vcMes)}
+            sub={
+              moedasAtivas.length
+                ? `PTAX no mês: ${moedasAtivas.map((m) => `${m} ${comSinal(varMesPtax.get(m) ?? 0, (x) => fmtPct(x))}`).join(" · ")}`
+                : undefined
+            }
+          />
+          <HeaderKpi
+            label="IOF câmbio + tarifas"
+            value={kpi(fmtCompact(t.iof + t.tarifa))}
+            sub={semTD ? undefined : `IOF ${fmtPct(PARAM.iofCambio)} na remessa · US$ ${PARAM.tarifaUSD} por operação`}
+          />
+          <HeaderKpi
+            label="IRPJ/CSLL provisionado"
+            value={kpi(fmtCompact(t.ir))}
+            sub={semTD ? undefined : `${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)} s/ resultado positivo`}
+          />
+          <HeaderKpi
+            label="Resultado líquido"
+            value={kpi(fmtCompact(t.liquido))}
+            state={semTD ? "neutral" : estadoValor(t.liquido)}
+            sub={t.principalBRL > 0 ? `${comSinal(t.liquido / t.principalBRL, (x) => fmtPct(x))} s/ principal em R$` : undefined}
+          />
+        </>
+      }
+    >
+      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <FilterField label="Empresa">
             <Select
               value={escopo}
               onChange={(v) => {
@@ -775,90 +837,86 @@ export function R10TimeDeposit() {
               options={ESCOPOS}
             />
           </FilterField>
-          <p className="text-[13px] text-label leading-snug md:pb-2">
+          <div className="sm:col-span-2 text-[13px] text-label sm:text-right leading-relaxed">
             PTAX de venda (BCB) importada do SAP – TCURR, tipo M – em {fmtDate(db)}:{" "}
             <strong className="text-text font-semibold tabular whitespace-nowrap">USD {fmtPtax(p.ptaxUSD)}</strong> ·{" "}
-            <strong className="text-text font-semibold tabular whitespace-nowrap">EUR {fmtPtax(p.ptaxEUR)}</strong>. Após a data-base, os
-            valores são projetados com a PTAX da data-base (último dado disponível).
-          </p>
+            <strong className="text-text font-semibold tabular whitespace-nowrap">EUR {fmtPtax(p.ptaxEUR)}</strong> · após a data-base,
+            projeção com a PTAX da data-base (último dado disponível)
+          </div>
         </div>
-      }
-      kpis={
-        <>
-          <HeaderKpi label="Saldo em R$" value={fmtCompact(t.saldoBRL)} sub={`${ativos.length} TD(s) · saldo ME × PTAX`} />
-          <HeaderKpi
-            label="Juros (moeda original)"
-            value={fmtCompact(t.juros)}
-            state={t.juros > 0 ? "positive" : "neutral"}
-            sub={t.porMoeda.length ? t.porMoeda.map((g) => fmtMECompacto(g.jurosME, g.moeda)).join(" · ") : "—"}
-          />
-          <HeaderKpi
-            label="Variação cambial acumulada"
-            value={fmtCompact(t.vc)}
-            state={estadoValor(t.vc)}
-            sub="principal × Δ PTAX desde a remessa"
-          />
-          <HeaderKpi
-            label="Variação cambial do mês"
-            value={fmtCompact(t.vcMes)}
-            state={estadoValor(t.vcMes)}
-            sub={
-              moedasAtivas.length
-                ? `PTAX no mês: ${moedasAtivas.map((m) => `${m} ${comSinal(varMesPtax.get(m) ?? 0, (x) => fmtPct(x))}`).join(" · ")}`
-                : "—"
-            }
-          />
-          <HeaderKpi label="IOF câmbio + tarifas" value={fmtCompact(t.iof + t.tarifa)} sub={`IOF ${fmtPct(PARAM.iofCambio)} na remessa`} />
-          <HeaderKpi
-            label="IRPJ/CSLL provisionado"
-            value={fmtCompact(t.ir)}
-            sub={`${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)} s/ resultado positivo`}
-          />
-          <HeaderKpi
-            label="Resultado líquido"
-            value={fmtCompact(t.liquido)}
-            state={estadoValor(t.liquido)}
-            sub={t.principalBRL > 0 ? `${comSinal(t.liquido / t.principalBRL, (x) => fmtPct(x))} s/ principal em R$` : "—"}
-          />
-        </>
-      }
-    >
+      </div>
+
       {ativos.length > 0 && (
         <MessageStrip design={conciliado ? "positive" : "critical"}>
-          {conciliado ? "Conciliado com a Carteira-Mestre" : "Divergência com a Carteira-Mestre"} – tipo Time deposit, {mestre.qtd}{" "}
-          contrato(s): saldo de <strong className="whitespace-nowrap">{fmtBRL(mestre.saldo)}</strong> e resultado líquido de{" "}
-          <strong className="whitespace-nowrap">{fmtBRL(mestre.liquido)}</strong>, a mesma base de R02, R05, R07, R11 e R12.
+          {conciliado ? "Conciliado com a Carteira-Mestre" : "Divergência com a Carteira-Mestre"} – tipo Time deposit,{" "}
+          {plural(mestre.qtd, "contrato", "contratos")}: saldo de <strong className="whitespace-nowrap">{fmtBRL(mestre.saldo)}</strong> e
+          resultado líquido de <strong className="whitespace-nowrap">{fmtBRL(mestre.liquido)}</strong>
+          {conciliado ? ", iguais aos desta tela – a mesma base de R02, R05, R07, R11 e R12." : ", diferentes dos desta tela."}
         </MessageStrip>
       )}
 
       <div className={clsx("grid gap-5", sel ? "lg:grid-cols-[minmax(0,1fr)_420px]" : "grid-cols-1")}>
         <Card
           title={`Time deposits (${linhas.length})`}
-          subtitle="Clique em uma linha para ver a decomposição do resultado e a evolução mensal"
+          subtitle={
+            linhas.length
+              ? "Selecione um time deposit para ver a decomposição do resultado e a evolução mensal"
+              : `Sem time deposits da empresa selecionada até ${fmtDate(db)}`
+          }
           bodyClassName="px-0 pb-0"
           className="min-w-0 overflow-hidden"
         >
           {linhas.length ? (
-            <DataTable
-              columns={colunas}
-              rows={linhas}
-              rowKey={(l) => l.td.id}
-              onRowClick={(l) => setSelecionado(l.td.id === selecionado ? null : l.td.id)}
-              selectedKey={selecionado}
-              showTotals
-              defaultSort={{ key: "saldoBRL", dir: "desc" }}
-            />
+            <>
+              <div className="hidden lg:block">
+                <DataTable
+                  columns={colunas}
+                  rows={linhas}
+                  rowKey={(l) => l.td.id}
+                  onRowClick={(l) => alternar(l.td.id)}
+                  selectedKey={selecionado}
+                  showTotals
+                  defaultSort={{ key: "saldoBRL", dir: "desc" }}
+                />
+              </div>
+              <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+                {linhasCartao.map((l) => (
+                  <li key={l.td.id}>
+                    <CartaoTD l={l} selecionado={l.td.id === selecionado} onClick={() => alternar(l.td.id)} />
+                  </li>
+                ))}
+                {!semTD && (
+                  <li className="px-4 py-3 bg-[#f5f6f7]">
+                    <div className="text-sm font-bold text-text">Total · {plural(ativos.length, "posição ativa", "posições ativas")}</div>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+                      <ValorCartao rotulo="Saldo (R$)" forte>
+                        {fmtNum(t.saldoBRL)}
+                      </ValorCartao>
+                      <ValorCartao rotulo="Resultado líquido" cor={corValor(t.liquido)} forte>
+                        {comSinal(t.liquido)}
+                      </ValorCartao>
+                      <ValorCartao rotulo="Var. cambial acumulada" cor={corValor(t.vc)}>
+                        {comSinal(t.vc)}
+                      </ValorCartao>
+                      <ValorCartao rotulo="Var. cambial do mês" cor={corValor(t.vcMes)}>
+                        {comSinal(t.vcMes)}
+                      </ValorCartao>
+                    </dl>
+                  </li>
+                )}
+              </ul>
+              <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
+                Juros simples na moeda original (ACT/360), pagos no vencimento. Saldo (R$) = saldo em moeda × PTAX da data-base; variação
+                cambial acumulada = principal × (PTAX da data-base − PTAX da remessa), com os juros convertidos pela PTAX da data-base –
+                juros + variação cambial = saldo (R$) − principal na remessa. Totais em moeda original por moeda; totais em R$ somente das
+                posições ativas.
+              </p>
+            </>
           ) : (
             <p className="py-12 px-4 text-center text-sm text-label border-t border-line-soft">
               Nenhum time deposit da empresa selecionada até a data-base de {fmtDate(db)}.
             </p>
           )}
-          <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
-            Juros simples na moeda original (ACT/360), pagos no vencimento. Saldo (R$) = saldo em moeda × PTAX da data-base; variação
-            cambial acumulada = principal × (PTAX da data-base − PTAX da remessa), com os juros convertidos pela PTAX da data-base – juros +
-            variação cambial = saldo (R$) − principal na remessa. Totais em moeda original por moeda; totais em R$ somente das posições
-            ativas.
-          </p>
         </Card>
         {sel && <DetalheTD l={sel} p={p} onClose={() => setSelecionado(null)} />}
       </div>
@@ -895,6 +953,8 @@ export function R10TimeDeposit() {
                 />
                 <YAxis
                   domain={[ptax.yMin, ptax.yMax]}
+                  ticks={ptax.yTicks}
+                  interval={0}
                   tickFormatter={(v: number) => fmtDec(v, 2)}
                   tick={AXIS_STYLE}
                   tickLine={false}
@@ -1009,6 +1069,69 @@ export function R10TimeDeposit() {
 }
 
 // ---------------------------------------------------------------------------
+// Lista em cartões (celular e tablet) e status
+// ---------------------------------------------------------------------------
+
+function StatusTD({ l }: { l: LinhaTD }) {
+  if (l.liquidado) return <ObjectStatus state="neutral">Liquidado</ObjectStatus>;
+  if (l.pos.prazoRemanescente <= 30) return <ObjectStatus state="critical">Vence em {l.pos.prazoRemanescente} dias</ObjectStatus>;
+  return <ObjectStatus state="information">Ativo</ObjectStatus>;
+}
+
+function ValorCartao({ rotulo, children, cor, forte }: { rotulo: string; children: ReactNode; cor?: string; forte?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-label">{rotulo}</dt>
+      <dd className={clsx("tabular whitespace-nowrap", forte && "font-bold", cor || "text-text")}>{children}</dd>
+    </div>
+  );
+}
+
+function CartaoTD({ l, selecionado, onClick }: { l: LinhaTD; selecionado: boolean; onClick: () => void }) {
+  const { td, pos, r, liquidado, resgate } = l;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selecionado}
+      className={clsx("w-full text-left px-4 py-3", selecionado ? "bg-selected" : "bg-white hover:bg-[#f2f4f6]")}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-link tabular">{td.id}</span>
+            <Tag color={COR_MOEDA[td.moeda]}>{td.moeda}</Tag>
+          </div>
+          <div className="text-xs text-label leading-snug mt-0.5">
+            {td.banco} · Emp. {td.empresa} · {taxaTDTexto(td)}
+          </div>
+        </div>
+        <StatusTD l={l} />
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2 text-[13px]">
+        <ValorCartao rotulo={liquidado ? "Resgate bruto (R$)" : "Saldo (R$)"} forte>
+          {fmtNum(liquidado ? resgate.bruto : pos.saldoBRL)}
+        </ValorCartao>
+        <ValorCartao rotulo={liquidado ? "Resultado líquido realizado" : "Resultado líquido"} cor={corValor(r.liquido)} forte>
+          {comSinal(r.liquido)}
+        </ValorCartao>
+        <ValorCartao rotulo="Var. cambial acumulada" cor={corValor(r.vc)}>
+          {comSinal(r.vc)}
+        </ValorCartao>
+        <ValorCartao rotulo="Var. cambial do mês" cor={liquidado ? undefined : corValor(pos.variacaoCambialMes)}>
+          {liquidado ? "–" : comSinal(pos.variacaoCambialMes)}
+        </ValorCartao>
+        <ValorCartao rotulo={liquidado ? "Resgatado (ME)" : "Saldo (ME)"}>{fmtME(liquidado ? resgate.valorME : pos.saldoME, td.moeda)}</ValorCartao>
+        <ValorCartao rotulo="Vencimento">
+          {fmtDate(td.vencimento)}
+          {!liquidado && <span className="text-xs text-label"> · {pos.prazoRemanescente} dias</span>}
+        </ValorCartao>
+      </dl>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Resultado por moeda
 // ---------------------------------------------------------------------------
 
@@ -1058,19 +1181,19 @@ function ResultadoPorMoeda({
     { k: "IRPJ/CSLL", ...Object.fromEntries(grupos.map((g) => [g.moeda, -mil(g.ir)])) },
     { k: "Resultado líquido", ...Object.fromEntries(grupos.map((g) => [g.moeda, mil(g.liquido)])) },
   ];
-  const linhasTabela: { rotulo: string; v: (g: GrupoMoeda) => number; total: number; sinal?: -1; cor?: boolean; forte?: boolean }[] = [
+  const linhasTabela: { rotulo: string; v: (g: GrupoMoeda) => number; total: number; cor?: boolean; forte?: boolean }[] = [
     { rotulo: "Saldo em R$", v: (g) => g.saldoBRL, total: total.saldoBRL, forte: true },
     { rotulo: "(+) Juros", v: (g) => g.juros, total: total.juros },
     { rotulo: "(±) Variação cambial acumulada", v: (g) => g.vc, total: total.vc, cor: true },
-    { rotulo: "(−) IOF câmbio + tarifa", v: (g) => g.custos, total: total.iof + total.tarifa, sinal: -1 },
-    { rotulo: "(−) IRPJ/CSLL provisionado", v: (g) => g.ir, total: total.ir, sinal: -1 },
+    { rotulo: "(−) IOF câmbio + tarifa", v: (g) => g.custos, total: total.iof + total.tarifa },
+    { rotulo: "(−) IRPJ/CSLL provisionado", v: (g) => g.ir, total: total.ir },
     { rotulo: "(=) Resultado líquido", v: (g) => g.liquido, total: total.liquido, cor: true, forte: true },
     { rotulo: "Variação cambial do mês", v: (g) => g.vcMes, total: total.vcMes, cor: true },
   ];
-  const cel = (v: number, l: (typeof linhasTabela)[number]) => {
-    const x = v * (l.sinal ?? 1);
-    return <span className={clsx(l.cor && corValor(x))}>{l.cor ? comSinal(x) : fmtNum(x)}</span>;
-  };
+  // linhas "(−)" mostram o valor positivo: o sinal já está no rótulo
+  const cel = (v: number, l: (typeof linhasTabela)[number]) => (
+    <span className={clsx(l.cor && corValor(v))}>{l.cor ? comSinal(v) : fmtNum(v)}</span>
+  );
   return (
     <Card title="Resultado por moeda" subtitle="USD × EUR – resultado acumulado desde a remessa, em R$ mil (gráfico) e R$ (tabela)">
       <div className="-ml-2" style={{ height: dados.length * 40 + 48 }}>
@@ -1178,8 +1301,8 @@ function ResultadoPorMoeda({
 
 const LANCAMENTOS: { evento: string; debito: string; credito: string }[] = [
   { evento: "Remessa (PTAX da remessa)", debito: "Aplicações no exterior – time deposit", credito: "Bancos conta movimento (R$)" },
-  { evento: "IOF câmbio na remessa", debito: "Despesa financeira – IOF", credito: "Bancos conta movimento (R$)" },
-  { evento: "Tarifa bancária (SWIFT)", debito: "Despesas bancárias", credito: "Bancos conta movimento (R$)" },
+  { evento: "IOF câmbio na remessa (simplificação da demo)", debito: "Despesa financeira – IOF", credito: "Bancos conta movimento (R$)" },
+  { evento: "Tarifa bancária SWIFT (simplificação da demo)", debito: "Despesas bancárias", credito: "Bancos conta movimento (R$)" },
   {
     evento: "Juros do mês – competência (TPM44)",
     debito: "Time deposit – juros a receber",
@@ -1199,29 +1322,33 @@ function TratamentoContabil() {
           <Bloco titulo="Conversão e mensuração – CPC 02 (R2) e CPC 48">
             <li>Reconhecimento inicial pela PTAX da remessa (taxa à vista da data da transação – CPC 02, item 21).</li>
             <li>
-              Item monetário em moeda estrangeira: convertido em cada data-base pela PTAX de fechamento (venda, BCB – CPC 02, item 23). A
-              diferença é variação cambial no resultado financeiro – <strong>ativa</strong> quando a PTAX sobe e <strong>passiva</strong>{" "}
-              quando cai (CPC 02, item 28).
+              Item monetário em moeda estrangeira: convertido em cada data-base pela taxa de fechamento (CPC 02, item 23) – nesta demo, a
+              PTAX de venda do BCB importada do SAP (convenção de mercado). A diferença é variação cambial no resultado financeiro –{" "}
+              <strong>ativa</strong> quando a PTAX sobe e <strong>passiva</strong> quando cai (CPC 02, item 28).
             </li>
             <li>
-              Juros por competência como receita financeira (custo amortizado – CPC 48): juros simples ACT/360, pagos no vencimento. Os
-              juros do mês são convertidos pela PTAX de fechamento do mês (aproximação da taxa média – CPC 02, item 22).
+              Juros por apropriação por competência (accrual) como receita financeira (custo amortizado – CPC 48): juros simples ACT/360,
+              pagos no vencimento. Simplificação da demo: os juros do mês são convertidos pela PTAX de fechamento do mês; o CPC 02 (item 22)
+              admite a taxa média do mês como aproximação da taxa de cada data.
             </li>
             <li>
-              IOF câmbio de {fmtPct(PARAM.iofCambio)} sobre a remessa e tarifa bancária de US$ {PARAM.tarifaUSD}: despesas na data da
-              remessa. Imateriais, não integram a taxa efetiva; se relevantes, seriam custos de transação (CPC 48, item 5.1.1).
+              IOF câmbio de {fmtPct(PARAM.iofCambio)} sobre a remessa para investimento no exterior ({NORMA_IOF}; antes, alíquota geral
+              de {fmtPct(PARAM.iofCambioGeral)}) e tarifa bancária de US$ {PARAM.tarifaUSD}: custos de transação (CPC 48, item 5.1.1). Por
+              simplificação da demo, são reconhecidos no resultado na remessa; em produção, seriam incorporados ao custo do ativo e
+              apropriados pela taxa efetiva de juros.
             </li>
           </Bloco>
           <Bloco titulo="Tributação">
             <li>
-              Rendimento de aplicação no exterior de pessoa jurídica: <strong>sem IRRF</strong> no Brasil – compõe o lucro real (Lei
-              9.249/1995, art. 25). IRPJ 15% + adicional 10% + CSLL 9% = {fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}, provisionados sobre o resultado
-              positivo (juros + variação cambial − IOF − tarifa).
+              Rendimento de aplicação no exterior de pessoa jurídica compõe o lucro real – IRPJ/CSLL de{" "}
+              {fmtPct(ALIQUOTA_IRPJ_CSLL, 0)} (Lei 9.249/1995, art. 25), <strong>sem IRRF</strong> no Brasil: IRPJ 15% + adicional 10% +
+              CSLL 9%, provisionados sobre o resultado positivo (juros + variação cambial − IOF − tarifa).
             </li>
             <li>
               Variação cambial: regime de caixa (regra geral – MP 2.158-35/2001, art. 30) ou de competência (opção da empresa). No regime de
               caixa, a parcela da provisão relativa à variação cambial não realizada é IRPJ/CSLL diferido (CPC 32) até a liquidação.
             </li>
+            <li>{NOTA_PIS_COFINS}</li>
           </Bloco>
           <Bloco titulo="Fluxo de caixa – CPC 03 (R2)">
             <li>
@@ -1670,7 +1797,7 @@ function Linha({ label, valor, forte, cor }: { label: string; valor: string; for
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-label">{label}</dt>
-      <dd className={clsx("tabular whitespace-nowrap", forte ? "font-bold text-text text-sm" : "text-text", cor)}>{valor}</dd>
+      <dd className={clsx("tabular whitespace-nowrap", forte && "font-bold text-sm", cor || "text-text")}>{valor}</dd>
     </div>
   );
 }

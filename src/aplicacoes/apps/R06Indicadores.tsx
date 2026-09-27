@@ -8,18 +8,19 @@ import { ObjectStatus, semaforoState, Tag } from "../../shared/components/fiori/
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { relatorioPorId } from "../data/catalogo";
 import { CONTRATOS, GRUPO_MODALIDADE } from "../../captacoes/data/contratos";
-import { reclassificadosEm } from "../../captacoes/lib/covenants";
+import { indicadoresEm, reclassificadosEm } from "../../captacoes/lib/covenants";
 import { custoMedioPonderado, posicoesDivida, type PosicaoDivida } from "../../captacoes/lib/divida";
 import { usePremissas } from "../../shared/context/MercadoContext";
 import { fmtDate, fmtQuarter } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { contratosMestre } from "../lib/carteiraMestre";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, fmtX, plural } from "../../shared/lib/format";
 import {
   apurarCovenants,
   avaliarLimitesPolitica,
   calcularCarry,
   endividamentoEm,
+  exposicaoCambial,
   fmtFolgaCovenant,
   fmtLimiteCovenant,
   fmtValorCovenant,
@@ -35,7 +36,7 @@ import {
 const rel = relatorioPorId("r06");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
-const SERIE: { rotulo: string; v: (i: IndicadoresTrimestre) => number; tipo: "valor" | "x" }[] = [
+const SERIE: { rotulo: string; formula?: string; v: (i: IndicadoresTrimestre) => number; tipo: "valor" | "x" }[] = [
   { rotulo: "Dívida bruta", v: (i) => i.dividaBruta, tipo: "valor" },
   { rotulo: "(−) Caixa", v: (i) => i.caixa, tipo: "valor" },
   { rotulo: "(−) Aplicações financeiras (valor contábil)", v: (i) => i.aplicacoes, tipo: "valor" },
@@ -44,10 +45,14 @@ const SERIE: { rotulo: string; v: (i: IndicadoresTrimestre) => number; tipo: "va
   { rotulo: "Encargos da dívida (12 meses)", v: (i) => i.encargosLTM, tipo: "valor" },
   { rotulo: "Patrimônio líquido", v: (i) => i.patrimonioLiquido, tipo: "valor" },
   { rotulo: "DL / EBITDA", v: (i) => i.dlEbitda, tipo: "x" },
-  { rotulo: "Cobertura (EBITDA / encargos)", v: (i) => i.cobertura, tipo: "x" },
-  { rotulo: "Liquidez CP ((caixa + aplic. CP) / dívida CP)", v: (i) => i.liquidezCP, tipo: "x" },
+  { rotulo: "Cobertura de juros", formula: "EBITDA ÷ encargos da dívida (12 meses)", v: (i) => i.cobertura, tipo: "x" },
+  { rotulo: "Cobertura de curto prazo", formula: "(caixa + aplicações circulantes) ÷ dívida circulante", v: (i) => i.liquidezCP, tipo: "x" },
   { rotulo: "DL / PL", v: (i) => i.dlPl, tipo: "x" },
 ];
+
+/** Nome exibido dos limites da política (a liquidez de curto prazo é a "Cobertura de curto prazo", como nos KPIs) */
+const NOME_LIMITE: Record<string, string> = { liquidez: "Cobertura de curto prazo" };
+const nomeLimite = (c: { id: string; indicador: string }) => NOME_LIMITE[c.id] ?? c.indicador;
 
 /** "A, B e C" */
 function listar(itens: string[]): string {
@@ -67,15 +72,20 @@ export function R06Indicadores() {
   const d = useMemo(() => {
     const serie = trimestresAte(db).map((t) => indicadoresTrimestre(t));
     const trimestre = serie[serie.length - 1];
-    const carry = calcularCarry(contratosMestre(db, p), p);
+    const mestre = contratosMestre(db, p);
+    const carry = calcularCarry(mestre, p);
+    const cambiais = mestre.filter(exposicaoCambial);
     const dividas = composicaoDivida(posicoesDivida(CONTRATOS, db, p, reclassificadosEm(db)));
     const na = endividamentoEm(p);
     const covenants = apurarCovenants(db);
     const politica = avaliarLimitesPolitica(trimestre);
-    return { serie, trimestre, carry, dividas, na, covenants, politica };
+    // dívida líquida da apuração do covenant DL/EBITDA (fim de trimestre) – difere da data-base fora de fim de trimestre
+    const apDl = covenants.find((a) => a.cov.id === "dlEbitda")?.dataApuracao ?? null;
+    const dlApuracao = apDl ? indicadoresEm(apDl).dividaLiquida : null;
+    return { serie, trimestre, carry, cambiais, dividas, na, covenants, politica, dlApuracao };
   }, [db, p]);
 
-  const { trimestre, carry, dividas, na, covenants, politica } = d;
+  const { trimestre, carry, cambiais, dividas, na, covenants, politica, dlApuracao } = d;
   const totalDivida = dividas.reduce((s, x) => s + x.circulante + x.naoCirculante, 0);
   const covDl = covenants.find((a) => a.cov.id === "dlEbitda")!;
   const cumpridos = covenants.filter((a) => a.dataApuracao && a.status !== "excedido").length;
@@ -83,7 +93,13 @@ export function R06Indicadores() {
   const semWaiver = descumpridos.filter((a) => a.reclassifica);
   const emAtencao = covenants.filter((a) => a.status === "atencao");
   const caixaNaData = na.dataCaixa === db;
-  const rotuloCaixa = na.dataCaixa && !caixaNaData ? ` (caixa ${fmtQuarter(na.dataCaixa)})` : "";
+  const caixaAnterior = !!na.dataCaixa && !caixaNaData;
+  // exposição cambial fora do carry: time deposits e fundos cambiais (taxa em moeda estrangeira)
+  const nTD = cambiais.filter((c) => c.tipo === "Time deposit").length;
+  const nFundoCambial = cambiais.filter((c) => c.tipo === "Fundo de investimento").length;
+  const descCambial = [nTD ? plural(nTD, "time deposit", "time deposits") : "", nFundoCambial ? plural(nFundoCambial, "fundo cambial", "fundos cambiais") : ""]
+    .filter(Boolean)
+    .join(" e ");
 
   const exportar = () =>
     exportarExcel(
@@ -103,14 +119,19 @@ export function R06Indicadores() {
             ["(−) Aplicações financeiras (valor contábil)", na.aplicacoesContabil],
             ["Dívida líquida", na.dividaLiquida],
           ],
-          notas: ["Dívida e aplicações na data-base; caixa do último balancete trimestral disponível até a data-base (dado corporativo fictício)."],
+          notas: [
+            "Dívida e aplicações na data-base; caixa do último balancete trimestral disponível até a data-base (dado corporativo fictício).",
+            ...(caixaAnterior && dlApuracao !== null
+              ? [`O covenant DL/EBITDA usa a apuração de ${rotuloApuracao(covDl)} (dívida líquida de ${fmtBRL(dlApuracao)}), não a dívida líquida da data-base.`]
+              : []),
+          ],
         },
         {
           nome: "Série trimestral",
           titulo: "R06 – Endividamento × Aplicações: série trimestral",
           subtitulo: "Consolidado · fim de cada trimestre",
           colunas: [{ titulo: "Indicador", largura: 44 }, ...d.serie.map((i) => ({ titulo: fmtQuarter(i.data), tipo: "decimal" as const, largura: 16 }))],
-          linhas: SERIE.map((s) => [s.rotulo, ...d.serie.map((i) => s.v(i))]),
+          linhas: SERIE.map((s) => [s.formula ? `${s.rotulo} (${s.formula})` : s.rotulo, ...d.serie.map((i) => s.v(i))]),
           notas: ["Valores em R$; indicadores em múltiplos (x). Aplicações pelo valor contábil."],
         },
         {
@@ -155,20 +176,24 @@ export function R06Indicadores() {
           nome: "Política financeira",
           titulo: `R06 – Limites da política financeira interna (apuração ${fmtQuarter(trimestre.data)})`,
           colunas: [{ titulo: "Indicador", largura: 30 }, { titulo: "Tipo", largura: 10 }, { titulo: "Limite", tipo: "decimal" }, { titulo: "Valor", tipo: "decimal" }, { titulo: "Status", largura: 16 }, { titulo: "Fonte", largura: 30 }],
-          linhas: politica.map((c) => [c.indicador, c.tipo === "max" ? "Máximo" : "Mínimo", c.limite, c.valor, SEMAFORO_TEXTO[c.status], c.fonte]),
+          linhas: politica.map((c) => [nomeLimite(c), c.tipo === "max" ? "Máximo" : "Mínimo", c.limite, c.valor, SEMAFORO_TEXTO[c.status], c.fonte]),
         },
         {
           nome: "Carry",
           titulo: `R06 – Carry: rentabilidade das aplicações × custo da dívida (${fmtDate(db)})`,
           colunas: [{ titulo: "Item", largura: 52 }, { titulo: "Valor", tipo: "decimal", largura: 18 }],
           linhas: [
-            ["Saldo das aplicações – valor bruto na curva na data-base (R$)", carry.saldo],
+            ["Saldo bruto das aplicações em R$ na data-base – base do carry (R$)", carry.saldo],
             ["Taxa bruta média ponderada (% a.a.)", carry.taxaBruta * 100],
             ["Alíquota média de IR (%)", carry.aliquotaMediaIR * 100],
             ["Taxa líquida média (% a.a.)", carry.taxaLiquida * 100],
             ["Custo médio ponderado da dívida (% a.a.)", carry.custoDivida * 100],
             ["Carry bruto (p.p.)", carry.carryBruto * 100],
-            ["Custo/ganho de carregamento (R$ a.a.)", carry.custoCarregamento],
+            ["Ganho (+) / custo (−) de carregamento (R$ a.a.)", carry.custoCarregamento],
+            [`Exposição cambial fora do carry${descCambial ? ` – ${descCambial}` : ""} (R$)`, carry.saldoCambial],
+          ],
+          notas: [
+            "Carry só com as aplicações em R$ (saldo bruto: curva na renda fixa e nos títulos, valor da cota nos fundos): a taxa dos time deposits e dos fundos cambiais, em moeda estrangeira e sem a variação cambial, não é comparável ao custo da dívida em R$.",
           ],
         },
         {
@@ -246,12 +271,16 @@ export function R06Indicadores() {
       kpis={
         <>
           <HeaderKpi label="Dívida bruta" value={fmtCompact(na.dividaBruta)} sub={`em ${fmtDate(db)} · custo amortizado`} />
-          <HeaderKpi label="Dívida líquida" value={fmtCompact(na.dividaLiquida)} sub={`caixa + aplic. ${fmtCompact(na.caixa + na.aplicacoesContabil)}${rotuloCaixa}`} />
+          <HeaderKpi
+            label={caixaAnterior ? "Dívida líquida na data-base" : "Dívida líquida"}
+            value={fmtCompact(na.dividaLiquida)}
+            sub={`${caixaAnterior ? `caixa de ${fmtDate(na.dataCaixa)} · ` : ""}caixa + aplic. ${fmtCompact(na.caixa + na.aplicacoesContabil)}`}
+          />
           <HeaderKpi
             label="DL / EBITDA"
             value={fmtX(covDl.valor)}
             state={rotuloCovenant(covDl).state}
-            sub={`apuração ${rotuloApuracao(covDl)} · covenant ${fmtLimiteCovenant(covDl.cov)}`}
+            sub={`apuração ${rotuloApuracao(covDl)}${dlApuracao !== null ? `: DL ${fmtCompact(dlApuracao)}` : ""} · covenant ${fmtLimiteCovenant(covDl.cov)}`}
           />
           <HeaderKpi
             label="Covenants contratuais"
@@ -265,7 +294,7 @@ export function R06Indicadores() {
                   : "cumpridos na última apuração"
             }
           />
-          <HeaderKpi label="Carry" value={`${fmtDec(carry.carryBruto * 100, 2)} p.p.`} state={carry.carryBruto >= 0 ? "positive" : "negative"} sub={`${fmtCompact(carry.custoCarregamento)} / ano`} />
+          <HeaderKpi label="Carry" value={`${fmtDec(carry.carryBruto * 100, 2)} p.p.`} state={carry.carryBruto >= 0 ? "positive" : "negative"} sub={`aplicações em R$ · ${fmtCompact(carry.custoCarregamento)}/ano`} />
         </>
       }
     >
@@ -295,10 +324,10 @@ export function R06Indicadores() {
           </div>
         </Card>
 
-        <Card className="xl:col-span-2" title="Carry" subtitle={`Rentabilidade das aplicações − custo da dívida (a.a.) · data-base ${fmtDate(db)}`}>
+        <Card className="xl:col-span-2" title="Carry" subtitle={`Rentabilidade das aplicações em R$ − custo da dívida (a.a.) · data-base ${fmtDate(db)}`}>
           <div className="space-y-3 mt-1">
-            <BarraTaxa rotulo="Aplicações – taxa bruta média" valor={carry.taxaBruta} max={maxTaxa} cor="#168eff" />
-            <BarraTaxa rotulo={`Aplicações – taxa líquida (IR ${fmtPct(carry.aliquotaMediaIR, 1)})`} valor={carry.taxaLiquida} max={maxTaxa} cor="#75980b" />
+            <BarraTaxa rotulo="Aplicações em R$ – taxa bruta média" valor={carry.taxaBruta} max={maxTaxa} cor="#168eff" />
+            <BarraTaxa rotulo={`Aplicações em R$ – taxa líquida (IR ${fmtPct(carry.aliquotaMediaIR, 1)})`} valor={carry.taxaLiquida} max={maxTaxa} cor="#75980b" />
             <BarraTaxa rotulo="Custo médio ponderado da dívida" valor={carry.custoDivida} max={maxTaxa} cor="#df1278" />
           </div>
           <div className="grid grid-cols-2 gap-3 mt-5">
@@ -311,9 +340,20 @@ export function R06Indicadores() {
               <div className={`text-xl font-bold tabular ${carry.custoCarregamento >= 0 ? "text-positive" : "text-negative"}`}>{fmtCompact(Math.abs(carry.custoCarregamento))}/ano</div>
             </div>
           </div>
+          {carry.saldoCambial > 0.5 && (
+            <p className="text-[13px] text-text mt-3 leading-snug">
+              Exposição cambial fora do carry: <strong className="tabular">{fmtCompact(carry.saldoCambial)}</strong>{" "}
+              <span className="text-label">
+                ({descCambial || "aplicações em moeda estrangeira"} – taxa em moeda estrangeira não comparável ao custo em R$)
+              </span>
+            </p>
+          )}
           <p className="text-xs text-label mt-3 leading-relaxed">
-            Manter {fmtCompact(carry.saldo)} aplicados (valor bruto na curva em {fmtDate(db)}) enquanto a dívida custa {fmtPct(carry.custoDivida)} a.a.
-            gera um carry de {fmtDec(carry.carryBruto * 100, 2)} p.p. Avalie pré-pagamento de dívidas caras × necessidade de liquidez.
+            Manter {fmtCompact(carry.saldo)} aplicados em R$ (saldo bruto em {fmtDate(db)}) enquanto a dívida custa {fmtPct(carry.custoDivida)} a.a.
+            gera um carry {carry.carryBruto >= 0 ? "positivo" : "negativo"} de {fmtDec(carry.carryBruto * 100, 2)} p.p.{" "}
+            {carry.carryBruto >= 0
+              ? "As aplicações rendem acima do custo médio da dívida: mantenha a liquidez e renegocie as dívidas mais caras quando houver oportunidade."
+              : "Avalie o pré-pagamento das dívidas mais caras × a necessidade de liquidez."}
           </p>
         </Card>
       </div>
@@ -331,10 +371,10 @@ export function R06Indicadores() {
               key: "ind",
               header: "Indicador",
               minWidth: 180,
-              value: (c) => c.indicador,
+              value: (c) => nomeLimite(c),
               render: (c) => (
                 <div className="leading-snug">
-                  <div className="font-semibold">{c.indicador}</div>
+                  <div className="font-semibold">{nomeLimite(c)}</div>
                   <div className="text-xs text-label">{c.formula}</div>
                 </div>
               ),
@@ -372,7 +412,10 @@ export function R06Indicadores() {
             <tbody>
               {SERIE.map((s) => (
                 <tr key={s.rotulo} className={s.rotulo === "Dívida líquida" || s.tipo === "x" ? "font-semibold" : ""}>
-                  <td className="sticky left-0 bg-white pl-4 pr-3 py-2 border-b border-line-soft whitespace-nowrap">{s.rotulo}</td>
+                  <td className="sticky left-0 bg-white pl-4 pr-3 py-2 border-b border-line-soft">
+                    <div className="whitespace-nowrap">{s.rotulo}</div>
+                    {s.formula && <div className="text-xs text-label font-normal leading-snug">{s.formula}</div>}
+                  </td>
                   {d.serie.map((i) => (
                     <td key={i.data} className="px-3 py-2 text-right tabular border-b border-line-soft whitespace-nowrap">
                       {s.tipo === "x" ? fmtX(s.v(i)) : fmtNum(s.v(i), { parens: s.rotulo.startsWith("(") })}
@@ -423,7 +466,8 @@ export function R06Indicadores() {
 
       <MessageStrip>
         Cabeçalho, carry e composição da dívida na data-base ({fmtDate(db)}); série trimestral, covenants e limites da política
-        na última apuração de cada indicador. Aplicações financeiras calculadas a partir da carteira (R01) em cada data.
+        na última apuração de cada indicador. Aplicações financeiras calculadas a partir da Carteira-Mestre (renda fixa, títulos
+        públicos, fundos e time deposits), pelo valor contábil, em cada data; o carry usa o saldo bruto das aplicações em R$.
         Dívida, encargos, custo médio ponderado e apuração dos covenants vêm da carteira de captações (dívida) do mesmo
         ambiente SAP; caixa, EBITDA e PL são dados corporativos fictícios do ambiente de teste (balancetes trimestrais)
         {na.dataCaixa && !caixaNaData ? ` – na data-base usa-se o caixa de ${fmtDate(na.dataCaixa)}` : ""}.

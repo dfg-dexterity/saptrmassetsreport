@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ArrowUpRight, CheckCircle2, X, XCircle } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, ChevronRight, X, XCircle } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "../../shared/components/fiori/Button";
@@ -12,11 +12,12 @@ import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { EMPRESAS } from "../../shared/data/empresas";
 import { fmtDate, previousYearEnd } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import { relatorioPorId } from "../data/catalogo";
 import type { ClassificacaoCPC48 } from "../data/carteira";
+import { PARAMETROS_TIME_DEPOSIT } from "../data/timeDeposits";
 import { ESCOPOS, useMestre, type Escopo } from "../context/useDados";
-import { MOEDAS, movimentacaoMestre, TIPOS_CONTRATO, type ContratoMestre, type Moeda, type TipoContrato } from "../lib/carteiraMestre";
+import { COR_MOEDA, MOEDAS, movimentacaoMestre, TIPOS_CONTRATO, type ContratoMestre, type Moeda, type TipoContrato } from "../lib/carteiraMestre";
 
 const rel = relatorioPorId("mestre");
 
@@ -28,8 +29,20 @@ const CPC48_STATE: Record<ClassificacaoCPC48, ValueState> = {
   "VJ por Resultado": "critical",
 };
 
+/** Base do saldo bruto de cada tipo de contrato */
+const BASE_SALDO: Record<TipoContrato, string> = {
+  "Renda fixa bancária": "curva",
+  "Tesouro Direto": "curva",
+  "Fundo de investimento": "valor da cota",
+  "Time deposit": "moeda × PTAX",
+};
+
+const TD = PARAMETROS_TIME_DEPOSIT;
+
 const NOTA_RODAPE =
-  "Renda fixa bancária: saldo na curva e valor de mercado por ágio/deságio informado. Fundos: valor da cota (sem curva). Time deposits: convertidos pela PTAX da data-base. Valor contábil = curva para Custo Amortizado e mercado para VJ.";
+  "Saldo bruto: curva na renda fixa bancária e nos títulos públicos, valor da cota nos fundos e saldo em moeda × PTAX da data-base nos time deposits. Valor contábil = curva no custo amortizado e mercado no valor justo (CPC 48); renda fixa bancária a mercado pelo ágio/deságio informado.";
+
+const NOTA_TRIBUTOS = `Rendimentos, tributos e taxas desde a aplicação. IR: IRRF regressivo (renda fixa, títulos e fundos, inclusive come-cotas) e, nos time deposits, IRPJ/CSLL de 34% sobre o resultado – sem IOF provisório. IOF realizado: nos time deposits, IOF câmbio na remessa (${fmtPct(TD.iofCambio)} a partir de ${fmtDate(TD.inicioIofInvestimento)} – Decreto 6.306/2007, art. 15-B; ${fmtPct(TD.iofCambioGeral)} antes); nos demais contratos é zero, pois o IOF regressivo só incide no resgate antes de 30 dias. PIS/COFINS sobre receitas financeiras (4,65%) não modelado.`;
 
 const infoTipo = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)!;
 const ordemTipo = (t: TipoContrato) => TIPOS_CONTRATO.findIndex((x) => x.tipo === t);
@@ -43,7 +56,7 @@ function somaME(cs: ContratoMestre[], fn: (c: ContratoMestre) => number): { valo
   return { valor: somar(cs, fn), moeda: cs[0].moeda };
 }
 
-/** Rentabilidade líquida a.a. média ponderada pelo saldo na curva */
+/** Rentabilidade líquida a.a. média ponderada pelo saldo bruto */
 function rentabMediaAA(cs: ContratoMestre[]): number {
   const base = somar(cs, (c) => c.saldoCurva);
   return base > 0 ? somar(cs, (c) => c.rentabLiqAA * c.saldoCurva) / base : 0;
@@ -59,9 +72,15 @@ function agioMedio(cs: ContratoMestre[]): number {
   return base > 0 ? somar(cs, (c) => c.mtm) / base : 0;
 }
 
+/** Alíquota do IOF câmbio da remessa (time deposits): IOF realizado ÷ principal em R$ */
+const aliqIofRemessa = (c: ContratoMestre) => (c.principalBRL > 0 ? c.iof / c.principalBRL : 0);
+
 const corValor = (v: number) => (Math.round(v) < 0 ? "text-negative" : undefined);
 /** Cor do percentual exibido com 2 casas (não pinta de vermelho um "0,00%") */
 const corPct = (frac: number) => (Math.round(frac * 1e4) < 0 ? "text-negative" : undefined);
+
+/** Ordem padrão da lista: tipo de contrato e código */
+const ordenarPadrao = (cs: ContratoMestre[]) => [...cs].sort((a, b) => ordemTipo(a.tipo) - ordemTipo(b.tipo) || a.codigo.localeCompare(b.codigo));
 
 export function CarteiraMestreApp() {
   const [escopo, setEscopo] = useState<Escopo>("todas");
@@ -88,24 +107,25 @@ export function CarteiraMestreApp() {
     const total = somar(contratos, (c) => c.saldoCurva);
     const tipos = TIPOS_CONTRATO.map((t) => {
       const cs = contratos.filter((c) => c.tipo === t.tipo);
-      const curva = somar(cs, (c) => c.saldoCurva);
+      const bruto = somar(cs, (c) => c.saldoCurva);
       return {
         ...t,
         qtd: cs.length,
-        curva,
+        bruto,
         contabil: somar(cs, (c) => c.valorContabil),
         liquido: somar(cs, (c) => c.rendimentoLiquido),
-        share: total > 0 ? curva / total : 0,
+        share: total > 0 ? bruto / total : 0,
       };
     });
     const mov = movimentacaoMestre(previousYearEnd(p.dataBase), p.dataBase, p, escopo).total;
     const contabil = somar(contratos, (c) => c.valorContabil);
     const mtmVJ = somar(contratos.filter((c) => c.cpc48 !== "Custo Amortizado"), (c) => c.mtm);
-    return { total, tipos, mov, contabil, mtmVJ, curvaMaisMtm: total + mtmVJ };
+    return { total, tipos, mov, contabil, mtmVJ, brutoMaisMtm: total + mtmVJ };
   }, [contratos, p, escopo]);
 
   const sel = linhas.find((c) => c.id === selecionado) ?? null;
   const filtrosAtivos = [tipo, moeda, cpc].filter((f) => f !== TODOS).length + (busca ? 1 : 0);
+  const lista = useMemo(() => ordenarPadrao(linhas), [linhas]);
 
   const opcoesCpc = [{ value: TODOS, label: "Todas" }, ...[...new Set(contratos.map((c) => c.cpc48))].sort().map((v) => ({ value: v, label: v }))];
   const opcoesTipo = [{ value: TODOS, label: "Todos" }, ...TIPOS_CONTRATO.map((t) => ({ value: t.tipo, label: t.tipo }))];
@@ -121,6 +141,7 @@ export function CarteiraMestreApp() {
     total: (r) => fmtNum(somar(r, fn)),
   });
 
+  // Ordem na tela: identificação → saldo bruto, valor contábil e resultado → detalhes (o Excel mantém a ordem da planilha)
   const colunas: Column<ContratoMestre>[] = [
     {
       key: "id",
@@ -136,25 +157,28 @@ export function CarteiraMestreApp() {
       total: (r) => <span>Total R$ ({r.length})</span>,
     },
     {
-      key: "origem",
-      header: "Origem",
-      value: (c) => c.origem,
-      render: (c) => (
-        <Link to={c.rota} onClick={(e) => e.stopPropagation()} className="text-link font-semibold hover:underline inline-flex items-center gap-0.5">
-          {c.origem}
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </Link>
-      ),
-    },
-    {
       key: "tipo",
       header: "Tipo de contrato",
+      headerTitle: "Tipo de contrato e relatório de origem",
       value: (c) => `${ordemTipo(c.tipo)}|${c.codigo}`,
       render: (c) => (
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: infoTipo(c.tipo).cor }} />
-          {c.tipo}
-        </span>
+        <div>
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: infoTipo(c.tipo).cor }} />
+            {c.tipo}
+          </span>
+          <div className="text-xs">
+            <Link
+              to={c.rota}
+              onClick={(e) => e.stopPropagation()}
+              className="text-link font-semibold hover:underline inline-flex items-center gap-0.5"
+              title={`Abrir no relatório de origem (${c.origem})`}
+            >
+              {c.origem}
+              <ArrowUpRight className="w-3 h-3" />
+            </Link>
+          </div>
+        </div>
       ),
     },
     {
@@ -181,7 +205,36 @@ export function CarteiraMestreApp() {
         </div>
       ),
     },
-    { key: "moeda", header: "Moeda", align: "center", value: (c) => c.moeda, render: (c) => <Tag color={c.moeda === "BRL" ? undefined : "#5d36ff"}>{c.moeda}</Tag> },
+    colR("bruto", "Saldo bruto (R$)", (c) => c.saldoCurva, { forte: true, headerTitle: "Curva na renda fixa e nos títulos, valor da cota nos fundos, saldo em moeda × PTAX nos time deposits" }),
+    colR("contabil", "Valor contábil (R$)", (c) => c.valorContabil, { forte: true, headerTitle: "Curva no custo amortizado; mercado no valor justo (CPC 48)" }),
+    colR("rendLiq", "Rendimento líquido (R$)", (c) => c.rendimentoLiquido, { forte: true, cor: true, headerTitle: "Rendimento bruto − IOF realizado − IR − taxas e tarifas, desde a aplicação" }),
+    {
+      key: "rentAA",
+      header: "Rentab. líq. a.a.",
+      headerTitle: "Rentabilidade líquida do período anualizada (365 dias); total ponderado pelo saldo bruto",
+      align: "right",
+      value: (c) => c.rentabLiqAA,
+      render: (c) => <span className={clsx("font-semibold", corPct(c.rentabLiqAA))}>{fmtPct(c.rentabLiqAA)}</span>,
+      total: (r) => fmtPct(rentabMediaAA(r)),
+    },
+    {
+      key: "cpc",
+      header: "Classificação CPC 48",
+      value: (c) => c.cpc48,
+      render: (c) => (
+        <ObjectStatus inverted icon={false} state={CPC48_STATE[c.cpc48]}>
+          {c.cpc48}
+        </ObjectStatus>
+      ),
+    },
+    {
+      key: "prazo",
+      header: "Prazo (curto/longo)",
+      align: "center",
+      value: (c) => (c.circulante ? "Curto" : "Longo"),
+      render: (c) => <Tag>{c.circulante ? "Curto" : "Longo"}</Tag>,
+    },
+    { key: "moeda", header: "Moeda", align: "center", value: (c) => c.moeda, render: (c) => <Tag color={COR_MOEDA[c.moeda]}>{c.moeda}</Tag> },
     { key: "indexador", header: "Indexador", value: (c) => c.indexador, render: (c) => <span className="whitespace-nowrap">{c.indexador}</span> },
     { key: "aplicacao", header: "Data aplicação", align: "right", value: (c) => c.dataAplicacao, render: (c) => fmtDate(c.dataAplicacao) },
     {
@@ -194,7 +247,7 @@ export function CarteiraMestreApp() {
           <div>
             <div>{fmtDate(c.vencimento)}</div>
             {c.prazoRemanescente !== null && (
-              <div className={clsx("text-xs", c.prazoRemanescente <= 30 ? "text-critical font-semibold" : "text-label")}>{fmtInt(c.prazoRemanescente)} dias</div>
+              <div className={clsx("text-xs", c.prazoRemanescente <= 30 ? "text-critical font-semibold" : "text-label")}>{plural(c.prazoRemanescente, "dia", "dias")}</div>
             )}
           </div>
         ) : (
@@ -217,32 +270,25 @@ export function CarteiraMestreApp() {
       },
     },
     colR("principalBRL", "Principal (R$)", (c) => c.principalBRL),
-    colR("curva", "Saldo na curva (R$)", (c) => c.saldoCurva, { forte: true }),
     colR("mercado", "Saldo a mercado (R$)", (c) => c.saldoMercado),
-    colR("mtm", "Ajuste MTM (R$)", (c) => c.mtm, { cor: true, headerTitle: "Saldo a mercado − saldo na curva" }),
+    colR("mtm", "Ajuste MTM (R$)", (c) => c.mtm, { cor: true, headerTitle: "Saldo a mercado − saldo bruto" }),
+    {
+      key: "agio",
+      header: "Ágio/deságio mercado (%)",
+      headerTitle: "(Saldo a mercado − saldo bruto) ÷ saldo bruto",
+      align: "right",
+      value: (c) => c.agioDesagio,
+      render: (c) => <span className={corPct(c.agioDesagio)}>{fmtPct(c.agioDesagio)}</span>,
+      total: (r) => fmtPct(agioMedio(r)),
+    },
     colR("rendBruto", "Rendimento bruto (R$)", (c) => c.rendimentoBruto, { cor: true, headerTitle: "Desde a aplicação: inclui cupons recebidos, come-cotas recolhido e variação cambial" }),
-    colR("iof", "IOF (R$)", (c) => c.iof),
-    colR("ir", "IR/IRRF (R$)", (c) => c.ir, { headerTitle: "IRRF regressivo / come-cotas; time deposits: provisão de IRPJ/CSLL (34%)" }),
-    colR("taxas", "Taxas e tarifas (R$)", (c) => c.taxas, { headerTitle: "Custódia B3 e agente (títulos públicos); tarifa bancária (time deposits)" }),
-    colR("rendLiq", "Rendimento líquido (R$)", (c) => c.rendimentoLiquido, { forte: true, cor: true }),
-    colR("contabil", "Valor contábil (R$)", (c) => c.valorContabil, { forte: true, headerTitle: "Curva no custo amortizado; mercado no valor justo (CPC 48)" }),
-    {
-      key: "cpc",
-      header: "Classificação CPC 48",
-      value: (c) => c.cpc48,
-      render: (c) => (
-        <ObjectStatus inverted icon={false} state={CPC48_STATE[c.cpc48]}>
-          {c.cpc48}
-        </ObjectStatus>
-      ),
-    },
-    {
-      key: "prazo",
-      header: "Prazo (curto/longo)",
-      align: "center",
-      value: (c) => (c.circulante ? "Curto" : "Longo"),
-      render: (c) => <Tag>{c.circulante ? "Curto" : "Longo"}</Tag>,
-    },
+    colR("iof", "IOF realizado (R$)", (c) => c.iof, {
+      headerTitle: `Só IOF realizado: nos time deposits, IOF câmbio na remessa (${fmtPct(TD.iofCambio)} a partir de ${fmtDate(TD.inicioIofInvestimento)}; ${fmtPct(TD.iofCambioGeral)} antes); nos demais, zero – o IOF regressivo só incide no resgate antes de 30 dias`,
+    }),
+    colR("ir", "IR – IRRF / IRPJ-CSLL (R$)", (c) => c.ir, {
+      headerTitle: "IRRF regressivo provisionado (renda fixa, títulos e fundos, inclusive come-cotas); time deposits: IRPJ/CSLL de 34% sobre o resultado",
+    }),
+    colR("taxas", "Taxas e tarifas (R$)", (c) => c.taxas, { headerTitle: "Custódia e taxa do agente (títulos públicos); tarifa bancária (time deposits)" }),
     {
       key: "rentPer",
       header: "Rentab. líq. período",
@@ -267,29 +313,11 @@ export function CarteiraMestreApp() {
         return s ? `${fmtNum(s.valor)} ${s.moeda}` : "";
       },
     },
-    {
-      key: "agio",
-      header: "Ágio/deságio mercado (%)",
-      headerTitle: "(Saldo a mercado − saldo na curva) ÷ saldo na curva",
-      align: "right",
-      value: (c) => c.agioDesagio,
-      render: (c) => <span className={corPct(c.agioDesagio)}>{fmtPct(c.agioDesagio)}</span>,
-      total: (r) => fmtPct(agioMedio(r)),
-    },
-    {
-      key: "rentAA",
-      header: "Rentab. líq. a.a.",
-      headerTitle: "Rentabilidade líquida do período anualizada (365 dias); total ponderado pelo saldo na curva",
-      align: "right",
-      value: (c) => c.rentabLiqAA,
-      render: (c) => <span className={clsx("font-semibold", corPct(c.rentabLiqAA))}>{fmtPct(c.rentabLiqAA)}</span>,
-      total: (r) => fmtPct(rentabMediaAA(r)),
-    },
     { key: "grupo", header: "Grupo econômico", minWidth: 140, value: (c) => c.grupo, render: (c) => <span className="whitespace-nowrap">{c.grupo}</span> },
   ];
 
   const exportar = () => {
-    const ordenadas = [...linhas].sort((a, b) => ordemTipo(a.tipo) - ordemTipo(b.tipo) || a.codigo.localeCompare(b.codigo));
+    const ordenadas = ordenarPadrao(linhas);
     const soma = (fn: (c: ContratoMestre) => number) => somar(ordenadas, fn);
     const principalME = somaME(ordenadas, (c) => c.principalME);
     const saldoME = somaME(ordenadas, (c) => c.saldoME);
@@ -300,6 +328,7 @@ export function CarteiraMestreApp() {
           nome: "Carteira-Mestre",
           titulo: "CARTEIRA-MESTRE – Base consolidada de contratos de aplicação",
           subtitulo: `${ESCOPOS.find((e) => e.value === escopo)!.label} · Valores em R$ (moeda original nas colunas ME)`,
+          // Layout da aba "Carteira-Mestre" do Reporting Pack (ordem e títulos da planilha)
           colunas: [
             { titulo: "ID", largura: 12 },
             { titulo: "Origem", largura: 8 },
@@ -388,9 +417,9 @@ export function CarteiraMestreApp() {
             "",
           ],
           notas: [
-            NOTA_RODAPE,
-            "Rendimento bruto desde a aplicação (inclui cupons recebidos, come-cotas recolhido e variação cambial). Time deposits: IR = provisão de IRPJ/CSLL (34%).",
-            "Colunas em moeda original (ME) somadas apenas quando todos os contratos exportados estão na mesma moeda. Rentab. líq. a.a. do total ponderada pelo saldo na curva.",
+            `"Saldo na curva" = saldo bruto. ${NOTA_RODAPE}`,
+            `Rendimento bruto desde a aplicação (inclui cupons recebidos, come-cotas recolhido e variação cambial). ${NOTA_TRIBUTOS}`,
+            "Colunas em moeda original (ME) somadas apenas quando todos os contratos exportados estão na mesma moeda. Rentab. líq. a.a. do total ponderada pelo saldo bruto.",
           ],
         },
       ],
@@ -402,7 +431,8 @@ export function CarteiraMestreApp() {
   const kpiLiq = somar(linhas, (c) => c.rendimentoLiquido);
   const kpiRent = rentabMediaAA(linhas);
   const difMov = resumo.total - resumo.mov.saldoFinal;
-  const difContabil = resumo.contabil - resumo.curvaMaisMtm;
+  const difContabil = resumo.contabil - resumo.brutoMaisMtm;
+  const abrir = (c: ContratoMestre) => setSelecionado(c.id === selecionado ? null : c.id);
 
   return (
     <ReportPage
@@ -411,11 +441,11 @@ export function CarteiraMestreApp() {
       kpis={
         <>
           <HeaderKpi label="Contratos ativos" value={fmtInt(linhas.length)} sub={filtrosAtivos ? `de ${contratos.length} na carteira` : `${TIPOS_CONTRATO.length} tipos de contrato`} />
-          <HeaderKpi label="Saldo na curva" value={fmtCompact(somar(linhas, (c) => c.saldoCurva))} />
+          <HeaderKpi label="Saldo bruto" value={fmtCompact(somar(linhas, (c) => c.saldoCurva))} sub="curva · cota · moeda × PTAX" />
           <HeaderKpi label="Valor contábil" value={fmtCompact(somar(linhas, (c) => c.valorContabil))} sub="curva no CA · mercado no VJ" />
           <HeaderKpi label="Ajuste MTM" value={fmtCompact(kpiMtm)} state={Math.round(kpiMtm) < 0 ? "negative" : "positive"} sub="mercado − curva" />
           <HeaderKpi label="Rendimento líquido" value={fmtCompact(kpiLiq)} state={kpiLiq < 0 ? "negative" : "positive"} sub="desde a aplicação" />
-          <HeaderKpi label="Rentab. líquida média" value={fmtPct(kpiRent)} unit="a.a." sub="ponderada pelo saldo na curva" />
+          <HeaderKpi label="Rentab. líquida média" value={fmtPct(kpiRent)} unit="a.a." sub="ponderada pelo saldo bruto" />
         </>
       }
     >
@@ -448,7 +478,7 @@ export function CarteiraMestreApp() {
         {filtrosAtivos > 0 && (
           <div className="flex items-center justify-between gap-3 mt-2 text-[13px]">
             <span className="text-label">
-              {filtrosAtivos} filtro(s) ativo(s) · {linhas.length} de {contratos.length} contratos
+              {plural(filtrosAtivos, "filtro ativo", "filtros ativos")} · {linhas.length} de {plural(contratos.length, "contrato", "contratos")}
             </span>
             <button
               type="button"
@@ -491,10 +521,10 @@ export function CarteiraMestreApp() {
                   <Tag color={t.cor}>{t.origem}</Tag>
                 </div>
                 <div className="text-xs text-label mt-0.5">
-                  {t.qtd} contrato{t.qtd === 1 ? "" : "s"} · {fmtPct(t.share, 1)} da carteira
+                  {plural(t.qtd, "contrato", "contratos")} · {fmtPct(t.share, 1)} da carteira
                 </div>
-                <div className="text-[1.5rem] leading-tight font-light text-text tabular mt-2 whitespace-nowrap">{fmtCompact(t.curva)}</div>
-                <div className="text-[11px] text-label">Saldo na curva</div>
+                <div className="text-[1.5rem] leading-tight font-light text-text tabular mt-2 whitespace-nowrap">{fmtCompact(t.bruto)}</div>
+                <div className="text-[11px] text-label">Saldo bruto ({BASE_SALDO[t.tipo]})</div>
                 <MicroBar value={t.share} max={1} color={t.cor} className="mt-2" />
                 <dl className="grid grid-cols-2 gap-2 mt-2.5 text-[12px]">
                   <div className="min-w-0">
@@ -517,18 +547,20 @@ export function CarteiraMestreApp() {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Conferencia
-              titulo="Saldo na curva × movimentação"
+              titulo="Saldo bruto × movimentação"
+              resultado={["Saldo bruto igual ao saldo final da movimentação", "Saldo bruto diverge do saldo final da movimentação"]}
               linhas={[
-                ["Σ saldo na curva (Carteira-Mestre)", resumo.total],
+                ["Σ saldo bruto (Carteira-Mestre)", resumo.total],
                 [`Saldo final da movimentação (${fmtDate(previousYearEnd(p.dataBase))} → ${fmtDate(p.dataBase)})`, resumo.mov.saldoFinal],
               ]}
               diferenca={difMov}
             />
             <Conferencia
-              titulo="Valor contábil × curva + MTM (VJ)"
+              titulo="Valor contábil × saldo bruto + MTM (VJ)"
+              resultado={["Valor contábil igual ao saldo bruto + MTM dos contratos a VJ", "Valor contábil diverge do saldo bruto + MTM dos contratos a VJ"]}
               linhas={[
                 ["Σ valor contábil", resumo.contabil],
-                [`Σ curva + MTM dos contratos a VJ (${fmtBRL(resumo.mtmVJ)})`, resumo.curvaMaisMtm],
+                [`Σ saldo bruto + MTM dos contratos a VJ (${fmtBRL(resumo.mtmVJ)})`, resumo.brutoMaisMtm],
               ]}
               diferenca={difContabil}
             />
@@ -539,23 +571,67 @@ export function CarteiraMestreApp() {
       <div className={clsx("grid gap-5", sel ? "lg:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1")}>
         <Card
           title={`Contratos (${linhas.length})`}
-          subtitle="Base consolidada em R$ na data-base · clique em uma linha para ver todos os campos do contrato"
+          subtitle={
+            <>
+              Base consolidada em R$ na data-base · <span className="hidden lg:inline">clique em uma linha</span>
+              <span className="lg:hidden">toque em um contrato</span> para ver todos os campos
+            </>
+          }
           bodyClassName="px-0 pb-0"
           className="min-w-0 overflow-hidden"
         >
-          <DataTable
-            columns={colunas}
-            rows={linhas}
-            rowKey={(c) => c.id}
-            onRowClick={(c) => setSelecionado(c.id === selecionado ? null : c.id)}
-            selectedKey={selecionado}
-            showTotals
-            maxHeight={660}
-            defaultSort={{ key: "tipo", dir: "asc" }}
-          />
+          <div className="hidden lg:block">
+            <DataTable
+              columns={colunas}
+              rows={linhas}
+              rowKey={(c) => c.id}
+              onRowClick={abrir}
+              selectedKey={selecionado}
+              showTotals
+              maxHeight={660}
+              defaultSort={{ key: "tipo", dir: "asc" }}
+            />
+          </div>
+
+          {/* Celular e tablet: lista em cartões */}
+          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            {lista.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum contrato no filtro selecionado</li>}
+            {lista.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => abrir(c)}
+                  aria-pressed={c.id === selecionado}
+                  className={clsx("w-full text-left px-4 py-3 flex items-start gap-2 hover:bg-hover focus:outline-none focus-visible:bg-hover", c.id === selecionado && "bg-selected")}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-sm font-semibold text-link tabular">{c.codigo}</span>
+                      <Tag color={infoTipo(c.tipo).cor}>{c.tipo}</Tag>
+                      {c.moeda !== "BRL" && <Tag color={COR_MOEDA[c.moeda]}>{c.moeda}</Tag>}
+                    </div>
+                    <div className="text-[13px] text-text leading-snug mt-0.5">
+                      {c.produto} · <span className="font-semibold">{c.contraparte}</span>
+                    </div>
+                    <div className="text-xs text-label leading-snug">
+                      {c.taxaContratada} · {c.vencimento ? `vence em ${fmtDate(c.vencimento)}` : "sem vencimento"} · {c.cpc48}
+                    </div>
+                    <ValoresCartao bruto={c.saldoCurva} contabil={c.valorContabil} liquido={c.rendimentoLiquido} />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-label shrink-0 mt-0.5" aria-hidden />
+                </button>
+              </li>
+            ))}
+            {lista.length > 0 && (
+              <li className="px-4 py-3 bg-[#f5f6f7]">
+                <div className="text-sm font-bold text-text">Total R$ · {plural(lista.length, "contrato", "contratos")}</div>
+                <ValoresCartao bruto={somar(lista, (c) => c.saldoCurva)} contabil={somar(lista, (c) => c.valorContabil)} liquido={somar(lista, (c) => c.rendimentoLiquido)} forte />
+              </li>
+            )}
+          </ul>
+
           <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
-            {NOTA_RODAPE} Rendimentos, tributos e taxas desde a aplicação; time deposits com provisão de IRPJ/CSLL (34%) em IR/IRRF.
-            Colunas em moeda original (ME) totalizadas só quando todos os contratos filtrados estão na mesma moeda.
+            {NOTA_RODAPE} {NOTA_TRIBUTOS} Colunas em moeda original (ME) totalizadas só quando todos os contratos filtrados estão na mesma moeda.
           </p>
         </Card>
         {sel && <DetalheContrato c={sel} onClose={() => setSelecionado(null)} />}
@@ -564,13 +640,34 @@ export function CarteiraMestreApp() {
   );
 }
 
-function Conferencia({ titulo, linhas, diferenca }: { titulo: string; linhas: [string, number][]; diferenca: number }) {
+function ValoresCartao({ bruto, contabil, liquido, forte }: { bruto: number; contabil: number; liquido: number; forte?: boolean }) {
+  const itens: [string, number, string | undefined][] = [
+    ["Saldo bruto", bruto, undefined],
+    ["Valor contábil", contabil, undefined],
+    ["Rend. líquido", liquido, corValor(liquido)],
+  ];
+  return (
+    <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+      {itens.map(([rotulo, v, cor], i) => (
+        <div key={rotulo} className={clsx("min-w-0", i === 2 && "text-right")}>
+          <dt className="text-xs text-label truncate">{rotulo}</dt>
+          <dd className={clsx("tabular truncate", forte ? "font-bold" : "font-semibold", cor ?? "text-text")}>{fmtCompact(v)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function Conferencia({ titulo, resultado, linhas, diferenca }: { titulo: string; resultado: [string, string]; linhas: [string, number][]; diferenca: number }) {
   const ok = Math.abs(diferenca) < 0.005;
   return (
     <section className="rounded-lg border border-line-soft px-3 py-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="text-[13px] font-bold text-text">{titulo}</h4>
-        {ok ? <CheckCircle2 className="w-4 h-4 text-positive shrink-0" aria-label="Conferido" /> : <XCircle className="w-4 h-4 text-negative shrink-0" aria-label="Divergente" />}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="text-[13px] font-bold text-text">{titulo}</h4>
+          <p className={clsx("text-xs font-semibold leading-snug", ok ? "text-positive" : "text-negative")}>{ok ? resultado[0] : resultado[1]}</p>
+        </div>
+        {ok ? <CheckCircle2 className="w-4 h-4 text-positive shrink-0 mt-0.5" aria-label="Conferido" /> : <XCircle className="w-4 h-4 text-negative shrink-0 mt-0.5" aria-label="Divergente" />}
       </div>
       <dl className="mt-1.5 space-y-1 text-[12px]">
         {linhas.map(([l, v]) => (
@@ -592,7 +689,9 @@ function DetalheContrato({ c, onClose }: { c: ContratoMestre; onClose: () => voi
   const navigate = useNavigate();
   const t = infoTipo(c.tipo);
   const estrangeira = c.moeda !== "BRL";
-  const rotuloIR = c.tipo === "Time deposit" ? `IRPJ/CSLL (${fmtPct(c.aliqIR, 0)})` : `IR/IRRF (${fmtPct(c.aliqIR, 1)})`;
+  const td = c.tipo === "Time deposit";
+  const rotuloIR = td ? `IRPJ/CSLL (${fmtPct(c.aliqIR, 0)})` : `IRRF (${fmtPct(c.aliqIR, 1)})`;
+  const rotuloIOF = td ? `IOF câmbio na remessa (${fmtPct(aliqIofRemessa(c))})` : "IOF realizado";
   return (
     <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
@@ -616,7 +715,7 @@ function DetalheContrato({ c, onClose }: { c: ContratoMestre; onClose: () => voi
           </ObjectStatus>
           <Tag>{c.circulante ? "Circulante" : "Não circulante"}</Tag>
           <Tag>Rating {c.rating}</Tag>
-          <Tag color={estrangeira ? "#5d36ff" : undefined}>{c.moeda}</Tag>
+          <Tag color={COR_MOEDA[c.moeda]}>{c.moeda}</Tag>
         </div>
         <Button className="mt-3 w-full" icon={<ArrowUpRight className="w-4 h-4" />} onClick={() => navigate(c.rota)}>
           Abrir no relatório de origem ({c.origem})
@@ -630,7 +729,7 @@ function DetalheContrato({ c, onClose }: { c: ContratoMestre; onClose: () => voi
             <Linha label="Principal (ME)" valor={`${fmtDec(c.principalME, 2)} ${c.moeda}`} />
             {estrangeira && <Linha label="PTAX da data-base" valor={fmtDec(c.ptax, 4)} />}
             <Linha label="Principal (R$)" valor={fmtBRL(c.principalBRL, true)} />
-            <Linha label="Saldo na curva" valor={fmtBRL(c.saldoCurva, true)} forte />
+            <Linha label={`Saldo bruto (${BASE_SALDO[c.tipo]})`} valor={fmtBRL(c.saldoCurva, true)} forte />
             <Linha label="Saldo a mercado" valor={fmtBRL(c.saldoMercado, true)} />
             <Linha
               label={Math.round(c.agioDesagio * 1e4) === 0 ? "Ajuste MTM (sem ágio/deságio)" : `Ajuste MTM (${c.agioDesagio > 0 ? "ágio" : "deságio"} de ${fmtPct(Math.abs(c.agioDesagio))})`}
@@ -648,15 +747,21 @@ function DetalheContrato({ c, onClose }: { c: ContratoMestre; onClose: () => voi
           <h4 className="text-sm font-bold text-text mb-2">Resultado desde a aplicação</h4>
           <dl className="space-y-1.5 text-[13px]">
             <Linha label="Rendimento bruto" valor={fmtBRL(c.rendimentoBruto, true)} cor={c.rendimentoBruto < 0 ? "text-negative" : "text-positive"} />
-            <Linha label="(−) IOF" valor={fmtBRL(-c.iof || 0, true)} />
-            <Linha label={`(−) ${rotuloIR}`} valor={fmtBRL(-c.ir || 0, true)} />
-            <Linha label="(−) Taxas e tarifas" valor={fmtBRL(-c.taxas || 0, true)} />
+            <Linha label={`(−) ${rotuloIOF}`} valor={fmtBRL(c.iof, true)} />
+            <Linha label={`(−) ${rotuloIR}`} valor={fmtBRL(c.ir, true)} />
+            <Linha label="(−) Taxas e tarifas" valor={fmtBRL(c.taxas, true)} />
             <div className="border-t border-line-soft pt-1.5">
               <Linha label="Rendimento líquido" valor={fmtBRL(c.rendimentoLiquido, true)} forte cor={c.rendimentoLiquido < 0 ? "text-negative" : undefined} />
             </div>
             <Linha label="Rentab. líquida no período" valor={fmtPct(c.rentabLiqPeriodo)} />
             <Linha label="Rentab. líquida a.a." valor={fmtPct(c.rentabLiqAA)} />
           </dl>
+          <p className="text-xs text-label leading-snug mt-2">
+            {td
+              ? "IOF câmbio pago na remessa; IRPJ/CSLL sobre o resultado (juros + variação cambial − IOF − tarifas)."
+              : `IOF regressivo só no resgate antes de 30 dias (nenhum realizado); IRRF provisionado pela alíquota vigente${c.tipo === "Fundo de investimento" ? ", inclusive o come-cotas recolhido" : ""}.`}{" "}
+            PIS/COFINS sobre receitas financeiras (4,65%) não modelado.
+          </p>
         </section>
 
         <section>
@@ -670,7 +775,7 @@ function DetalheContrato({ c, onClose }: { c: ContratoMestre; onClose: () => voi
             <Field label="Taxa a.a. equivalente">{fmtPct(c.taxaAA)}</Field>
             <Field label="Data aplicação">{fmtDate(c.dataAplicacao)}</Field>
             <Field label="Vencimento">{c.vencimento ? fmtDate(c.vencimento) : "Sem vencimento"}</Field>
-            <Field label="Prazo remanescente">{c.prazoRemanescente === null ? "—" : `${fmtInt(c.prazoRemanescente)} dias`}</Field>
+            <Field label="Prazo remanescente">{c.prazoRemanescente === null ? "—" : plural(c.prazoRemanescente, "dia", "dias")}</Field>
             <Field label="Faixa de prazo">{c.faixaPrazo}</Field>
             <Field label="Prazo (curto/longo)">{c.circulante ? "Curto (circulante)" : "Longo (não circulante)"}</Field>
             <Field label="Liquidez imediata">{c.liquidezImediata ? "Sim" : "Não"}</Field>

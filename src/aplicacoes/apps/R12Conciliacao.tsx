@@ -11,258 +11,58 @@ import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag, type ValueState } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { usePremissas } from "../../shared/context/MercadoContext";
-import { IMPORTACAO_SAP, premissasNaDataBase, ultimoDadoNaDataBase, type PremissasMercado } from "../../shared/data/mercado";
-import { addDays, fmtDate, fmtMonthLong, fromDay, isBusinessDay, previousMonthEnd, proximoDiaUtil, toDay } from "../../shared/lib/dates";
+import { ultimoDadoNaDataBase } from "../../shared/data/mercado";
+import { addDays, fmtDate, fmtMonthLong } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec } from "../../shared/lib/format";
-import { ptaxNaData } from "../../shared/lib/taxas";
-import { ESCOPOS, operacoesDoEscopo, type Escopo } from "../context/useDados";
-import { OPERACOES } from "../data/carteira";
+import { fmtBRL, fmtCompact, fmtDec, plural } from "../../shared/lib/format";
+import { ESCOPOS, type Escopo } from "../context/useDados";
 import { relatorioPorId } from "../data/catalogo";
-import { FUNDOS } from "../data/fundos";
-import { TITULOS } from "../data/tesouro";
-import { TIME_DEPOSITS } from "../data/timeDeposits";
+import { TIPOS_CONTRATO, type EventoMestre, type MovMestre, type TipoContrato } from "../lib/carteiraMestre";
 import {
-  contratosMestre,
-  movimentacaoMestre,
-  TIPOS_CONTRATO,
-  type ContratoMestre,
-  type EventoMestre,
-  type MovMestre,
-  type TipoContrato,
-} from "../lib/carteiraMestre";
-import { posicoesEm } from "../lib/finance";
-import { cotaFundo, posicaoFundo } from "../lib/fundos";
-import { posicaoTitulo, puTitulo } from "../lib/tesouro";
-import { posicaoTimeDeposit, saldoME } from "../lib/timeDeposit";
+  conciliacaoDoMes,
+  diaSemana,
+  fmtDif,
+  fmtDifBRL,
+  FONTE_TIPO,
+  identidade,
+  rotuloDU,
+  TOLERANCIA,
+  TOLERANCIA_TXT,
+  TRANSACOES_SAP,
+  type Conciliacao,
+  type DetalheFundo,
+  type DetalheTD,
+  type DetalheTitulo,
+  type EtapaStatus,
+  type LinhaExtrato,
+  type LinhaGL,
+  type Responsavel,
+  type StatusConc,
+  type StatusEtapa,
+} from "../lib/conciliacao";
 
 const rel = relatorioPorId("r12");
 
 /**
  * R12 – Conciliação de fim de mês das aplicações financeiras: TRM (Carteira-Mestre) × FI-GL por conta contábil e tipo
  * de contrato, TRM × extratos externos, roll-forward do mês com checagens de integridade e checklist de fechamento
- * (DU-1 a DU+3). As diferenças são fictícias e determinísticas (dependem da data-base), sempre com a causa apurada.
+ * (DU-1 a DU+3). O motor (dados, diferenças e checklist) fica em `lib/conciliacao.ts`, compartilhado com o Launchpad.
  */
 
 type Aba = "gl" | "extratos" | "rollforward" | "checklist";
-type StatusConc = "Conciliado" | "Diferença explicada" | "Pendente";
-/** timing = lançamento em outro período; preco = fonte de preço diferente; pendente = sem explicação aceita */
-type Natureza = "timing" | "preco" | "pendente";
-type StatusEtapa = "Concluída" | "Com ressalva" | "Pendente";
-type Responsavel = "Tesouraria" | "Contabilidade" | "Controladoria";
-type MoedaME = "USD" | "EUR";
-
-/** Diferenças de até R$ 1,00 por linha são arredondamento (conciliado) */
-const TOLERANCIA = 1;
-const TOLERANCIA_TXT = fmtBRL(TOLERANCIA, true);
 
 const STATUS_STATE: Record<StatusConc, ValueState> = { Conciliado: "positive", "Diferença explicada": "critical", Pendente: "negative" };
 const ETAPA_STATE: Record<StatusEtapa, ValueState> = { Concluída: "positive", "Com ressalva": "critical", Pendente: "neutral" };
 
 // ---------------------------------------------------------------------------
-// Plano de contas (ambiente de teste – fictício) e determinação de contas
+// Helpers de apresentação
 // ---------------------------------------------------------------------------
-
-interface ContaPlano {
-  conta: string;
-  descricao: string;
-  circulante: boolean;
-  componente: "curva" | "mtm";
-  regra: string;
-}
-
-const PLANO_CONTAS: ContaPlano[] = [
-  {
-    conta: "1.1.2.01",
-    descricao: "Aplicações financeiras – renda fixa bancária",
-    circulante: true,
-    componente: "curva",
-    regra: "Renda fixa bancária realizável em até 12 meses ou VJPR · principal + juros (curva)",
-  },
-  {
-    conta: "1.1.2.02",
-    descricao: "Títulos públicos federais",
-    circulante: true,
-    componente: "curva",
-    regra: "Tesouro Direto com vencimento em até 12 meses ou mantido para negociação (VJPR) · PU na curva × quantidade",
-  },
-  {
-    conta: "1.1.2.03",
-    descricao: "Cotas de fundos de investimento",
-    circulante: true,
-    componente: "curva",
-    regra: "Fundos de investimento · cota × quantidade (valor justo por resultado)",
-  },
-  {
-    conta: "1.1.2.04",
-    descricao: "Aplicações no exterior – time deposits",
-    circulante: true,
-    componente: "curva",
-    regra: "Time deposits com vencimento em até 12 meses · saldo em moeda × PTAX de fechamento",
-  },
-  {
-    conta: "1.1.2.09",
-    descricao: "Ajuste a valor justo (MTM) – circulante",
-    circulante: true,
-    componente: "mtm",
-    regra: "Contratos circulantes a valor justo (VJORA/VJPR) · mercado − curva (acréscimo ou redutora)",
-  },
-  {
-    conta: "1.2.1.01",
-    descricao: "Aplicações financeiras – não circulante",
-    circulante: false,
-    componente: "curva",
-    regra: "Contratos com vencimento acima de 12 meses, exceto VJPR (qualquer tipo) · curva",
-  },
-  {
-    conta: "1.2.1.09",
-    descricao: "Ajuste a valor justo (MTM) – não circulante",
-    circulante: false,
-    componente: "mtm",
-    regra: "Contratos não circulantes a valor justo (VJORA/VJPR) · mercado − curva (acréscimo ou redutora)",
-  },
-];
-
-function contaCurva(c: ContratoMestre): string {
-  if (!c.circulante) return "1.2.1.01";
-  if (c.tipo === "Renda fixa bancária") return "1.1.2.01";
-  if (c.tipo === "Tesouro Direto") return "1.1.2.02";
-  if (c.tipo === "Fundo de investimento") return "1.1.2.03";
-  return "1.1.2.04";
-}
-
-function contaMTM(c: ContratoMestre): string {
-  return c.circulante ? "1.1.2.09" : "1.2.1.09";
-}
-
-/** Base do saldo TRM comparado com o extrato de cada tipo de contrato */
-const BASE_EXTRATO: Record<TipoContrato, string> = {
-  "Renda fixa bancária": "Curva",
-  "Tesouro Direto": "Mercado (PU ANBIMA)",
-  "Fundo de investimento": "Cota × quantidade",
-  "Time deposit": "ME × PTAX",
-};
-
-const FONTE_TIPO: Record<TipoContrato, string> = {
-  "Renda fixa bancária": "Bancos emissores e B3",
-  "Tesouro Direto": "B3 / agentes de custódia",
-  "Fundo de investimento": "Administradores",
-  "Time deposit": "Bancos no exterior (ME)",
-};
-
-/** Fundos que divulgam a cota de fechamento em D+1 (multimercado, ações e cambial) */
-const CLASSES_COTA_D1 = new Set(["Multimercado macro", "Ações", "Cambial"]);
-
-// ---------------------------------------------------------------------------
-// Checklist de fechamento
-// ---------------------------------------------------------------------------
-
-interface Etapa {
-  id: string;
-  du: number;
-  etapa: string;
-  transacao: string | null;
-  responsavel: Responsavel;
-}
-
-const ETAPAS: Etapa[] = [
-  {
-    id: "mercado",
-    du: -1,
-    etapa: "Importar dados de mercado para o SAP: PTAX (TCURR), taxas indicativas ANBIMA/PU dos títulos, cotas de fundos e índices (CDI/IPCA)",
-    transacao: null,
-    responsavel: "Tesouraria",
-  },
-  { id: "tbb1", du: 0, etapa: "Lançamento dos fluxos do mês: aplicações, juros recebidos, resgates, cupons e come-cotas", transacao: "TBB1", responsavel: "Tesouraria" },
-  { id: "tpm44", du: 0, etapa: "Apropriação (accrual/deferral) dos juros por competência", transacao: "TPM44", responsavel: "Contabilidade" },
-  { id: "tpm1", du: 1, etapa: "Avaliação: marcação a mercado dos títulos e variação cambial dos time deposits", transacao: "TPM1", responsavel: "Contabilidade" },
-  { id: "tpm10", du: 1, etapa: "Lançamentos da gestão de posições – conferência do diário gerado", transacao: "TPM10", responsavel: "Contabilidade" },
-  { id: "gl", du: 2, etapa: "Conciliar TRM × FI-GL por conta contábil e tipo de contrato (esta tela)", transacao: null, responsavel: "Contabilidade" },
-  {
-    id: "extratos",
-    du: 2,
-    etapa: "Conciliar TRM × extratos: bancos, B3/custodiantes, administradores de fundos e bancos no exterior (esta tela)",
-    transacao: null,
-    responsavel: "Tesouraria",
-  },
-  { id: "rollforward", du: 2, etapa: "Roll-forward do mês e checagens de integridade (esta tela)", transacao: null, responsavel: "Controladoria" },
-  { id: "aprovacao", du: 3, etapa: "Aprovação da Controladoria e envio dos saldos para a nota explicativa (R02)", transacao: null, responsavel: "Controladoria" },
-];
-
-const TRANSACOES_SAP: { codigo: string; descricao: string }[] = [
-  { codigo: "TBB1", descricao: "Lançamento dos fluxos (aplicações, resgates, juros recebidos, cupons e come-cotas) no FI-GL" },
-  { codigo: "TPM44", descricao: "Apropriação por competência (accrual/deferral) dos juros das aplicações" },
-  { codigo: "TPM1", descricao: "Avaliação: MTM dos títulos a valor justo (VJORA/VJPR) e variação cambial dos time deposits" },
-  { codigo: "TPM10", descricao: "Lançamentos da gestão de posições – conferência do diário gerado antes da conciliação" },
-];
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const r2 = (v: number) => Math.round(v * 100) / 100;
-const arred = (v: number, casas: number) => Math.round(v * 10 ** casas) / 10 ** casas;
-const truncar = (v: number, casas: number) => Math.trunc(v * 10 ** casas + 1e-9) / 10 ** casas;
 
 function fmtValor(v: number): string {
   return fmtDec(v, 2);
 }
 
-/** Diferença com sinal explícito (+/−); zero sem sinal */
-function fmtDif(v: number, casas = 2): string {
-  if (Math.abs(v) < 0.5 / 10 ** casas) return fmtDec(0, casas);
-  return `${v > 0 ? "+" : "−"}${fmtDec(Math.abs(v), casas)}`;
-}
-
-function fmtDifBRL(v: number): string {
-  if (Math.abs(v) < 0.005) return fmtBRL(0, true);
-  return `${v > 0 ? "+" : "−"}${fmtBRL(Math.abs(v), true)}`;
-}
-
 const fmtTaxa = (v: number) => `${fmtDec(v * 100, 2)}%`;
-
-function plural(n: number, singular: string, pluralTxt: string): string {
-  return `${n} ${n === 1 ? singular : pluralTxt}`;
-}
-
-const DIAS_SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
-
-function diaSemana(iso: string): string {
-  return DIAS_SEMANA[(((toDay(iso) + 4) % 7) + 7) % 7];
-}
-
-/**
- * Calendário de fechamento (feriados nacionais – base ANBIMA): DU0 = último dia útil do mês da data-base; DU-n = n-ésimo
- * dia útil anterior; DU+n = n-ésimo dia útil após o fim do mês.
- */
-function diaUtil(dataBase: string, n: number): string {
-  if (n > 0) {
-    let d = dataBase;
-    for (let k = 0; k < n; k++) d = proximoDiaUtil(addDays(d, 1));
-    return d;
-  }
-  let d = toDay(dataBase);
-  while (!isBusinessDay(d)) d--;
-  for (let k = 0; k > n; k--) {
-    d--;
-    while (!isBusinessDay(d)) d--;
-  }
-  return fromDay(d);
-}
-
-function rotuloDU(n: number): string {
-  return n === 0 ? "DU0" : n > 0 ? `DU+${n}` : `DU${n}`;
-}
-
-/** Último dia útil local do banco no exterior (segunda a sexta) até a data */
-function ultimoDiaUtilExterior(iso: string): string {
-  let d = toDay(iso);
-  for (;;) {
-    const dow = (((d + 4) % 7) + 7) % 7;
-    if (dow !== 0 && dow !== 6) return fromDay(d);
-    d--;
-  }
-}
 
 /** Luminância relativa (WCAG 2.x) */
 function luminancia(rgb: number[]): number {
@@ -298,566 +98,10 @@ const destaquePopIn = (s: StatusConc) =>
 
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
 
-// ---------------------------------------------------------------------------
-// Motor da conciliação (helpers locais sobre a Carteira-Mestre)
-// ---------------------------------------------------------------------------
-
-interface ItemDif {
-  natureza: Natureza;
-  valor: number;
-  texto: string;
+/** "4 nos extratos e 1 no FI-GL" – diferenças explicadas separadas por conciliação */
+function explicadasPorOrigem(extratos: number, gl: number): string {
+  return [extratos ? `${extratos} nos extratos` : "", gl ? `${gl} no FI-GL` : ""].filter(Boolean).join(" e ");
 }
-
-interface LinhaGL {
-  chave: string;
-  conta: ContaPlano;
-  tipo: TipoContrato;
-  contratos: number;
-  saldoTRM: number;
-  saldoGL: number;
-  diferenca: number;
-  arredondamento: number;
-  itens: ItemDif[];
-  status: StatusConc;
-  motivo: string | null;
-}
-
-interface DetalheTitulo {
-  tipo: "titulo";
-  custodiante: string;
-  quantidade: number;
-  puTRM: number;
-  puExtrato: number;
-  taxaTRM: number;
-  taxaExtrato: number;
-}
-
-interface DetalheFundo {
-  tipo: "fundo";
-  administrador: string;
-  quantidade: number;
-  quantidadeExtrato: number;
-  cotaTRM: number;
-  cotaExtrato: number;
-  dataCota: string;
-  d1: boolean;
-}
-
-interface DetalheTD {
-  tipo: "td";
-  banco: string;
-  moeda: MoedaME;
-  saldoTRMME: number;
-  saldoExtratoME: number;
-  ptax: number;
-  dataExtrato: string;
-}
-
-interface LinhaExtrato {
-  c: ContratoMestre;
-  fonte: string;
-  base: string;
-  saldoTRM: number;
-  saldoExtrato: number;
-  diferenca: number;
-  itens: ItemDif[];
-  status: StatusConc;
-  motivo: string | null;
-  detalhe: DetalheTitulo | DetalheFundo | DetalheTD | null;
-}
-
-interface Checagem {
-  id: string;
-  descricao: string;
-  ok: boolean;
-  detalhe: string;
-}
-
-interface EtapaStatus extends Etapa {
-  data: string;
-  status: StatusEtapa;
-  nota: string | null;
-}
-
-function statusDe(itens: ItemDif[], diferenca: number): StatusConc {
-  if (itens.some((i) => i.natureza === "pendente")) return "Pendente";
-  return Math.abs(diferenca) > TOLERANCIA ? "Diferença explicada" : "Conciliado";
-}
-
-function motivoDe(itens: ItemDif[], arredondamento: number, textoArred: string): string | null {
-  const textos = itens.map((i) => i.texto);
-  if (Math.abs(arredondamento) >= 0.005) textos.push(itens.length ? `Inclui ${fmtDifBRL(arredondamento)} de arredondamento.` : textoArred);
-  return textos.length ? textos.join(" ") : null;
-}
-
-function identidade(m: MovMestre): number {
-  return m.saldoFinal - (m.saldoInicial + m.aplicacoes + m.rendimentos - m.resgatesBrutos - m.comeCotas);
-}
-
-function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
-  const inicio = previousMonthEnd(db);
-  /** fechamento em andamento: a data-base é o último dado importado do SAP (meses anteriores já aprovados) */
-  const emAndamento = db === IMPORTACAO_SAP.ultimoDadoDisponivel;
-  const du0 = diaUtil(db, 0);
-  const duM1 = diaUtil(db, -1);
-  const du1 = diaUtil(db, 1);
-  const noEscopo = (empresa: string) => escopo === "todas" || empresa === escopo;
-
-  const contratos = contratosMestre(db, p, escopo);
-  const mov = movimentacaoMestre(inicio, db, p, escopo);
-
-  // Exceções do fechamento em andamento (fictícias): a última aplicação de renda fixa do mês ficou sem a apropriação
-  // (TPM44) no FI-GL e a primeira, indexada ao CDI, tem extrato do banco com taxa diferente da negociada.
-  const aplicacoesRF = mov.eventos
-    .filter((e) => e.tipo === "Aplicação" && e.tipoContrato === "Renda fixa bancária")
-    .map((e) => contratos.find((c) => c.codigo === e.codigo))
-    .filter((c): c is ContratoMestre => !!c);
-  const opGL = emAndamento ? (aplicacoesRF[aplicacoesRF.length - 1] ?? null) : null;
-  const opExtrato = emAndamento ? (aplicacoesRF.find((c) => c !== opGL && c.indexador === "CDI") ?? null) : null;
-
-  // ------------------------------------------------------------------ TRM × FI-GL
-  const grupos = new Map<string, { conta: ContaPlano; tipo: TipoContrato; itens: { c: ContratoMestre; v: number }[] }>();
-  const adicionar = (conta: string, c: ContratoMestre, v: number) => {
-    const k = `${conta}|${c.tipo}`;
-    let g = grupos.get(k);
-    if (!g) {
-      g = { conta: PLANO_CONTAS.find((x) => x.conta === conta)!, tipo: c.tipo, itens: [] };
-      grupos.set(k, g);
-    }
-    g.itens.push({ c, v });
-  };
-  for (const c of contratos) {
-    adicionar(contaCurva(c), c, c.saldoCurva);
-    const mtm = c.valorContabil - c.saldoCurva;
-    if (c.cpc48 !== "Custo Amortizado" && Math.abs(mtm) >= 0.005) adicionar(contaMTM(c), c, mtm);
-  }
-
-  const ptaxFim: Record<MoedaME, number> = { USD: p.ptaxUSD, EUR: p.ptaxEUR };
-  const ptaxPenultimo: Record<MoedaME, number> = { USD: ptaxNaData("USD", duM1, p), EUR: ptaxNaData("EUR", duM1, p) };
-  const comeCotas = mov.eventos.filter((e) => e.tipo === "Come-cotas");
-
-  const gl: LinhaGL[] = [];
-  for (const conta of PLANO_CONTAS) {
-    for (const t of TIPOS_CONTRATO) {
-      const g = grupos.get(`${conta.conta}|${t.tipo}`);
-      if (!g) continue;
-      const saldoTRM = g.itens.reduce((s, i) => s + i.v, 0);
-      const itens: ItemDif[] = [];
-      if (conta.componente === "curva" && t.tipo === "Time deposit") {
-        const moedas = [...new Set(g.itens.map((i) => i.c.moeda))].filter((m): m is MoedaME => m !== "BRL");
-        const valor = g.itens.reduce((s, i) => (i.c.moeda === "BRL" ? s : s + r2(i.c.saldoME * (ptaxPenultimo[i.c.moeda] - i.c.ptax))), 0);
-        if (Math.abs(valor) >= 0.005)
-          itens.push({
-            natureza: "timing",
-            valor,
-            texto: `Variação cambial de ${fmtDate(du0)} (último dia útil) contabilizada em D+1, ${fmtDate(du1)}: o FI-GL está avaliado à PTAX de ${fmtDate(duM1)} (${moedas.map((m) => `${m} ${fmtDec(ptaxPenultimo[m], 4)}`).join("; ")}) e o TRM à PTAX de fechamento (${moedas.map((m) => `${m} ${fmtDec(ptaxFim[m], 4)}`).join("; ")}). Regulariza no mês seguinte.`,
-          });
-      }
-      if (conta.componente === "curva" && t.tipo === "Fundo de investimento" && comeCotas.length) {
-        const valor = r2(comeCotas.reduce((s, e) => s + e.ir, 0));
-        itens.push({
-          natureza: "timing",
-          valor,
-          texto: `Come-cotas de ${fmtDate(comeCotas[0].data)} (IR de ${fmtBRL(valor, true)} em ${plural(comeCotas.length, "fundo", "fundos")}) informado pelos administradores e contabilizado em D+1, ${fmtDate(du1)}: o FI-GL ainda não reflete a redução das cotas (contrapartida em IRRF a compensar).`,
-        });
-      }
-      if (opGL && conta.componente === "curva" && t.tipo === opGL.tipo && contaCurva(opGL) === conta.conta) {
-        const juros = r2(opGL.saldoCurva - opGL.principalBRL);
-        itens.push({
-          natureza: "pendente",
-          valor: -juros,
-          texto: `Log da TPM44 com erro na operação ${opGL.codigo} (${opGL.produto} ${opGL.contraparte}, aplicada em ${fmtDate(opGL.dataAplicacao)}): determinação de contas não encontrada – juros de ${fmtBRL(juros, true)} apropriados no TRM e não contabilizados. Corrigir e reprocessar a TPM44.`,
-        });
-      }
-      // lançamentos por contrato arredondados a centavos; nas linhas com diferença apurada, o saldo do razão é o TRM
-      // arredondado mais os itens (o resíduo fica abaixo de meio centavo)
-      const arredondamento = itens.length ? r2(saldoTRM) - saldoTRM : g.itens.reduce((s, i) => s + (r2(i.v) - i.v), 0);
-      const diferenca = itens.reduce((s, i) => s + i.valor, 0) + arredondamento;
-      gl.push({
-        chave: `${conta.conta}|${t.tipo}`,
-        conta,
-        tipo: t.tipo,
-        contratos: new Set(g.itens.map((i) => i.c.id)).size,
-        saldoTRM,
-        saldoGL: saldoTRM + diferenca,
-        diferenca,
-        arredondamento,
-        itens,
-        status: statusDe(itens, diferenca),
-        motivo: motivoDe(itens, arredondamento, "Arredondamento de centavos nos lançamentos por contrato."),
-      });
-    }
-  }
-
-  // ------------------------------------------------------------------ TRM × extratos
-  const extratos: LinhaExtrato[] = [];
-  for (const t of TIPOS_CONTRATO) {
-    for (const c of contratos.filter((x) => x.tipo === t.tipo)) {
-      const itens: ItemDif[] = [];
-      let saldoTRM = c.saldoCurva;
-      let saldoExtrato = c.saldoCurva;
-      let fonte = "";
-      let textoArred = "Arredondamento de centavos – dentro da tolerância.";
-      let detalhe: LinhaExtrato["detalhe"] = null;
-
-      if (c.tipo === "Renda fixa bancária") {
-        const titulo = c.produto === "Debênture" || c.produto === "CRI" || c.produto === "CRA";
-        fonte = titulo ? `B3 – extrato de custódia (${c.contraparte})` : `${c.contraparte} – extrato de posição`;
-        saldoExtrato = r2(c.principalBRL * truncar(c.saldoCurva / c.principalBRL, 8));
-        textoArred = "Fator acumulado truncado na 8ª casa decimal pelo emissor – centavos.";
-        if (opExtrato && c.id === opExtrato.id) {
-          const taxa = OPERACOES.find((o) => o.transacao === c.id)?.taxa ?? 1;
-          const juros = c.saldoCurva - c.principalBRL;
-          const valor = -r2((juros * 0.01) / taxa);
-          saldoExtrato = r2(c.saldoCurva) + valor;
-          itens.push({
-            natureza: "pendente",
-            valor,
-            texto: `Extrato do ${c.contraparte} remunera ${fmtDec((taxa - 0.01) * 100, 1)}% do CDI; a nota de negociação e o cadastro do TRM têm ${fmtDec(taxa * 100, 1)}% do CDI (juros desde ${fmtDate(c.dataAplicacao)}). Contestar com o banco antes da aprovação.`,
-          });
-        }
-      } else if (c.tipo === "Tesouro Direto") {
-        const tit = TITULOS.find((x) => x.id === c.codigo)!;
-        const x = posicaoTitulo(tit, db, p);
-        // agente com fonte de preço própria: ±1 bp sobre a taxa indicativa ANBIMA (sinal alterna com o mês)
-        const bp = tit.custodiante.includes("Bradesco") ? (Number(db.slice(5, 7)) % 2 === 1 ? 1 : -1) : 0;
-        const taxaExtrato = x.taxaMercado + bp / 10_000;
-        const puExtrato = truncar(bp ? puTitulo(tit, db, taxaExtrato, p) : x.puMercado, 6);
-        fonte = `${tit.custodiante} – PU de mercado`;
-        saldoTRM = c.saldoMercado;
-        saldoExtrato = r2(tit.quantidade * puExtrato);
-        textoArred = "PU truncado na 6ª casa decimal (convenção B3/Tesouro) – centavos.";
-        const dif = saldoExtrato - saldoTRM;
-        if (bp && Math.abs(dif) > TOLERANCIA)
-          itens.push({
-            natureza: "preco",
-            valor: dif,
-            texto: `PU do agente (${fmtDec(puExtrato, 6)}) calculado com taxa de ${fmtDec(taxaExtrato * 100, 2)}% – fonte própria, ${bp > 0 ? "+" : "−"}1 bp sobre a taxa indicativa ANBIMA de ${fmtDec(x.taxaMercado * 100, 2)}% usada no TRM. Diferença de precificação, sem ajuste contábil.`,
-          });
-        detalhe = {
-          tipo: "titulo",
-          custodiante: tit.custodiante,
-          quantidade: tit.quantidade,
-          puTRM: x.puMercado,
-          puExtrato,
-          taxaTRM: x.taxaMercado,
-          taxaExtrato: bp ? taxaExtrato : x.taxaMercado,
-        };
-      } else if (c.tipo === "Fundo de investimento") {
-        const f = FUNDOS.find((x) => x.id === c.codigo)!;
-        const pos = posicaoFundo(f, db, p);
-        const d1 = CLASSES_COTA_D1.has(f.classe);
-        const dataCota = d1 ? duM1 : db;
-        const cotaExtrato = arred(cotaFundo(f, dataCota, p), 8);
-        const quantidadeExtrato = arred(pos.quantidade, 6);
-        fonte = `${f.administrador} – posição de cotas`;
-        saldoExtrato = r2(quantidadeExtrato * cotaExtrato);
-        textoArred = "Quantidade (6 casas) e cota (8 casas) arredondadas pelo administrador – centavos.";
-        const dif = saldoExtrato - saldoTRM;
-        if (d1 && Math.abs(dif) > TOLERANCIA)
-          itens.push({
-            natureza: "timing",
-            valor: dif,
-            texto: `Posição extraída em ${rotuloDU(0)} com a cota de ${fmtDate(dataCota)} (${fmtDec(cotaExtrato, 8)}): a cota de fechamento é divulgada pelo administrador em D+1. Diferença temporária – confirmar com a cota publicada em ${fmtDate(du1)}.`,
-          });
-        detalhe = {
-          tipo: "fundo",
-          administrador: f.administrador,
-          quantidade: pos.quantidade,
-          quantidadeExtrato,
-          cotaTRM: pos.cota,
-          cotaExtrato,
-          dataCota,
-          d1,
-        };
-      } else {
-        const td = TIME_DEPOSITS.find((x) => x.id === c.codigo)!;
-        const dataExtrato = ultimoDiaUtilExterior(db);
-        const saldoExtratoME = r2(saldoME(td, dataExtrato));
-        fonte = `${td.banco} – extrato em ${td.moeda}`;
-        saldoExtrato = saldoExtratoME * c.ptax;
-        textoArred = `Saldo em ${td.moeda} arredondado a centavos pelo banco.`;
-        const dias = toDay(db) - toDay(dataExtrato);
-        const dif = saldoExtrato - saldoTRM;
-        if (dias > 0 && Math.abs(dif) > TOLERANCIA)
-          itens.push({
-            natureza: "timing",
-            valor: dif,
-            texto: `Extrato emitido em ${fmtDate(dataExtrato)} (último dia útil local): juros de ${plural(dias, "dia corrido", "dias corridos")} até a data-base não incluídos (${td.moeda} ${fmtDec(saldoExtratoME - c.saldoME, 2)}). Diferença temporária.`,
-          });
-        detalhe = {
-          tipo: "td",
-          banco: td.banco,
-          moeda: td.moeda,
-          saldoTRMME: c.saldoME,
-          saldoExtratoME,
-          ptax: c.ptax,
-          dataExtrato,
-        };
-      }
-
-      const diferenca = saldoExtrato - saldoTRM;
-      const explicado = itens.reduce((s, i) => s + i.valor, 0);
-      const resto = diferenca - explicado;
-      extratos.push({
-        c,
-        fonte,
-        base: BASE_EXTRATO[c.tipo],
-        saldoTRM,
-        saldoExtrato,
-        diferenca,
-        itens,
-        status: statusDe(itens, diferenca),
-        motivo: motivoDe(itens, resto, textoArred),
-        detalhe,
-      });
-    }
-  }
-
-  // ------------------------------------------------------------------ Roll-forward e checagens
-  const porTipo = TIPOS_CONTRATO.map((t) => {
-    const cs = contratos.filter((c) => c.tipo === t.tipo);
-    return {
-      ...t,
-      mov: mov.porTipo[t.tipo],
-      carteira: cs.reduce((s, c) => s + c.saldoCurva, 0),
-      contabil: cs.reduce((s, c) => s + c.valorContabil, 0),
-      contratos: cs.length,
-    };
-  });
-  const saldoCarteira = contratos.reduce((s, c) => s + c.saldoCurva, 0);
-  const valorContabil = contratos.reduce((s, c) => s + c.valorContabil, 0);
-  const pAnterior = premissasNaDataBase(inicio);
-  const saldoAnterior = contratosMestre(inicio, pAnterior, escopo).reduce((s, c) => s + c.saldoCurva, 0);
-  const difIdentidade = Math.max(Math.abs(identidade(mov.total)), ...porTipo.map((t) => Math.abs(identidade(t.mov))));
-  const difSaldoFinal = mov.total.saldoFinal - saldoCarteira;
-  const difSaldoInicial = mov.total.saldoInicial - saldoAnterior;
-  const rollforwardOk = difIdentidade < 0.005 && Math.abs(difSaldoFinal) < 0.005;
-
-  const mtmVJORA = contratos.filter((c) => c.cpc48 === "VJ por ORA").reduce((s, c) => s + c.valorContabil - c.saldoCurva, 0);
-  const mtmVJPR = contratos.filter((c) => c.cpc48 === "VJ por Resultado").reduce((s, c) => s + c.valorContabil - c.saldoCurva, 0);
-  const mtmCusto = contratos.filter((c) => c.cpc48 === "Custo Amortizado").reduce((s, c) => s + c.mtm, 0);
-  const mtmCalculado = contratos.filter((c) => c.cpc48 !== "Custo Amortizado").reduce((s, c) => s + c.mtm, 0);
-  const mtmContabil = gl.filter((l) => l.conta.componente === "mtm").reduce((s, l) => s + l.saldoTRM, 0);
-  const circulante = gl.filter((l) => l.conta.circulante).reduce((s, l) => s + l.saldoTRM, 0);
-
-  // totais dos relatórios de origem (motores do R01, R08, R09 e R10)
-  const r01 = posicoesEm(operacoesDoEscopo(escopo), db, p);
-  const r08 = TITULOS.filter((t) => noEscopo(t.empresa))
-    .map((t) => posicaoTitulo(t, db, p))
-    .filter((x) => x.ativo);
-  const r09 = FUNDOS.filter((f) => noEscopo(f.empresa))
-    .map((f) => posicaoFundo(f, db, p))
-    .filter((x) => x.ativo);
-  const r10 = TIME_DEPOSITS.filter((t) => noEscopo(t.empresa))
-    .map((t) => posicaoTimeDeposit(t, db, p))
-    .filter((x) => x.ativo);
-  const origem = [
-    { id: "r01", rel: "R01", tipo: "Renda fixa bancária" as TipoContrato, n: r01.length, total: r01.reduce((s, x) => s + x.valorContabil, 0), un: ["operação", "operações"] },
-    { id: "r08", rel: "R08", tipo: "Tesouro Direto" as TipoContrato, n: r08.length, total: r08.reduce((s, x) => s + x.valorContabil, 0), un: ["título", "títulos"] },
-    { id: "r09", rel: "R09", tipo: "Fundo de investimento" as TipoContrato, n: r09.length, total: r09.reduce((s, x) => s + x.saldo, 0), un: ["fundo", "fundos"] },
-    { id: "r10", rel: "R10", tipo: "Time deposit" as TipoContrato, n: r10.length, total: r10.reduce((s, x) => s + x.saldoBRL, 0), un: ["time deposit", "time deposits"] },
-  ];
-
-  const tds = contratos.filter((c) => c.tipo === "Time deposit");
-  const moedasTD = [...new Set(tds.map((c) => c.moeda))].filter((m): m is MoedaME => m !== "BRL");
-  const ptaxOk = tds.every((c) => c.moeda !== "BRL" && Math.abs(c.ptax - ptaxFim[c.moeda]) < 1e-9);
-  const extFundos = extratos.filter((l) => l.c.tipo === "Fundo de investimento");
-  const fundosIguais = extFundos.filter((l) => l.detalhe?.tipo === "fundo" && !l.detalhe.d1).length;
-  const fundosD1 = extFundos.length - fundosIguais;
-  const fmt2 = (v: number) => fmtDec(v, 2);
-
-  const checagens: Checagem[] = [
-    {
-      id: "identidade",
-      descricao: "Roll-forward fecha: SF = SI + aplicações + rendimentos − resgates − come-cotas",
-      ok: difIdentidade < 0.005,
-      detalhe: `Diferença de R$ ${fmt2(difIdentidade)} no total e em cada tipo de contrato`,
-    },
-    {
-      id: "saldoFinal",
-      descricao: `Saldo final do roll-forward = Σ saldo bruto da Carteira-Mestre em ${fmtDate(db)}`,
-      ok: Math.abs(difSaldoFinal) < 0.005,
-      detalhe: `${fmtBRL(saldoCarteira, true)} em ${plural(contratos.length, "contrato", "contratos")} · diferença de R$ ${fmt2(Math.abs(difSaldoFinal))}`,
-    },
-    {
-      id: "saldoInicial",
-      descricao: `Saldo inicial = saldo do fechamento de ${fmtDate(inicio)}`,
-      ok: Math.abs(difSaldoInicial) < 0.005,
-      detalhe: `${fmtBRL(saldoAnterior, true)} (Carteira-Mestre com as premissas daquela data-base) · diferença de R$ ${fmt2(Math.abs(difSaldoInicial))}`,
-    },
-    ...origem.map((o) => {
-      const mestre = porTipo.find((t) => t.tipo === o.tipo)!;
-      const dif = o.total - mestre.contabil;
-      return {
-        id: o.id,
-        descricao: `${metaTipo(o.tipo).curto}: total do ${o.rel} × Carteira-Mestre (valor contábil)`,
-        ok: Math.abs(dif) < 0.005 && o.n === mestre.contratos,
-        detalhe: o.n
-          ? `${fmtBRL(o.total, true)} em ${plural(o.n, o.un[0], o.un[1])} · diferença de R$ ${fmt2(Math.abs(dif))}`
-          : `Sem ${o.un[1]} na empresa selecionada`,
-      };
-    }),
-    {
-      id: "mtm",
-      descricao: "MTM contábil (contas 1.1.2.09 e 1.2.1.09) = MTM calculado dos contratos a valor justo",
-      ok: Math.abs(mtmContabil - mtmCalculado) < 0.005,
-      detalhe: `${fmtBRL(mtmContabil, true)} (VJORA ${fmtBRL(mtmVJORA, true)} · VJPR ${fmtBRL(mtmVJPR, true)}); o MTM de ${fmtBRL(mtmCusto, true)} dos contratos ao custo amortizado não é contabilizado – apenas divulgado (CPC 40)`,
-    },
-    {
-      id: "ptax",
-      descricao: "PTAX usada nos time deposits = PTAX importada (TCURR, tipo M)",
-      ok: ptaxOk,
-      detalhe: tds.length
-        ? `${moedasTD.map((m) => `${m} ${fmtDec(ptaxFim[m], 4)}`).join(" · ")} de ${fmtDate(du0)} em ${plural(tds.length, "contrato", "contratos")}`
-        : "Sem contratos em moeda estrangeira na empresa selecionada",
-    },
-    {
-      id: "cotas",
-      descricao: "Cotas do TRM × cotas informadas pelos administradores",
-      ok: extFundos.every((l) => l.status !== "Pendente"),
-      detalhe: extFundos.length
-        ? `${fundosIguais} de ${plural(extFundos.length, "fundo", "fundos")} com a mesma cota${fundosD1 ? `; ${fundosD1} com a cota de ${fmtDate(duM1)} (divulgação em D+1 – diferença explicada)` : ""}`
-        : "Sem fundos na empresa selecionada",
-    },
-    {
-      id: "mercado",
-      descricao: "Dados de mercado importados do SAP até a data-base",
-      ok: db <= IMPORTACAO_SAP.ultimoDadoDisponivel,
-      detalhe: `Último dado disponível na data-base: ${fmtDate(ultimoDadoNaDataBase(db))} – a conciliação não usa valores projetados`,
-    },
-  ];
-
-  // ------------------------------------------------------------------ Checklist
-  const glPend = gl.filter((l) => l.status === "Pendente");
-  const glExp = gl.filter((l) => l.status === "Diferença explicada");
-  const extPend = extratos.filter((l) => l.status === "Pendente");
-  const extExp = extratos.filter((l) => l.status === "Diferença explicada");
-  const checagensFalha = checagens.filter((c) => !c.ok);
-  const fx = gl.flatMap((l) => (l.tipo === "Time deposit" ? l.itens.filter((i) => i.natureza === "timing") : []));
-  const cc = gl.flatMap((l) => (l.tipo === "Fundo de investimento" ? l.itens.filter((i) => i.natureza === "timing") : []));
-  const somaItens = (xs: ItemDif[]) => xs.reduce((s, i) => s + i.valor, 0);
-  const qtdPendencias = glPend.length + extPend.length + checagensFalha.length;
-  const fluxos = mov.eventos.length;
-
-  const checklist: EtapaStatus[] = ETAPAS.map((e) => {
-    let status: StatusEtapa = "Concluída";
-    let nota: string | null = null;
-    switch (e.id) {
-      case "mercado":
-        nota = `PTAX de fechamento${moedasTD.length ? ` (${moedasTD.map((m) => `${m} ${fmtDec(ptaxFim[m], 4)}`).join("; ")})` : ""}, taxas ANBIMA, cotas e CDI/IPCA carregados até ${fmtDate(ultimoDadoNaDataBase(db))}.`;
-        break;
-      case "tbb1":
-        if (cc.length && Math.abs(somaItens(cc)) > TOLERANCIA) {
-          status = "Com ressalva";
-          nota = `Come-cotas (${fmtBRL(somaItens(cc), true)}) lançado em D+1 após o informe dos administradores – diferença temporária na conta 1.1.2.03.`;
-        } else nota = fluxos ? `${plural(fluxos, "fluxo lançado", "fluxos lançados")} no mês.` : "Sem fluxos no mês.";
-        break;
-      case "tpm44":
-        if (opGL) {
-          status = "Com ressalva";
-          nota = `Erro no log da operação ${opGL.codigo}: juros de ${fmtBRL(opGL.saldoCurva - opGL.principalBRL, true)} não contabilizados – reprocessar.`;
-        }
-        break;
-      case "tpm1":
-        if (fx.length && Math.abs(somaItens(fx)) > TOLERANCIA) {
-          status = "Com ressalva";
-          nota = `Variação cambial do último dia útil dos time deposits (${fmtDifBRL(-somaItens(fx))}) lançada em D+1 – item de conciliação da conta 1.1.2.04.`;
-        }
-        break;
-      case "gl":
-        if (glPend.length) {
-          status = "Com ressalva";
-          nota = `${plural(glPend.length, "diferença pendente", "diferenças pendentes")} (${fmtDifBRL(glPend.reduce((s, l) => s + l.diferenca, 0))}).`;
-        } else if (glExp.length) nota = `${plural(glExp.length, "diferença temporária explicada", "diferenças temporárias explicadas")}.`;
-        break;
-      case "extratos":
-        if (extPend.length) {
-          status = "Com ressalva";
-          nota = `${plural(extPend.length, "extrato com diferença pendente", "extratos com diferença pendente")} (${extPend.map((l) => l.c.codigo).join(", ")}).`;
-        } else if (extExp.length) nota = `${plural(extExp.length, "diferença explicada", "diferenças explicadas")} (timing e fonte de preço).`;
-        break;
-      case "rollforward":
-        if (checagensFalha.length) {
-          status = "Com ressalva";
-          nota = `${plural(checagensFalha.length, "checagem com falha", "checagens com falha")}.`;
-        } else nota = `Diferença de R$ 0,00 · ${checagens.length} checagens OK.`;
-        break;
-      case "aprovacao":
-        if (qtdPendencias) {
-          status = "Pendente";
-          nota = `Aguarda a regularização de ${plural(qtdPendencias, "pendência", "pendências")}.`;
-        } else nota = "Período aprovado; saldos enviados para a nota explicativa.";
-        break;
-    }
-    return { ...e, data: diaUtil(db, e.du), status, nota };
-  });
-
-  // ------------------------------------------------------------------ Resumos
-  const contas = [...new Set(gl.map((l) => l.conta.conta))].map((conta) => {
-    const ls = gl.filter((l) => l.conta.conta === conta);
-    const status: StatusConc = ls.some((l) => l.status === "Pendente")
-      ? "Pendente"
-      : ls.some((l) => l.status === "Diferença explicada")
-        ? "Diferença explicada"
-        : "Conciliado";
-    return { conta, status };
-  });
-
-  const planoResumo = PLANO_CONTAS.map((conta) => {
-    const ls = gl.filter((l) => l.conta.conta === conta.conta);
-    return {
-      conta,
-      contratos: ls.reduce((s, l) => s + l.contratos, 0),
-      tipos: ls.map((l) => l.tipo),
-      saldoTRM: ls.reduce((s, l) => s + l.saldoTRM, 0),
-      saldoGL: ls.reduce((s, l) => s + l.saldoGL, 0),
-    };
-  });
-
-  const naturezas = (["timing", "pendente"] as Natureza[]).map((n) => {
-    const xs = gl.flatMap((l) => l.itens.filter((i) => i.natureza === n));
-    return { natureza: n, qtd: xs.length, valor: somaItens(xs) };
-  });
-  const arredondamentoGL = gl.reduce((s, l) => s + l.arredondamento, 0);
-
-  return {
-    inicio,
-    emAndamento,
-    du0,
-    duM1,
-    du1,
-    contratos,
-    mov,
-    gl,
-    contas,
-    planoResumo,
-    naturezas,
-    arredondamentoGL,
-    extratos,
-    porTipo,
-    saldoCarteira,
-    saldoAnterior,
-    valorContabil,
-    circulante,
-    mtmVJORA,
-    mtmVJPR,
-    mtmCusto,
-    rollforwardOk,
-    difIdentidade,
-    difSaldoFinal,
-    checagens,
-    checklist,
-    glPend,
-    glExp,
-    extPend,
-    extExp,
-    checagensFalha,
-    qtdPendencias,
-  };
-}
-
-type Conciliacao = ReturnType<typeof montarConciliacao>;
 
 // ---------------------------------------------------------------------------
 // Tela
@@ -887,14 +131,15 @@ export function R12Conciliacao() {
   const [tipoExt, setTipoExt] = useState<TipoContrato | null>(null);
   const [filtroExt, setFiltroExt] = useState<"todos" | "diferencas">("todos");
 
-  const d = useMemo(() => montarConciliacao(db, p, escopo), [db, p, escopo]);
+  const d = useMemo(() => conciliacaoDoMes(db, p, escopo), [db, p, escopo]);
 
   const escopoLabel = ESCOPOS.find((e) => e.value === escopo)?.label ?? "";
   const inicioMes = addDays(d.inicio, 1);
   const contasOk = d.contas.filter((c) => c.status !== "Pendente").length;
   const contasExp = d.contas.filter((c) => c.status === "Diferença explicada").length;
   const extOk = d.extratos.length - d.extPend.length;
-  const difGL = d.gl.reduce((s, l) => s + l.diferenca, 0);
+  const difGL = d.totalGL.diferenca;
+  const qtdExplicadas = d.glExp.length + d.extExp.length;
   const executadas = d.checklist.filter((e) => e.status !== "Pendente").length;
   const ressalvas = d.checklist.filter((e) => e.status === "Com ressalva").length;
   const aprovacao = d.checklist.find((e) => e.id === "aprovacao")!;
@@ -922,7 +167,6 @@ export function R12Conciliacao() {
   // -------------------------------------------------------------------------
 
   const exportar = () => {
-    const somaGL = (fn: (l: LinhaGL) => number) => d.gl.reduce((s, l) => s + fn(l), 0);
     const somaExt = (fn: (l: LinhaExtrato) => number) => d.extratos.reduce((s, l) => s + fn(l), 0);
     const movs = d.porTipo.map((t) => t.mov);
     const linhaRF = (rotulo: string, fn: (m: MovMestre) => number) => [rotulo, ...movs.map(fn), fn(d.mov.total)];
@@ -952,15 +196,16 @@ export function R12Conciliacao() {
             "",
             "",
             d.contratos.length,
-            somaGL((l) => l.saldoTRM),
-            somaGL((l) => l.saldoGL),
-            somaGL((l) => l.diferenca),
+            d.totalGL.saldoTRM,
+            d.totalGL.saldoGL,
+            d.totalGL.diferenca,
             `${contasOk}/${d.contas.length} contas sem pendência`,
             "",
           ],
           notas: [
             "Plano de contas do ambiente de teste (fictício). Saldo TRM = valor contábil da Carteira-Mestre: curva (custo amortizado) e mercado (valor justo – CPC 48), com o ajuste a valor justo separado nas contas 1.x.x.09.",
-            `Tolerância: diferenças de até ${TOLERANCIA_TXT} por linha são arredondamento (conciliado). Diferença explicada = timing identificado, não bloqueia a aprovação; pendente = bloqueia a aprovação.`,
+            `Saldos por linha arredondados a centavos; os totais são a soma das linhas.${Math.abs(d.arredondamentoCarteira) >= 0.005 ? ` Valor contábil da Carteira-Mestre: ${fmtBRL(d.valorContabil, true)} (arredondamento de ${fmtDifBRL(d.arredondamentoCarteira)} sobre o total das linhas).` : ""}`,
+            `Tolerância: diferenças de até ${TOLERANCIA_TXT} por linha são arredondamento (conciliado). Diferença explicada = diferença temporária (timing) ou de fonte de preço identificada, não bloqueia a aprovação; pendente = bloqueia a aprovação.`,
             ...d.planoResumo.filter((x) => Math.abs(x.saldoTRM) < 0.005).map((x) => `Conta ${x.conta.conta} (${x.conta.descricao}) sem saldo na data-base.`),
           ],
         },
@@ -1040,8 +285,8 @@ export function R12Conciliacao() {
             linhaRF(`Saldo inicial em ${fmtDate(d.inicio)}`, (m) => m.saldoInicial),
             linhaRF("(+) Aplicações", (m) => m.aplicacoes),
             linhaRF("(+) Rendimentos (juros na curva, valorização da cota e variação cambial)", (m) => m.rendimentos),
-            linhaRF("(−) Resgates brutos (resgates, cupons e vencimentos)", (m) => -m.resgatesBrutos),
-            linhaRF("(−) Come-cotas (IR recolhido com redução de cotas)", (m) => -m.comeCotas),
+            linhaRF("(−) Resgates brutos (resgates, cupons e vencimentos)", (m) => m.resgatesBrutos),
+            linhaRF("(−) Come-cotas (IR recolhido com redução de cotas)", (m) => m.comeCotas),
             linhaRF(`Saldo final em ${fmtDate(db)}`, (m) => m.saldoFinal),
             ["Saldo bruto da Carteira-Mestre na data-base", ...d.porTipo.map((t) => t.carteira), d.saldoCarteira],
             ["Diferença (saldo final − Carteira-Mestre)", ...d.porTipo.map((t) => t.mov.saldoFinal - t.carteira), d.difSaldoFinal],
@@ -1381,8 +626,8 @@ export function R12Conciliacao() {
         <MessageStrip design="positive">
           <strong>Fechamento de {fmtMonthLong(db)} sem pendências:</strong> {contasOk} de {plural(d.contas.length, "conta", "contas")} TRM × FI-GL e{" "}
           {extOk} de {plural(d.extratos.length, "extrato", "extratos")} conciliados
-          {d.glExp.length + d.extExp.length > 0 &&
-            ` (${plural(d.glExp.length + d.extExp.length, "diferença temporária ou de precificação explicada", "diferenças temporárias ou de precificação explicadas")})`}
+          {qtdExplicadas > 0 &&
+            ` (${plural(qtdExplicadas, "diferença temporária ou de fonte de preço explicada", "diferenças temporárias ou de fonte de preço explicadas")}: ${explicadasPorOrigem(d.extExp.length, d.glExp.length)})`}
           , roll-forward fechado com diferença de R$&nbsp;0,00 e {executadas} de {d.checklist.length} etapas do checklist concluídas –{" "}
           {aprovado ? `período aprovado pela Controladoria em ${fmtDate(aprovacao.data)}` : "período pronto para aprovação"}.
         </MessageStrip>
@@ -1399,22 +644,14 @@ export function R12Conciliacao() {
           bodyClassName="px-4 pb-3"
         >
           <ul className="border-t border-line-soft divide-y divide-line-soft text-[13px] text-text">
-            {d.glPend.map((l) => (
-              <li key={l.chave} className="flex items-start gap-2 py-2">
+            {d.pendencias.map((x) => (
+              <li key={x.id} className="flex items-start gap-2 py-2">
                 <XCircle className="w-4 h-4 text-negative shrink-0 mt-0.5" aria-label="Pendente" />
                 <span className="min-w-0 leading-relaxed">
-                  Conta <strong className="tabular">{l.conta.conta}</strong> ({l.conta.descricao.toLowerCase()}): FI-GL{" "}
-                  {fmtBRL(Math.abs(l.diferenca), true)} {l.diferenca < 0 ? "menor" : "maior"} que o TRM – apropriação da TPM44 não
-                  contabilizada. <LinkAcao onClick={() => irPara("gl")}>Ver conciliação</LinkAcao>
-                </span>
-              </li>
-            ))}
-            {d.extPend.map((l) => (
-              <li key={l.c.id} className="flex items-start gap-2 py-2">
-                <XCircle className="w-4 h-4 text-negative shrink-0 mt-0.5" aria-label="Pendente" />
-                <span className="min-w-0 leading-relaxed">
-                  Extrato do <strong>{l.c.codigo}</strong> ({l.c.produto} {l.c.contraparte}): saldo {fmtBRL(Math.abs(l.diferenca), true)}{" "}
-                  {l.diferenca < 0 ? "menor" : "maior"} que o TRM – taxa divergente. <LinkAcao onClick={() => irPara("extratos")}>Ver conciliação</LinkAcao>
+                  <strong>{x.titulo}</strong>
+                  <span className="block">
+                    {x.descricao} <LinkAcao onClick={() => irPara(x.origem === "gl" ? "gl" : "extratos")}>Ver conciliação</LinkAcao>
+                  </span>
                 </span>
               </li>
             ))}
@@ -1428,8 +665,8 @@ export function R12Conciliacao() {
             ))}
           </ul>
           <p className="text-xs text-label leading-relaxed border-t border-line-soft pt-2">
-            {d.glExp.length + d.extExp.length > 0 &&
-              `${plural(d.glExp.length + d.extExp.length, "diferença explicada (timing ou fonte de preço) não bloqueia", "diferenças explicadas (timing ou fonte de preço) não bloqueiam")} a aprovação. `}
+            {qtdExplicadas > 0 &&
+              `${qtdExplicadas === 1 ? "Diferença explicada" : "Diferenças explicadas"} por diferença temporária (timing) ou fonte de preço (${explicadasPorOrigem(d.extExp.length, d.glExp.length)}) ${qtdExplicadas === 1 ? "não bloqueia" : "não bloqueiam"} a aprovação. `}
             A aprovação da Controladoria ({rotuloDU(aprovacao.du)}, {fmtDate(aprovacao.data)}) aguarda a regularização.
           </p>
         </Card>
@@ -1518,21 +755,35 @@ export function R12Conciliacao() {
             <ul className="text-xs text-label px-4 py-3 space-y-1 leading-relaxed border-t border-line-soft">
               <li>
                 (i) Saldo TRM = valor contábil da Carteira-Mestre: curva nos contratos ao custo amortizado e mercado nos contratos a
-                valor justo (CPC 48), com o ajuste a valor justo (mercado − curva) nas contas 1.1.2.09 e 1.2.1.09. O total (
-                {fmtBRL(d.valorContabil, true)}) é o valor contábil da{" "}
-                <Link to="/carteira-mestre" className="text-link hover:underline">
-                  Carteira-Mestre
-                </Link>
-                .
+                valor justo (CPC 48), com o ajuste a valor justo (mercado − curva) nas contas 1.1.2.09 e 1.2.1.09. Saldos por linha
+                arredondados a centavos; os totais são a soma das linhas.{" "}
+                {Math.abs(d.arredondamentoCarteira) >= 0.005 ? (
+                  <>
+                    O total das linhas ({fmtBRL(d.totalGL.saldoTRM, true)}) mais o arredondamento de {fmtDifBRL(d.arredondamentoCarteira)} é o
+                    valor contábil da{" "}
+                    <Link to="/carteira-mestre" className="text-link hover:underline">
+                      Carteira-Mestre
+                    </Link>{" "}
+                    ({fmtBRL(d.valorContabil, true)}).
+                  </>
+                ) : (
+                  <>
+                    O total ({fmtBRL(d.totalGL.saldoTRM, true)}) é o valor contábil da{" "}
+                    <Link to="/carteira-mestre" className="text-link hover:underline">
+                      Carteira-Mestre
+                    </Link>
+                    .
+                  </>
+                )}
               </li>
               <li>
-                (ii) Saldo FI-GL = saldo das contas no razão (ambiente de teste) após TBB1, TPM44 e TPM1. Diferenças de até{" "}
-                <strong className="text-text">{TOLERANCIA_TXT}</strong> por linha são arredondamento; diferença explicada (timing)
-                não bloqueia a aprovação; pendente bloqueia.
+                (ii) Saldo FI-GL = saldo das contas no razão (ambiente de teste) após TBB1, TPM10, TPM44 e TPM1. Diferenças de até{" "}
+                <strong className="text-text">{TOLERANCIA_TXT}</strong> por linha são arredondamento; a diferença temporária (timing)
+                explicada não bloqueia a aprovação; a pendente bloqueia.
               </li>
               <li>
                 (iii) Contrapartidas no FI-GL: juros e variação cambial no resultado financeiro, MTM dos contratos VJORA no
-                patrimônio líquido (ajuste de avaliação patrimonial), MTM dos VJPR no resultado e come-cotas em IRRF a compensar.
+                patrimônio líquido (ajuste de avaliação patrimonial), MTM dos VJR no resultado e come-cotas em IRRF a compensar.
               </li>
             </ul>
           </Card>
@@ -1582,8 +833,29 @@ export function R12Conciliacao() {
                       <td className="px-4 py-2 border-t border-[#a8b2bd]">Total do ativo – aplicações financeiras</td>
                       <td className="hidden sm:table-cell border-t border-[#a8b2bd]" />
                       <td className="px-3 py-2 border-t border-[#a8b2bd] text-right tabular">{d.contratos.length}</td>
-                      <td className="px-4 py-2 border-t border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtValor(d.valorContabil)}</td>
+                      <td className="px-4 py-2 border-t border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtValor(d.totalGL.saldoTRM)}</td>
                     </tr>
+                    {Math.abs(d.arredondamentoCarteira) >= 0.005 && (
+                      <>
+                        <tr className="text-label">
+                          <td className="px-4 py-1.5 border-t border-line-soft">Arredondamento (saldos por linha a centavos)</td>
+                          <td className="hidden sm:table-cell border-t border-line-soft" />
+                          <td className="border-t border-line-soft" />
+                          <td className="px-4 py-1.5 border-t border-line-soft text-right tabular whitespace-nowrap">{fmtDif(d.arredondamentoCarteira)}</td>
+                        </tr>
+                        <tr className="text-text font-semibold">
+                          <td className="px-4 py-1.5 border-t border-line-soft">
+                            Valor contábil da{" "}
+                            <Link to="/carteira-mestre" className="text-link hover:underline">
+                              Carteira-Mestre
+                            </Link>
+                          </td>
+                          <td className="hidden sm:table-cell border-t border-line-soft" />
+                          <td className="border-t border-line-soft" />
+                          <td className="px-4 py-1.5 border-t border-line-soft text-right tabular whitespace-nowrap">{fmtValor(d.valorContabil)}</td>
+                        </tr>
+                      </>
+                    )}
                   </tfoot>
                 </table>
               </div>
@@ -1600,7 +872,7 @@ export function R12Conciliacao() {
                   <li key={n.natureza} className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <ObjectStatus state={n.natureza === "pendente" ? (n.qtd ? "negative" : "neutral") : n.qtd ? "critical" : "neutral"}>
-                        {n.natureza === "pendente" ? "Pendente" : "Explicada (timing)"}
+                        {n.natureza === "pendente" ? "Pendente" : "Diferença temporária (timing)"}
                       </ObjectStatus>
                       <div className="text-xs text-label mt-0.5">{n.qtd ? plural(n.qtd, "item", "itens") : "nenhum item"}</div>
                     </div>
@@ -1612,7 +884,11 @@ export function R12Conciliacao() {
                 <li className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <ObjectStatus state="positive">Arredondamento</ObjectStatus>
-                    <div className="text-xs text-label mt-0.5">centavos por contrato · dentro da tolerância</div>
+                    <div className="text-xs text-label mt-0.5">
+                      {d.linhasArredondamento
+                        ? `centavos em ${plural(d.linhasArredondamento, "linha", "linhas")} (soma dos lançamentos por contrato) · dentro da tolerância`
+                        : "nenhuma linha com centavos de diferença"}
+                    </div>
                   </div>
                   <span className="tabular font-semibold whitespace-nowrap text-text">{fmtDifBRL(d.arredondamentoGL)}</span>
                 </li>
@@ -1622,8 +898,9 @@ export function R12Conciliacao() {
                 </li>
               </ul>
               <p className="text-xs text-label mt-4 leading-relaxed">
-                Timing: lançamento em D+1 (variação cambial do último dia útil dos time deposits e come-cotas informado pelo
+                Temporária: lançamento em D+1 (variação cambial do último dia útil dos time deposits e come-cotas informado pelo
                 administrador) – regulariza no mês seguinte. Pendente: erro de processamento que exige correção antes da aprovação.
+                Todos os valores são somas das linhas da conciliação.
               </p>
             </Card>
           </div>
@@ -1854,8 +1131,8 @@ function AbaRollforward({
     { rotulo: `Saldo inicial em ${fmtDate(d.inicio)}`, fn: (m) => m.saldoInicial, forte: true },
     { rotulo: "(+) Aplicações", fn: (m) => m.aplicacoes },
     { rotulo: "(+) Rendimentos", fn: (m) => m.rendimentos },
-    { rotulo: "(−) Resgates brutos (resgates, cupons e vencimentos)", fn: (m) => -m.resgatesBrutos },
-    { rotulo: "(−) Come-cotas (IR com redução de cotas)", fn: (m) => -m.comeCotas },
+    { rotulo: "(−) Resgates brutos (resgates, cupons e vencimentos)", fn: (m) => m.resgatesBrutos },
+    { rotulo: "(−) Come-cotas (IR com redução de cotas)", fn: (m) => m.comeCotas },
     { rotulo: `(=) Saldo final em ${fmtDate(db)}`, fn: (m) => m.saldoFinal, forte: true },
   ];
   const memoria: { rotulo: string; fn: (m: MovMestre) => number }[] = [
@@ -2052,7 +1329,7 @@ function AbaRollforward({
           <dl className="text-[13px] space-y-2">
             <LinhaPonte rotulo="Saldo bruto (roll-forward)" valor={d.saldoCarteira} forte />
             <LinhaPonte rotulo="(+) Ajuste a valor justo – VJORA" valor={d.mtmVJORA} sub="contrapartida no patrimônio líquido" />
-            <LinhaPonte rotulo="(+) Ajuste a valor justo – VJPR" valor={d.mtmVJPR} sub="contrapartida no resultado" />
+            <LinhaPonte rotulo="(+) Ajuste a valor justo – VJR" valor={d.mtmVJR} sub="contrapartida no resultado" />
             <div className="border-t border-line-soft pt-2">
               <LinhaPonte rotulo="(=) Valor contábil" valor={d.valorContabil} forte />
             </div>
@@ -2064,7 +1341,7 @@ function AbaRollforward({
             <button type="button" className="text-link font-semibold hover:underline" onClick={() => irPara("gl")}>
               TRM × FI-GL
             </button>
-            . O MTM de {fmtBRL(d.mtmCusto, true)} dos contratos ao custo amortizado não é contabilizado – só entra na divulgação do
+            {Math.abs(d.arredondamentoCarteira) >= 0.005 ? ` mais ${fmtDifBRL(d.arredondamentoCarteira)} de arredondamento dos saldos por linha` : ""}. O MTM de {fmtBRL(d.mtmCusto, true)} dos contratos ao custo amortizado não é contabilizado – só entra na divulgação do
             valor justo (CPC 40).
           </p>
         </Card>
@@ -2222,7 +1499,7 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
           <ul className="space-y-3">
             {TRANSACOES_SAP.map((t) => (
               <li key={t.codigo} className="flex items-start gap-3 text-[13px]">
-                <span className="w-14 shrink-0">
+                <span className="w-16 shrink-0">
                   <Tag>{t.codigo}</Tag>
                 </span>
                 <span className="text-text leading-snug">{t.descricao}</span>
