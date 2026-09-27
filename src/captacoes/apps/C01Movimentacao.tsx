@@ -9,28 +9,19 @@ import { AXIS_STYLE, CHART_COLORS, HeaderKpi } from "../../shared/components/fio
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
-import {
-  addDays,
-  diffDays,
-  fmtDate,
-  fmtMonthLong,
-  fmtMonthShort,
-  fmtQuarter,
-  lastMonthEnds,
-  monthOf,
-  previousYearEnd,
-  yearOf,
-} from "../../shared/lib/dates";
+import { fmtDate } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
 import { ESCOPOS, useDivida, type Escopo } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
 import { GRUPO_MODALIDADE, type ContratoDivida } from "../data/contratos";
 import { diferencaRollforward, movimentacaoDivida, totalDivida, type CamposMov, type MovContrato } from "../lib/divida";
+import { arredondarTabela, ratear, saldosMil } from "../lib/arredondamento";
+import { PERIODOS, periodoApuracao, type Periodo, type PeriodoApuracao } from "../lib/periodos";
 
 const rel = relatorioCaptacao("c01");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-/** Tolerância de fechamento do roll-forward e da conferência com a carteira (R$) */
+/** Tolerância de conciliação da movimentação e da conferência com a carteira (R$) */
 const TOLERANCIA = 1;
 const ORDEM_GRUPOS = ["BNDES", "Debêntures", "CRA", "CRI", "CCB"];
 
@@ -42,57 +33,9 @@ const COR_REDUCAO = CHART_COLORS[5];
 // Período de apuração (helper idêntico no C01 e no C03)
 // ---------------------------------------------------------------------------
 
-type Periodo = "mes" | "trimestre" | "exercicio" | "12m";
 
-const PERIODOS: { value: Periodo; label: string }[] = [
-  { value: "mes", label: "Mês" },
-  { value: "trimestre", label: "Trimestre" },
-  { value: "exercicio", label: "Exercício" },
-  { value: "12m", label: "12 meses" },
-];
 
-interface PeriodoApuracao {
-  /** data do saldo de abertura (fim do período anterior); os encargos correm do dia seguinte até a data-base */
-  inicio: string;
-  fim: string;
-  dias: number;
-  /** "1º trimestre de 2026", "Exercício de 2026 (jan a mar)" */
-  descricao: string;
-  /** "1T26", "mar/26" – KPIs */
-  curto: string;
-  /** "31/12/2025 a 31/03/2026 · 90 dias" – mesmo formato no C01 e no C03 */
-  rotulo: string;
-}
 
-/**
- * Mês = mês da data-base; Trimestre = trimestre civil até a data-base; Exercício = desde 31/12 do ano anterior;
- * 12 meses = os 12 meses encerrados na data-base.
- */
-function periodoApuracao(periodo: Periodo, dataBase: string): PeriodoApuracao {
-  const mes = monthOf(dataBase);
-  const ano = yearOf(dataBase);
-  const mesesNoTrimestre = ((mes - 1) % 3) + 1;
-  const inicio =
-    periodo === "mes"
-      ? lastMonthEnds(dataBase, 2)[0]
-      : periodo === "trimestre"
-        ? lastMonthEnds(dataBase, mesesNoTrimestre + 1)[0]
-        : periodo === "exercicio"
-          ? previousYearEnd(dataBase)
-          : lastMonthEnds(dataBase, 13)[0];
-  const dias = diffDays(inicio, dataBase);
-  const mesAbrev = fmtMonthShort(dataBase).slice(0, 3);
-  const mesLongo = fmtMonthLong(dataBase);
-  const [descricao, curto] =
-    periodo === "mes"
-      ? [mesLongo.charAt(0).toUpperCase() + mesLongo.slice(1), fmtMonthShort(dataBase)]
-      : periodo === "trimestre"
-        ? [`${Math.ceil(mes / 3)}º trimestre de ${ano}${mesesNoTrimestre < 3 ? ` (até ${mesAbrev})` : ""}`, fmtQuarter(dataBase)]
-        : periodo === "exercicio"
-          ? [mes === 12 ? `Exercício de ${ano}` : `Exercício de ${ano} (${mes === 1 ? "jan" : `jan a ${mesAbrev}`})`, `Exercício ${ano}`]
-          : [`12 meses (${fmtMonthShort(addDays(inicio, 1))} a ${fmtMonthShort(dataBase)})`, "12 meses"];
-  return { inicio, fim: dataBase, dias, descricao, curto, rotulo: `${fmtDate(inicio)} a ${fmtDate(dataBase)} · ${dias} dias` };
-}
 
 function PeriodoInfo({ per }: { per: PeriodoApuracao }) {
   return (
@@ -167,180 +110,68 @@ function comSinal(v: number, fmt: (x: number) => string): string {
 // Arredondamento controlado (tabelas em R$ mil que fecham nas linhas e nas colunas)
 // ---------------------------------------------------------------------------
 
-interface TabelaArredondada {
-  celulas: number[][];
-  /** total de cada linha */
-  linhas: number[];
-  /** total de cada coluna */
-  colunas: number[];
-  geral: number;
-}
 
-/**
- * Arredonda uma tabela (valores já na unidade exibida, ex.: R$ mil) para inteiros de modo que cada linha some o seu
- * total, cada coluna some o seu total e os totais somem o total geral – o arredondamento controlado das notas
- * explicativas. Cada célula fica no piso ou no teto do valor exato (valores inteiros, como 25.000, não mudam) e os
- * ajustes vão para as células com resto mais próximo de 0,5 (fluxo de custo mínimo). `alvos` fixa totais já exibidos
- * em outras tabelas; se não houver solução com eles, são relaxados em ±1 como último recurso.
- */
-function arredondarTabela(
-  valores: number[][],
-  alvos: { linhas?: (number | undefined)[]; colunas?: (number | undefined)[]; geral?: number } = {},
-): TabelaArredondada {
-  const nL = valores.length;
-  const nC = nL ? valores[0].length : 0;
-  const somaL = valores.map((l) => l.reduce((s, v) => s + v, 0));
-  const somaC = Array.from({ length: nC }, (_, j) => valores.reduce((s, l) => s + l[j], 0));
-  const geral = alvos.geral ?? Math.round(somaL.reduce((s, v) => s + v, 0));
 
-  // Nós: 0 = origem dos totais de linha, 1 = destino dos totais de coluna, linhas, colunas, fonte e sumidouro
-  const L = (i: number) => 2 + i;
-  const C = (j: number) => 2 + nL + j;
-  const S = 2 + nL + nC;
-  const T = S + 1;
-  const excesso = new Array<number>(T + 1).fill(0);
-  interface Var {
-    x: number;
-  }
-  interface Arco {
-    de: number;
-    para: number;
-    cap: number;
-    custo: number;
-    rev: number;
-    v?: Var;
-    d?: number;
-  }
-  const arcos: Arco[] = [];
-  const adj: number[][] = Array.from({ length: T + 1 }, () => []);
-  const arco = (de: number, para: number, cap: number, custo: number, v?: Var, d?: number) => {
-    adj[de].push(arcos.length);
-    arcos.push({ de, para, cap, custo, rev: arcos.length + 1, v, d });
-    adj[para].push(arcos.length);
-    arcos.push({ de: para, para: de, cap: 0, custo: -custo, rev: arcos.length - 1 });
-  };
-  /** Variável = fluxo de `de` para `para`; passos de ±1 com custos crescentes (convexos) */
-  const variavel = (de: number, para: number, exato: number, alvo: number | undefined, peso: number): Var => {
-    const x = alvo ?? Math.round(exato);
-    const v: Var = { x };
-    excesso[de] -= x;
-    excesso[para] += x;
-    const resto = exato - x;
-    const passo = (d: number, custo: number) => (d > 0 ? arco(de, para, 1, custo, v, 1) : arco(para, de, 1, custo, v, -1));
-    const ambos = (custo: number) => [1, -1].forEach((d) => passo(d, custo));
-    const fracao = Math.abs(resto) > 1e-7;
-    if (alvo !== undefined) {
-      // total já exibido em outra tabela: só muda se não houver outra saída
-      for (let k = 1; k <= 3; k++) ambos(1e7 * k);
-    } else if (peso > 1) {
-      // total: piso ou teto do valor exato; afastar-se mais, só como último recurso
-      if (fracao) passo(resto > 0 ? 1 : -1, peso + 1 - 2 * Math.abs(resto));
-      for (let k = 1; k <= 3; k++) ambos(1e5 * k);
-    } else if (fracao) {
-      // célula: piso ou teto; valores inteiros (ex.: 25.000 captados) nunca mudam
-      passo(resto > 0 ? 1 : -1, peso + 1 - 2 * Math.abs(resto));
-      ambos(1e5);
-    }
-    return v;
-  };
-
-  const vl = somaL.map((s, i) => variavel(0, L(i), s, alvos.linhas?.[i], 50));
-  const vc = somaC.map((s, j) => variavel(C(j), 1, s, alvos.colunas?.[j], 50));
-  const cel = valores.map((l, i) => l.map((a, j) => variavel(L(i), C(j), a, undefined, 1)));
-  excesso[0] += geral;
-  excesso[1] -= geral;
-  for (let n = 0; n < S; n++) {
-    if (excesso[n] > 0) arco(S, n, excesso[n], 0);
-    else if (excesso[n] < 0) arco(n, T, -excesso[n], 0);
-  }
-
-  // Caminhos mínimos sucessivos (Bellman-Ford; a tabela tem poucas dezenas de nós)
-  for (let it = 0; it < 1000; it++) {
-    const dist = new Array<number>(T + 1).fill(Infinity);
-    const via = new Array<number>(T + 1).fill(-1);
-    dist[S] = 0;
-    for (let rodada = 0; rodada <= T; rodada++) {
-      let mudou = false;
-      for (let k = 0; k < arcos.length; k++) {
-        const a = arcos[k];
-        if (a.cap > 0 && dist[a.de] + a.custo < dist[a.para] - 1e-9) {
-          dist[a.para] = dist[a.de] + a.custo;
-          via[a.para] = k;
-          mudou = true;
-        }
-      }
-      if (!mudou) break;
-    }
-    if (dist[T] === Infinity) break;
-    let f = Infinity;
-    for (let n = T; n !== S; n = arcos[via[n]].de) f = Math.min(f, arcos[via[n]].cap);
-    for (let n = T; n !== S; n = arcos[via[n]].de) {
-      const a = arcos[via[n]];
-      a.cap -= f;
-      arcos[a.rev].cap += f;
-    }
-  }
-  for (const a of arcos) if (a.v && a.d) a.v.x += a.d * (arcos[a.rev].cap);
-
-  return { celulas: cel.map((l) => l.map((v) => v.x)), linhas: vl.map((v) => v.x), colunas: vc.map((v) => v.x), geral };
-}
-
-/** Rateia `alvo` entre as parcelas arredondadas (maior resto), sem alterar parcelas inteiras */
-function ratear(valores: number[], alvo?: number): number[] {
-  const alvoFinal = alvo ?? Math.round(valores.reduce((s, v) => s + v, 0));
-  return arredondarTabela([valores], { linhas: [alvoFinal], geral: alvoFinal }).celulas[0];
-}
 
 /** Valor já arredondado em R$ mil (inteiro): negativos entre parênteses, zero como "–" */
 function fmtK(v: number): string {
   return fmtNum(v, { parens: true, dash: true });
 }
 
-/** Campos que somam o saldo final: saldo inicial + movimentações */
-const CAMPOS_SOMA = ETAPAS.filter((e) => e.campo !== "saldoFinal").map((e) => e.campo);
+
+/** Movimentações que somam: saldo inicial + movimentações = saldo final */
+const MOVS = ETAPAS.filter((e) => !e.saldo).map((e) => e.campo);
 
 /** Valores inteiros em R$ mil de uma coluna (modalidade, contrato ou total) da movimentação */
 type Mil = Record<CampoEtapa | "encargos" | "capitalizados", number>;
 
-function registroMil(celulas: number[], saldoFinal: number, capitalizados: number): Mil {
-  const r = { saldoFinal, capitalizados } as Mil;
-  CAMPOS_SOMA.forEach((c, k) => (r[c] = celulas[k] ?? 0));
+function registroMil(saldoInicial: number, movs: number[], saldoFinal: number, capitalizados: number): Mil {
+  const r = { saldoInicial, saldoFinal, capitalizados } as Mil;
+  MOVS.forEach((c, k) => (r[c] = movs[k] ?? 0));
   r.encargos = r.juros + r.atualizacaoMonetaria + r.apropriacaoCustos;
   return r;
 }
 
 /**
- * Movimentação em R$ mil que fecha nas linhas e nas colunas: por modalidade (saldo inicial e saldo final totais iguais
- * aos da carteira arredondada) e, dentro de cada modalidade, por contrato (os contratos somam a modalidade), de modo
- * que as visões por modalidade e por contrato mostrem os mesmos números. A parcela capitalizada (CPC 20) é arredondada
- * junto com a parcela do resultado, para que as duas somem os encargos de cada contrato.
+ * Movimentação em R$ mil que fecha nas linhas e nas colunas. Saldos inicial e final de modalidades e contratos são os
+ * mesmos da composição (C06) e da carteira; as movimentações são arredondadas por modalidade e, dentro de cada
+ * modalidade, por contrato (os contratos somam a modalidade), de modo que as visões por modalidade e por contrato
+ * mostrem os mesmos números. A parcela capitalizada (CPC 20) é arredondada junto com a parcela do resultado, para que
+ * as duas somem os encargos de cada contrato.
  */
-function movimentacaoMil(grupos: { grupo: string; linhas: MovContrato[]; t: Totais }[], t: Totais) {
+function movimentacaoMil(grupos: { grupo: string; linhas: MovContrato[]; t: Totais }[]) {
   const k = (v: number) => v / 1000;
   const porGrupo = new Map<string, Mil>();
   const porContrato = new Map<string, Mil>();
-  if (!grupos.length) return { porGrupo, porContrato, total: registroMil([], 0, 0) };
+  const itens = (campo: "saldoInicial" | "saldoFinal") =>
+    grupos.flatMap((x) => x.linhas.map((l) => ({ grupo: x.grupo, id: l.c.id, saldo: l[campo] })));
+  const si = saldosMil(itens("saldoInicial"));
+  const sf = saldosMil(itens("saldoFinal"));
   const g = arredondarTabela(
-    grupos.map((x) => CAMPOS_SOMA.map((c) => k(x.t[c]))),
-    { colunas: [Math.round(k(t.saldoInicial))], geral: Math.round(k(t.saldoFinal)) },
+    grupos.map((x) => MOVS.map((c) => k(x.t[c]))),
+    { linhas: grupos.map((x) => (sf.grupos.get(x.grupo) ?? 0) - (si.grupos.get(x.grupo) ?? 0)), geral: sf.total - si.total },
   );
   let capTotal = 0;
   grupos.forEach((x, i) => {
     const ct = arredondarTabela(
-      x.linhas.map((l) => CAMPOS_SOMA.map((c) => k(l[c]))),
-      { colunas: g.celulas[i], geral: g.linhas[i] },
+      x.linhas.map((l) => MOVS.map((c) => k(l[c]))),
+      {
+        linhas: x.linhas.map((l) => (sf.contratos.get(l.c.id) ?? 0) - (si.contratos.get(l.c.id) ?? 0)),
+        colunas: g.celulas[i],
+        geral: g.linhas[i],
+      },
     );
-    const regs = x.linhas.map((_, j) => registroMil(ct.celulas[j], ct.linhas[j], 0));
+    const regs = x.linhas.map((l, j) => registroMil(si.contratos.get(l.c.id) ?? 0, ct.celulas[j], sf.contratos.get(l.c.id) ?? 0, 0));
     // encargos de cada contrato = parcela do resultado + parcela capitalizada
     const split = arredondarTabela(
       x.linhas.map((l) => [k(l.juros + l.atualizacaoMonetaria + l.apropriacaoCustos - l.capitalizados), k(l.capitalizados)]),
       { linhas: regs.map((r) => r.encargos), geral: regs.reduce((s, r) => s + r.encargos, 0) },
     );
     x.linhas.forEach((l, j) => porContrato.set(l.c.id, { ...regs[j], capitalizados: split.celulas[j][1] }));
-    porGrupo.set(x.grupo, registroMil(g.celulas[i], g.linhas[i], split.colunas[1]));
-    capTotal += split.colunas[1];
+    porGrupo.set(x.grupo, registroMil(si.grupos.get(x.grupo) ?? 0, g.celulas[i], sf.grupos.get(x.grupo) ?? 0, split.colunas[1] ?? 0));
+    capTotal += split.colunas[1] ?? 0;
   });
-  return { porGrupo, porContrato, total: registroMil(g.colunas, g.geral, capTotal) };
+  return { porGrupo, porContrato, total: registroMil(si.total, g.colunas, sf.total, capTotal) };
 }
 
 // ---------------------------------------------------------------------------
@@ -791,7 +622,7 @@ export function C01Movimentacao() {
     const liquidados = linhas.filter((l) => l.saldoInicial > 0 && Math.abs(l.saldoFinal) < 1);
     const capitalizados = linhas.filter((l) => l.capitalizados > 0);
     const dfc = reconciliar(linhas, t);
-    const mil = movimentacaoMil(grupos, t);
+    const mil = movimentacaoMil(grupos);
     return {
       linhas,
       t,

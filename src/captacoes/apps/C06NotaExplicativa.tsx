@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { ChevronRight, Copy } from "lucide-react";
-import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "../../shared/components/fiori/Button";
@@ -15,10 +15,10 @@ import { EMPRESA_CONTROLADORA, EMPRESAS } from "../../shared/data/empresas";
 import { premissasNaDataBase, ultimoDadoNaDataBase } from "../../shared/data/mercado";
 import { addDays, addMonths, fmtDate } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtCompact, fmtDec, fmtMil, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
+import { fmtCompact, fmtDec, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
 import { useCovenants, useDivida } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
-import { GRUPO_MODALIDADE, taxaContratadaDivida, type ContratoDivida, type IndexadorDivida } from "../data/contratos";
+import { COR_MODALIDADE, GRUPO_MODALIDADE, taxaContratadaDivida, type ContratoDivida, type IndexadorDivida } from "../data/contratos";
 import type { CovenantId } from "../data/covenants";
 import { reclassificadosEm, type ApuracaoCovenant } from "../lib/covenants";
 import {
@@ -33,6 +33,7 @@ import {
   type MovContrato,
   type PosicaoDivida,
 } from "../lib/divida";
+import { arredondarTabela, ratear, saldosMil } from "../lib/arredondamento";
 
 const rel = relatorioCaptacao("c06");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
@@ -56,14 +57,8 @@ const NOME_GRUPO: Record<Grupo, string> = {
   CCB: "Cédulas de Crédito Bancário (CCB)",
 };
 
-/** Mesmas cores da composição por modalidade do Launchpad (ordem por saldo na data-base padrão) */
-const COR_GRUPO: Record<Grupo, string> = {
-  Debêntures: CHART_COLORS[0],
-  BNDES: CHART_COLORS[1],
-  CRA: CHART_COLORS[2],
-  CCB: CHART_COLORS[3],
-  CRI: CHART_COLORS[4],
-};
+/** Cor de cada modalidade – a mesma em todas as telas de Captações (COR_MODALIDADE) */
+const COR_GRUPO = COR_MODALIDADE as Record<Grupo, string>;
 
 /** Modalidades detalhadas na aba de características */
 const GRUPOS_CARACTERISTICAS: Grupo[] = ["Debêntures", "CRA", "CRI", "BNDES"];
@@ -101,9 +96,40 @@ function frase(s: string): string {
   return s.endsWith(".") ? s : `${s}.`;
 }
 
-/** "R$ 12.345 mil" (textos da nota) */
+/** Valor já arredondado em R$ mil (inteiro): negativos entre parênteses, zero como "–" */
+function fmtK(v: number): string {
+  return fmtNum(v, { parens: true, dash: true });
+}
+
+/** "R$ 12.345 mil" a partir de um valor já em R$ mil – espaços não separáveis (sem "R$" sozinho no fim da linha) */
+function rsK(v: number): string {
+  return `R$\u00a0${fmtNum(v)}\u00a0mil`;
+}
+
+/** "R$ 12.345 mil" a partir de um valor em R$ (textos da nota) */
 function rsMil(v: number): string {
-  return `R$ ${fmtNum(v / 1000)} mil`;
+  return rsK(Math.round(v / 1000));
+}
+
+/** Nota das tabelas em R$ mil */
+const NOTA_ARREDONDAMENTO =
+  "Valores em R$ mil arredondados de modo que linhas e colunas fechem (a diferença de arredondamento é alocada à parcela com maior resto).";
+
+/** Legenda dos gráficos: texto na cor do texto (a cor da série fica só no marcador) */
+function textoLegenda(valor: string) {
+  return <span style={{ color: "#1d2d3e" }}>{valor}</span>;
+}
+
+function useMediaQuery(query: string): boolean {
+  const [ok, setOk] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const f = () => setOk(m.matches);
+    f();
+    m.addEventListener("change", f);
+    return () => m.removeEventListener("change", f);
+  }, [query]);
+  return ok;
 }
 
 /** Spread total a.a. (BNDES indireto: spread do BNDES somado ao do agente financeiro, como no motor e nas escrituras) */
@@ -139,6 +165,111 @@ function semReclassificacao(contratos: ContratoDivida[], ids: string[], data: st
     premissasNaDataBase(data),
   );
   return { saldo: totalDivida(pos), nc: soma(pos, (x) => x.naoCirculante) };
+}
+
+// ---------------------------------------------------------------------------
+// Arredondamento controlado (tabelas em R$ mil que fecham nas linhas e nas colunas)
+// ---------------------------------------------------------------------------
+
+
+
+
+// ---------------------------------------------------------------------------
+// Números da nota em R$ mil (arredondamento controlado: as tabelas fecham e repetem os mesmos valores)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mesmo critério do C02 para os totais do balanço: arredonda as parcelas e ajusta a maior (exceto as `fixos`) para
+ * somar o total – assim circulante, não circulante e reclassificado são os mesmos números no C02 e no C06.
+ */
+function fecharEmMil(componentes: number[], alvoMil: number, fixos: number[] = []): number[] {
+  const r = componentes.map((v) => Math.round(v / 1000));
+  const dif = alvoMil - r.reduce((s, v) => s + v, 0);
+  let i = -1;
+  for (let k = 0; k < componentes.length; k++) {
+    if (fixos.includes(k)) continue;
+    if (i < 0 || Math.abs(componentes[k]) > Math.abs(componentes[i])) i = k;
+  }
+  if (dif !== 0 && i >= 0) r[i] += dif;
+  return r;
+}
+
+interface CpNc {
+  circ: number;
+  nc: number;
+  total: number;
+}
+
+const mil = (v: number) => v / 1000;
+
+
+/**
+ * Composição em R$ mil: modalidades × (circulante, não circulante) e, dentro de cada modalidade, os contratos, com os
+ * saldos de `saldosMil` (os mesmos da movimentação no C01)
+ */
+function composicaoMil(linhas: { grupo: string; pos: PosicaoDivida[] }[]): { grupos: CpNc[]; total: CpNc; contratos: Map<string, CpNc> } {
+  const contratos = new Map<string, CpNc>();
+  if (!linhas.length) return { grupos: [], total: { circ: 0, nc: 0, total: 0 }, contratos };
+  const s = saldosMil(linhas.flatMap((l) => l.pos.map((x) => ({ grupo: l.grupo, id: x.c.id, saldo: x.saldoContabil }))));
+  const todas = linhas.flatMap((l) => l.pos);
+  const g = arredondarTabela(
+    linhas.map((l) => [mil(soma(l.pos, (x) => x.circulante)), mil(soma(l.pos, (x) => x.naoCirculante))]),
+    {
+      linhas: linhas.map((l) => s.grupos.get(l.grupo) ?? 0),
+      colunas: fecharEmMil([soma(todas, (x) => x.circulante), soma(todas, (x) => x.naoCirculante)], s.total),
+      geral: s.total,
+    },
+  );
+  linhas.forEach((l, i) => {
+    if (!l.pos.length) return;
+    const c = arredondarTabela(
+      l.pos.map((x) => [mil(x.circulante), mil(x.naoCirculante)]),
+      { linhas: l.pos.map((x) => s.contratos.get(x.c.id) ?? 0), colunas: g.celulas[i], geral: g.linhas[i] },
+    );
+    l.pos.forEach((x, j) => contratos.set(x.c.id, { circ: c.celulas[j][0], nc: c.celulas[j][1], total: c.linhas[j] }));
+  });
+  return {
+    grupos: g.celulas.map(([circ, nc], i) => ({ circ, nc, total: g.linhas[i] })),
+    total: { circ: g.colunas[0], nc: g.colunas[1], total: g.geral },
+    contratos,
+  };
+}
+
+interface ComponentesSaldo {
+  principal: number;
+  am: number;
+  juros: number;
+  /** negativo (redutora) */
+  custos: number;
+  total: number;
+}
+
+/** Componentes do saldo contábil em R$ mil que somam o total da composição; `custos` fixa a redutora, se informada */
+function componentesMil(s: ComponentesSaldo, total: number, custos?: number): ComponentesSaldo {
+  if (custos === undefined) {
+    const [principal, am, juros, c] = ratear([mil(s.principal), mil(s.am), mil(s.juros), mil(s.custos)], total);
+    return { principal, am, juros, custos: c, total };
+  }
+  const [principal, am, juros] = ratear([mil(s.principal), mil(s.am), mil(s.juros)], total - custos);
+  return { principal, am, juros, custos, total };
+}
+
+/** Movimentações que somam: saldo inicial + movimentações = saldo final */
+const MOVS: CamposMov[] = ["captacoes", "custosTransacao", "juros", "atualizacaoMonetaria", "apropriacaoCustos", "pagamentoPrincipal", "pagamentoJuros"];
+
+type MovMil = Record<CamposMov, number>;
+
+function movMil(saldoInicial: number, saldoFinal: number, movs: number[], capitalizados: number): MovMil {
+  const r = { saldoInicial, saldoFinal, capitalizados } as MovMil;
+  MOVS.forEach((c, i) => (r[c] = movs[i] ?? 0));
+  return r;
+}
+
+/** Coluna única (Controladora): saldos arredondados e movimentações rateadas para fechar */
+function movimentacaoMilColuna(t: Record<CamposMov, number>): MovMil {
+  const si = Math.round(mil(t.saldoInicial));
+  const sf = Math.round(mil(t.saldoFinal));
+  return movMil(si, sf, ratear(MOVS.map((c) => mil(t[c])), sf - si), Math.round(mil(t.capitalizados)));
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +344,14 @@ interface Narrativa {
 }
 
 /** Texto sobre descumprimentos, waivers e reclassificação (CPC 26, itens 74–75) na data-base */
-function narrativaCovenants(aps: ApuracaoCovenant[], db: string, contratos: ContratoDivida[], posDb: PosicaoDivida[]): Narrativa {
+function narrativaCovenants(
+  aps: ApuracaoCovenant[],
+  db: string,
+  contratos: ContratoDivida[],
+  posDb: PosicaoDivida[],
+  /** saldos por contrato em R$ mil, iguais aos da composição */
+  milDb: Map<string, CpNc>,
+): Narrativa {
   const paragrafos: string[] = [];
   const eventos: EventoLinha[] = [];
   const excedidos = aps.filter((a) => a.dataApuracao && a.status === "excedido");
@@ -226,6 +364,9 @@ function narrativaCovenants(aps: ApuracaoCovenant[], db: string, contratos: Cont
     const relacao = a.cov.tipo === "min" ? "abaixo do mínimo" : "acima do máximo";
     const ids = listaPt(a.cov.contratos);
     const antes = semReclassificacao(contratos, a.cov.contratos, dA);
+    // na data-base, o saldo integral é o mesmo da composição (contratos arredondados que somam a modalidade)
+    const saldoIntegral =
+      dA === db ? rsK(a.cov.contratos.reduce((s, id) => s + (milDb.get(id)?.total ?? 0), 0)) : rsMil(antes.saldo);
     const w = a.waiver;
 
     paragrafos.push(
@@ -249,8 +390,8 @@ function narrativaCovenants(aps: ApuracaoCovenant[], db: string, contratos: Cont
     if (a.reclassifica) {
       paragrafos.push(
         w
-          ? `Como a anuência (waiver) do ${w.credor} somente foi obtida em ${fmtDate(w.obtidoEm)}, após a data do balanço, a Companhia não detinha, em ${fmtDate(db)}, o direito de postergar a liquidação desses passivos por pelo menos 12 meses. Por isso, a parcela de ${rsMil(antes.nc)} que seria classificada no não circulante foi reclassificada para o passivo circulante (CPC 26, itens 74 e 75), e o saldo integral desses contratos, de ${rsMil(antes.saldo)}, está apresentado no circulante.`
-          : `Até a data do balanço não havia sido obtida a anuência (waiver) dos credores. Por isso, a parcela de ${rsMil(antes.nc)} que seria classificada no não circulante foi reclassificada para o passivo circulante (CPC 26, itens 74 e 75), e o saldo integral desses contratos, de ${rsMil(antes.saldo)}, está apresentado no circulante.`,
+          ? `Como a anuência (waiver) do ${w.credor} somente foi obtida em ${fmtDate(w.obtidoEm)}, após a data do balanço, a Companhia não detinha, em ${fmtDate(db)}, o direito de postergar a liquidação desses passivos por pelo menos 12 meses. Por isso, a parcela de ${rsMil(antes.nc)} que seria classificada no não circulante foi reclassificada para o passivo circulante (CPC 26, itens 74 e 75), e o saldo integral desses contratos, de ${saldoIntegral}, está apresentado no circulante.`
+          : `Até a data do balanço não havia sido obtida a anuência (waiver) dos credores. Por isso, a parcela de ${rsMil(antes.nc)} que seria classificada no não circulante foi reclassificada para o passivo circulante (CPC 26, itens 74 e 75), e o saldo integral desses contratos, de ${saldoIntegral}, está apresentado no circulante.`,
       );
       if (w) {
         paragrafos.push(
@@ -271,16 +412,16 @@ function narrativaCovenants(aps: ApuracaoCovenant[], db: string, contratos: Cont
           : `O ${w.credor} concedeu waiver em ${fmtDate(w.obtidoEm)}, antes da data do balanço; por isso, os saldos foram mantidos conforme o cronograma contratual.`,
       );
       const posC = posDb.filter((x) => a.cov.contratos.includes(x.c.id));
-      const circ = soma(posC, (x) => x.circulante);
-      const nc = soma(posC, (x) => x.naoCirculante);
+      const circ = soma(posC, (x) => milDb.get(x.c.id)?.circ ?? 0);
+      const nc = soma(posC, (x) => milDb.get(x.c.id)?.nc ?? 0);
       paragrafos.push(
-        `Em ${fmtDate(db)}, com o waiver vigente, os contratos ${ids} são apresentados conforme o cronograma contratual: ${rsMil(circ)} no circulante e ${rsMil(nc)} no não circulante. A próxima apuração do ${SIGLA[a.cov.id]} ocorrerá em ${fmtDate(proximaApuracao(a))}.`,
+        `Em ${fmtDate(db)}, com o waiver vigente, os contratos ${ids} são apresentados conforme o cronograma contratual: ${rsK(circ)} no circulante e ${rsK(nc)} no não circulante. A próxima apuração do ${SIGLA[a.cov.id]} ocorrerá em ${fmtDate(proximaApuracao(a))}.`,
       );
       eventos.push({ data: w.obtidoEm, titulo: `Waiver do ${w.credor}`, detalhe: "Dispensa do vencimento antecipado", state: "positive" });
       eventos.push({
         data: db,
         titulo: "Data-base",
-        detalhe: `Cronograma contratual: ${rsMil(circ)} no circulante e ${rsMil(nc)} no não circulante`,
+        detalhe: `Cronograma contratual: ${rsK(circ)} no circulante e ${rsK(nc)} no não circulante`,
         state: "information",
       });
     }
@@ -315,7 +456,7 @@ function narrativaCovenants(aps: ApuracaoCovenant[], db: string, contratos: Cont
 }
 
 // ---------------------------------------------------------------------------
-// Movimentação (linhas do roll-forward)
+// Movimentação (linhas da movimentação)
 // ---------------------------------------------------------------------------
 
 function linhasMovimentacao(ab: string, db: string): { campo: CamposMov; rotulo: string; forte?: boolean }[] {
@@ -438,7 +579,7 @@ export function C06NotaExplicativa() {
     })).filter((x) => Object.values(x.total).some((v) => Math.abs(v) >= 500));
     const novas = movCons.linhas.filter((l) => l.captacoes > 0);
     const liquidados = movCons.linhas.filter((l) => l.c.vencimento <= db);
-    const capitalizados = movCons.linhas.filter((l) => l.capitalizados >= 500);
+    const capitalizados = movCons.linhas.filter((l) => l.capitalizados > 0);
     const difRoll = diferencaRollforward(movCons.total);
 
     // Vencimentos do não circulante (principal pelo valor contábil da data-base)
@@ -485,7 +626,8 @@ export function C06NotaExplicativa() {
     );
     const graficoVenc = [...anosTodos]
       .sort((a, b) => a - b)
-      .map((a) => ({ ano: String(a), ...Object.fromEntries(gruposVenc.map((g) => [g, (porGrupoAno.get(g)?.get(a) ?? 0) / 1e6])) }));
+      // zeros como nulos: a dica do gráfico lista só as modalidades com parcelas no ano
+      .map((a) => ({ ano: String(a), ...Object.fromEntries(gruposVenc.map((g) => [g, (porGrupoAno.get(g)?.get(a) ?? 0) / 1e6 || null])) }));
     const bndesReclass = posicoes.filter((x) => x.reclassificado);
 
     // Custos de transação
@@ -505,9 +647,130 @@ export function C06NotaExplicativa() {
     const custosApropriados = movCons.total.apropriacaoCustos;
     const custosDb = soma(posicoes, (x) => x.custosAApropriar);
 
-    const narrativa = narrativaCovenants(apuracoes, db, contratos, posicoes);
+    // Circulante: parcelas com vencimento em até 12 meses (cronograma contratual) × longo prazo reclassificado
+    // (CPC 26, item 74), com o mesmo desdobramento do C02
+    const contratuais = new Map(posicoesDivida(contratos, db, p).map((x) => [x.c.id, x]));
+    const desdobra = posicoes.map((x) => {
+      const ct = contratuais.get(x.c.id) ?? x;
+      const custosCirculante = x.principalCirculante + x.jurosAPagar - x.circulante;
+      const custos12m = x.reclassificado ? ct.principalCirculante + ct.jurosAPagar - ct.circulante : custosCirculante;
+      return {
+        principal12m: ct.principalCirculante,
+        principalReclass: x.principalCirculante - ct.principalCirculante,
+        custos12m,
+        custosReclass: custosCirculante - custos12m,
+      };
+    });
+
+    // ------------------------------------------------------------------------------------------------
+    // R$ mil que fecham (arredondamento controlado), encadeados para que as tabelas repitam os mesmos valores
+    // ------------------------------------------------------------------------------------------------
+    const compDb = composicaoMil(composicao.map((l) => ({ grupo: l.grupo, pos: l.pos })));
+    const compAb = composicaoMil(composicao.map((l) => ({ grupo: l.grupo, pos: l.posA })));
+    const totalGrupo = (c: typeof compDb, g: Grupo) => {
+      const i = composicao.findIndex((l) => l.grupo === g);
+      return i >= 0 ? c.grupos[i] : { circ: 0, nc: 0, total: 0 };
+    };
+    // movimentação por modalidade: saldos inicial e final iguais aos da composição
+    const tabMov = arredondarTabela(
+      movGrupos.map((m) => MOVS.map((c) => mil(m.total[c]))),
+      {
+        linhas: movGrupos.map((m) => totalGrupo(compDb, m.grupo).total - totalGrupo(compAb, m.grupo).total),
+        geral: compDb.total.total - compAb.total.total,
+      },
+    );
+    const capGrupos = ratear(movGrupos.map((m) => mil(m.total.capitalizados)));
+    const movGruposMil = movGrupos.map((m, i) =>
+      movMil(totalGrupo(compAb, m.grupo).total, totalGrupo(compDb, m.grupo).total, tabMov.celulas[i], capGrupos[i]),
+    );
+    const movConsMil = movMil(compAb.total.total, compDb.total.total, tabMov.colunas, soma(capGrupos, (v) => v));
+    const movCtrlMil = movimentacaoMilColuna(movCtrl.total);
+    // custos a apropriar: abertura (composição do saldo) + incorridos − apropriados (movimentação) = saldo na data-base
+    const saldoAbMil = componentesMil(saldo(posA), compAb.total.total);
+    const custosAbMil = -saldoAbMil.custos;
+    const custosIncMil = -movConsMil.custosTransacao;
+    const custosAprMil = movConsMil.apropriacaoCustos;
+    const custosDbMil = custosAbMil + custosIncMil - custosAprMil;
+    const saldoDbMil = componentesMil(saldo(posicoes), compDb.total.total, -custosDbMil);
+    // vencimentos do não circulante: parcelas por ano − custos a apropriar = passivo não circulante da composição
+    // (a linha de custos entra no arredondamento, para que ela – e não uma parcela redonda – absorva as diferenças)
+    const ncGrupoMil = gruposVenc.map((g) => totalGrupo(compDb, g).nc);
+    const [, custosNCTotalMil] = fecharEmMil([soma(principalNC, (v) => v), -soma(custosNCGrupo, (v) => v)], compDb.total.nc);
+    const tabVenc = arredondarTabela(
+      [...vencimentos.map((v) => v.valores.map(mil)), custosNCGrupo.map((v) => -mil(v))],
+      { linhas: [...vencimentos.map(() => undefined), custosNCTotalMil], colunas: ncGrupoMil, geral: compDb.total.nc },
+    );
+    const nFaixas = vencimentos.length;
+    const custosNCGrupoMil = (tabVenc.celulas[nFaixas] ?? []).map((v) => -v);
+    const principalNCMil = ncGrupoMil.map((v, i) => v + (custosNCGrupoMil[i] ?? 0));
+    const custosNCMil = soma(custosNCGrupoMil, (v) => v);
+    // custos por contrato: custo original = apropriado + a apropriar (circulante + não circulante)
+    const origMil = custos.map((l) => Math.round(mil(l.original)));
+    const totalOrigMil = soma(origMil, (v) => v);
+    const tabCustos = arredondarTabela(
+      custos.map((l) => [mil(l.apropriado), mil(l.circ), mil(l.nc)]),
+      { linhas: origMil, colunas: [totalOrigMil - custosDbMil, custosDbMil - custosNCMil, custosNCMil], geral: totalOrigMil },
+    );
+    // capitalizados por contrato somando o total da movimentação
+    const capitalizadosMil = ratear(capitalizados.map((l) => mil(l.capitalizados)), movConsMil.capitalizados);
+    const reclassLiquido = soma(desdobra, (x) => x.principalReclass - x.custosReclass);
+    const [principal12mMil, reclassMil] = fecharEmMil(
+      [
+        soma(desdobra, (x) => x.principal12m),
+        reclassLiquido,
+        soma(posicoes, (x) => x.jurosAPagar),
+        -soma(desdobra, (x) => x.custos12m),
+      ],
+      compDb.total.circ,
+      [1],
+    );
+    const [principalReclassMil] = fecharEmMil([soma(desdobra, (x) => x.principalReclass), -soma(desdobra, (x) => x.custosReclass)], reclassMil);
+    const m = {
+      compDb,
+      compAb,
+      movGrupos: movGruposMil,
+      movCons: movConsMil,
+      movCtrl: movCtrlMil,
+      saldoDb: saldoDbMil,
+      saldoAb: saldoAbMil,
+      custosAb: custosAbMil,
+      custosInc: custosIncMil,
+      custosApr: custosAprMil,
+      custosDb: custosDbMil,
+      custosCirc: custosDbMil - custosNCMil,
+      custosNC: custosNCMil,
+      venc: {
+        linhas: tabVenc.celulas.slice(0, nFaixas),
+        totais: tabVenc.linhas.slice(0, nFaixas),
+        principalNC: principalNCMil,
+        custosNC: custosNCGrupoMil,
+        nc: ncGrupoMil,
+      },
+      custosPorContrato: new Map(
+        custos.map((l, i) => {
+          const [apropriado, circ, nc] = tabCustos.celulas[i];
+          return [l.x.c.id, { original: origMil[i], apropriado, circ, nc, aApropriar: circ + nc }];
+        }),
+      ),
+      custosTotal: {
+        original: totalOrigMil,
+        apropriado: tabCustos.colunas[0] ?? 0,
+        circ: tabCustos.colunas[1] ?? 0,
+        nc: tabCustos.colunas[2] ?? 0,
+        aApropriar: (tabCustos.colunas[1] ?? 0) + (tabCustos.colunas[2] ?? 0),
+      },
+      capitalizados: new Map(capitalizados.map((l, i) => [l.c.id, capitalizadosMil[i]])),
+      principalCP: principal12mMil + principalReclassMil,
+      principalReclassLP: principalReclassMil,
+      /** não circulante levado ao circulante, líquido dos custos de longo prazo (o mesmo valor do C00, C02 e C04) */
+      reclassLiquido: reclassMil,
+      principalCP12: principal12mMil,
+    };
+
+    const narrativa = narrativaCovenants(apuracoes, db, contratos, posicoes, compDb.contratos);
 
     return {
+      m,
       posA,
       reclA,
       total,
@@ -548,12 +811,13 @@ export function C06NotaExplicativa() {
     };
   }, [contratos, posicoes, ab, db, p, apuracoes]);
 
+  const { m } = d;
   const linhasMov = linhasMovimentacao(ab, db);
+  const encargosMil = m.movCons.juros + m.movCons.atualizacaoMonetaria + m.movCons.apropriacaoCustos;
   const ultimoDado = ultimoDadoNaDataBase(db);
   const reclassDb = [...reclassificados];
   const reclassAb = [...d.reclA];
   const primeiroMesNC = addDays(d.limite, 1);
-  const encargosPeriodo = d.movCons.total.juros + d.movCons.total.atualizacaoMonetaria + d.movCons.total.apropriacaoCustos;
   const ultimaFaixa = d.vencimentos[d.vencimentos.length - 1];
   /** Contratos sujeitos ao covenant e em aberto na data-base */
   const contratosCov = (a: ApuracaoCovenant) => {
@@ -577,14 +841,14 @@ export function C06NotaExplicativa() {
   const blocos: Bloco[] = (() => {
     const b: Bloco[] = [];
     const push = (t: Bloco["t"], texto: string) => b.push({ t, texto });
-    const tm = d.movCons.total;
+    const tm = m.movCons;
 
     push("titulo", "Empréstimos, financiamentos e debêntures");
 
     push("secao", "a) Política contábil");
     push(
       "p",
-      "Os empréstimos, financiamentos, debêntures e certificados de recebíveis (CRA e CRI) são reconhecidos inicialmente pelo valor justo, líquido dos custos de transação incorridos, e mensurados subsequentemente pelo custo amortizado. Os juros e a atualização monetária são apropriados ao resultado pela fluência do prazo dos contratos; os custos de transação são apropriados linearmente pelo prazo de cada contrato, por não gerarem diferença relevante em relação ao método da taxa efetiva de juros (CPC 48 / IFRS 9).",
+      "Os empréstimos, financiamentos, debêntures e certificados de recebíveis (CRA e CRI) são reconhecidos inicialmente pelo valor justo, líquido dos custos de transação incorridos, e mensurados subsequentemente pelo custo amortizado. Os juros e a atualização monetária são apropriados ao resultado pela fluência do prazo dos contratos, em regime exponencial (CDI e títulos em base de 252 dias úteis; BNDES em 365 dias corridos, com o excedente da TJLP sobre 6% a.a. capitalizado ao principal) e com as taxas efetivamente incorridas (séries históricas de CDI, IPCA, TJLP e TLP); os custos de transação são apropriados linearmente pelo prazo de cada contrato, por não gerarem diferença relevante em relação ao método da taxa efetiva de juros (CPC 48 / IFRS 9).",
     );
     push(
       "p",
@@ -594,38 +858,37 @@ export function C06NotaExplicativa() {
     push("secao", "b) Composição");
     push(
       "p",
-      `Em ${fmtDate(db)}, o saldo consolidado de empréstimos, financiamentos e debêntures era de ${rsMil(d.total)} (${rsMil(d.totalA)} em ${fmtDate(ab)}), dos quais ${rsMil(d.circ)} no passivo circulante e ${rsMil(d.nc)} no não circulante; na Controladora, o saldo era de ${rsMil(d.movCtrl.total.saldoFinal)}. O custo médio ponderado da dívida – juros e atualização monetária – era de ${fmtPct(d.custoMedio)} a.a., com prazo médio remanescente do principal de ${fmtDec(d.prazoMedio, 1)} anos.`,
+      `Em ${fmtDate(db)}, o saldo consolidado de empréstimos, financiamentos e debêntures era de ${rsK(m.compDb.total.total)} (${rsK(m.compAb.total.total)} em ${fmtDate(ab)}), dos quais ${rsK(m.compDb.total.circ)} no passivo circulante e ${rsK(m.compDb.total.nc)} no não circulante; na Controladora, o saldo era de ${rsK(m.movCtrl.saldoFinal)}. O custo médio ponderado da dívida – juros e atualização monetária – era de ${fmtPct(d.custoMedio)} a.a., com prazo médio remanescente do principal de ${fmtDec(d.prazoMedio, 1)} anos.`,
     );
-    for (const l of d.composicao.filter((x) => x.total > 0)) {
-      push("li", frase(`${NOME_GRUPO[l.grupo]}: ${rsMil(l.total)} (${fmtPct(d.total > 0 ? l.total / d.total : 0, 1)} do total) – ${l.encargos}`));
-    }
+    d.composicao.forEach((l, i) => {
+      if (l.total > 0) push("li", frase(`${NOME_GRUPO[l.grupo]}: ${rsK(m.compDb.grupos[i].total)} (${fmtPct(d.total > 0 ? l.total / d.total : 0, 1)} do total) – ${l.encargos}`));
+    });
     if (reclassDb.length) push("p", notaReclass(reclassDb, db, true));
     if (reclassAb.length) push("p", `Informação comparativa: ${minuscula(notaReclass(reclassAb, ab, false))}`);
 
     push("secao", "c) Movimentação");
     const captTxt = d.novas.length
-      ? `a Companhia captou ${rsMil(tm.captacoes)} ${
+      ? `a Companhia captou ${rsK(tm.captacoes)} ${
           d.novas.length === 1
             ? `(${minuscula(d.novas[0].c.instrumento)}, ${d.novas[0].c.id})`
             : `em ${d.novas.length} operações (${listaPt(d.novas.map((l) => l.c.id))})`
-        }, com custos de transação de ${rsMil(-tm.custosTransacao)}`
+        }, com custos de transação de ${rsK(-tm.custosTransacao)}`
       : "não houve novas captações";
-    const capTxt = tm.capitalizados >= 500 ? `, dos quais ${rsMil(tm.capitalizados)} capitalizados no imobilizado em andamento (CPC 20)` : "";
+    const capTxt = tm.capitalizados > 0 ? `, dos quais ${rsK(tm.capitalizados)} capitalizados no imobilizado em andamento (CPC 20)` : "";
     push(
       "p",
-      `No período de ${fmtDate(ab)} a ${fmtDate(db)}, ${captTxt}. Foram apropriados encargos de ${rsMil(encargosPeriodo)} (juros de ${rsMil(tm.juros)}, atualização monetária de ${rsMil(tm.atualizacaoMonetaria)} e custos de transação de ${rsMil(tm.apropriacaoCustos)})${capTxt}. Os pagamentos somaram ${rsMil(-tm.pagamentoPrincipal)} de principal e ${rsMil(-tm.pagamentoJuros)} de juros${d.liquidados.length ? `, incluindo a liquidação ${d.liquidados.length === 1 ? "do contrato" : "dos contratos"} ${listaPt(d.liquidados.map((l) => l.c.id))}` : ""}. O saldo passou de ${rsMil(tm.saldoInicial)} para ${rsMil(tm.saldoFinal)}.`,
+      `No período de ${fmtDate(ab)} a ${fmtDate(db)}, ${captTxt}. Foram apropriados encargos de ${rsK(encargosMil)} (juros de ${rsK(tm.juros)}, atualização monetária de ${rsK(tm.atualizacaoMonetaria)} e custos de transação de ${rsK(tm.apropriacaoCustos)})${capTxt}. Os pagamentos somaram ${rsK(-tm.pagamentoPrincipal)} de principal e ${rsK(-tm.pagamentoJuros)} de juros${d.liquidados.length ? `, incluindo a liquidação ${d.liquidados.length === 1 ? "do contrato" : "dos contratos"} ${listaPt(d.liquidados.map((l) => l.c.id))}` : ""}. O saldo passou de ${rsK(tm.saldoInicial)} para ${rsK(tm.saldoFinal)}.`,
     );
 
     push("secao", "d) Cronograma de vencimentos do não circulante");
-    const totalCustosNC = soma(d.custosNCGrupo, (v) => v);
     push(
       "p",
-      `As parcelas de principal classificadas no passivo não circulante, de ${rsMil(totalPrincipalNC)} (antes dos custos de transação a apropriar de ${rsMil(totalCustosNC)}), têm o seguinte cronograma de vencimento:`,
+      `As parcelas de principal classificadas no passivo não circulante, de ${rsK(soma(m.venc.principalNC, (v) => v))} (antes dos custos de transação a apropriar de ${rsK(m.custosNC)}), têm o seguinte cronograma de vencimento:`,
     );
-    for (const v of d.vencimentos) push("li", `${v.rotulo}: ${rsMil(v.total)}`);
+    d.vencimentos.forEach((v, i) => push("li", `${v.rotulo}: ${rsK(m.venc.totais[i])}`));
     push(
       "p",
-      `Os valores em moeda corrente dos contratos indexados ao IPCA e à TLP consideram a atualização monetária até ${fmtDate(db)}. Os juros e as parcelas futuras dos contratos pós-fixados são projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): CDI de ${fmtPct(p.cdi)} a.a., IPCA de ${fmtPct(p.ipca12m)} em 12 meses, TJLP de ${fmtPct(p.tjlp)} a.a. e TLP real de ${fmtPct(p.tlpReal)} a.a.`,
+      `Os valores em moeda corrente dos contratos indexados ao IPCA e à TLP consideram a atualização monetária até ${fmtDate(db)}, e os dos contratos em TJLP, o excedente da TJLP sobre 6% a.a. capitalizado ao principal. Os juros e as parcelas futuras dos contratos pós-fixados são projetados com o último dado disponível importado do SAP (${fmtDate(ultimoDado)}): CDI de ${fmtPct(p.cdi)} a.a., IPCA de ${fmtPct(p.ipca12m)} em 12 meses e TJLP de ${fmtPct(p.tjlp)} a.a.; nos contratos em TLP, a taxa real é a fixada na contratação. Pagamentos com vencimento em dia não útil são liquidados no dia útil seguinte.`,
     );
 
     push("secao", "e) Características e garantias");
@@ -666,7 +929,8 @@ export function C06NotaExplicativa() {
   // -------------------------------------------------------------------------
 
   const exportar = () => {
-    const mil = (v: number) => v / 1000;
+    const cpA = (id: string) => m.compAb.contratos.get(id);
+    const cpD = (id: string) => m.compDb.contratos.get(id);
     const tituloGrupos = d.gruposVenc.map((g) => ({ titulo: g, tipo: "inteiro" as const, largura: 14 }));
     exportarExcel(
       `C06_Nota_Captacoes_${db}.xlsx`,
@@ -686,8 +950,18 @@ export function C06NotaExplicativa() {
             { titulo: `Não circulante ${fmtDate(ab)}`, tipo: "inteiro", largura: 18 },
             { titulo: `Total ${fmtDate(ab)}`, tipo: "inteiro", largura: 16 },
           ],
-          linhas: d.composicao.flatMap((l) => [
-            [NOME_GRUPO[l.grupo], l.encargos, l.pos.length ? l.taxa * 100 : null, mil(l.circ), mil(l.nc), mil(l.total), mil(l.circA), mil(l.ncA), mil(l.totalA)],
+          linhas: d.composicao.flatMap((l, i) => [
+            [
+              NOME_GRUPO[l.grupo],
+              l.encargos,
+              l.pos.length ? l.taxa * 100 : null,
+              m.compDb.grupos[i].circ,
+              m.compDb.grupos[i].nc,
+              m.compDb.grupos[i].total,
+              m.compAb.grupos[i].circ,
+              m.compAb.grupos[i].nc,
+              m.compAb.grupos[i].total,
+            ],
             ...idsDoGrupo(l).map((id) => {
               const x = l.pos.find((y) => y.c.id === id);
               const xa = l.posA.find((y) => y.c.id === id);
@@ -696,18 +970,19 @@ export function C06NotaExplicativa() {
                 `    ${c.id} – ${c.instrumento}`,
                 taxaContratadaDivida(c),
                 x ? x.taxaEfetivaAA * 100 : null,
-                x ? mil(x.circulante) : null,
-                x ? mil(x.naoCirculante) : null,
-                x ? mil(x.saldoContabil) : null,
-                xa ? mil(xa.circulante) : null,
-                xa ? mil(xa.naoCirculante) : null,
-                xa ? mil(xa.saldoContabil) : null,
+                x ? (cpD(id)?.circ ?? null) : null,
+                x ? (cpD(id)?.nc ?? null) : null,
+                x ? (cpD(id)?.total ?? null) : null,
+                xa ? (cpA(id)?.circ ?? null) : null,
+                xa ? (cpA(id)?.nc ?? null) : null,
+                xa ? (cpA(id)?.total ?? null) : null,
               ];
             }),
           ]),
-          total: ["Total", "", d.custoMedio * 100, mil(d.circ), mil(d.nc), mil(d.total), mil(d.circA), mil(d.ncA), mil(d.totalA)],
+          total: ["Total", "", d.custoMedio * 100, m.compDb.total.circ, m.compDb.total.nc, m.compDb.total.total, m.compAb.total.circ, m.compAb.total.nc, m.compAb.total.total],
           notas: [
             "Saldos pelo custo amortizado: principal atualizado + juros a pagar − custos de transação a apropriar (CPC 48).",
+            NOTA_ARREDONDAMENTO,
             "Taxa efetiva a.a. = juros + correção monetária com as taxas vigentes na data-base (pós-fixados projetados com o último dado disponível importado do SAP).",
             ...(reclassDb.length ? [notaReclass(reclassDb, db, true)] : []),
             ...(reclassAb.length ? [notaReclass(reclassAb, ab, false)] : []),
@@ -723,12 +998,13 @@ export function C06NotaExplicativa() {
             { titulo: fmtDate(ab), tipo: "inteiro", largura: 16 },
           ],
           linhas: [
-            ["Principal (valor nominal)", mil(d.saldoDb.principal), mil(d.saldoAb.principal)],
-            ["Atualização monetária do principal", mil(d.saldoDb.am), mil(d.saldoAb.am)],
-            ["Juros a pagar", mil(d.saldoDb.juros), mil(d.saldoAb.juros)],
-            ["(−) Custos de transação a apropriar", mil(d.saldoDb.custos), mil(d.saldoAb.custos)],
+            ["Principal (valor nominal)", m.saldoDb.principal, m.saldoAb.principal],
+            ["Atualização monetária do principal", m.saldoDb.am, m.saldoAb.am],
+            ["Juros a pagar", m.saldoDb.juros, m.saldoAb.juros],
+            ["(−) Custos de transação a apropriar", m.saldoDb.custos, m.saldoAb.custos],
           ],
-          total: ["Saldo contábil", mil(d.saldoDb.total), mil(d.saldoAb.total)],
+          total: ["Saldo contábil", m.saldoDb.total, m.saldoAb.total],
+          notas: [NOTA_ARREDONDAMENTO],
         },
         {
           nome: "Movimentação",
@@ -739,9 +1015,10 @@ export function C06NotaExplicativa() {
             { titulo: "Controladora", tipo: "inteiro", largura: 16 },
             { titulo: "Consolidado", tipo: "inteiro", largura: 16 },
           ],
-          linhas: linhasMov.map((l) => [l.rotulo, mil(d.movCtrl.total[l.campo]), mil(d.movCons.total[l.campo])]),
+          linhas: linhasMov.map((l) => [l.rotulo, m.movCtrl[l.campo], m.movCons[l.campo]]),
           notas: [
-            `Encargos capitalizados no imobilizado em andamento (CPC 20): Controladora R$ ${fmtMil(d.movCtrl.total.capitalizados)} mil · Consolidado R$ ${fmtMil(d.movCons.total.capitalizados)} mil.`,
+            `Encargos capitalizados no imobilizado em andamento (CPC 20): Controladora ${rsK(m.movCtrl.capitalizados)} · Consolidado ${rsK(m.movCons.capitalizados)}.`,
+            NOTA_ARREDONDAMENTO,
           ],
         },
         {
@@ -753,7 +1030,8 @@ export function C06NotaExplicativa() {
             ...d.movGrupos.map((m) => ({ titulo: m.grupo, tipo: "inteiro" as const, largura: 14 })),
             { titulo: "Total", tipo: "inteiro", largura: 14 },
           ],
-          linhas: linhasMov.map((l) => [l.rotulo, ...d.movGrupos.map((m) => mil(m.total[l.campo])), mil(d.movCons.total[l.campo])]),
+          linhas: linhasMov.map((l) => [l.rotulo, ...m.movGrupos.map((g) => g[l.campo]), m.movCons[l.campo]]),
+          notas: [NOTA_ARREDONDAMENTO],
         },
         {
           nome: "Vencimentos NC",
@@ -761,12 +1039,15 @@ export function C06NotaExplicativa() {
           subtitulo: `Consolidado · R$ mil · parcelas após ${fmtDate(d.limite)}`,
           colunas: [{ titulo: "Ano de vencimento", largura: 30 }, ...tituloGrupos, { titulo: "Total", tipo: "inteiro", largura: 14 }],
           linhas: [
-            ...d.vencimentos.map((v) => [v.rotulo, ...v.valores.map(mil), mil(v.total)]),
-            ["Principal no não circulante", ...d.principalNC.map(mil), mil(soma(d.principalNC, (v) => v))],
-            ["(−) Custos de transação a apropriar", ...d.custosNCGrupo.map((v) => -mil(v)), -mil(soma(d.custosNCGrupo, (v) => v))],
+            ...d.vencimentos.map((v, i) => [v.rotulo, ...m.venc.linhas[i], m.venc.totais[i]]),
+            ["Principal no não circulante", ...m.venc.principalNC, soma(m.venc.principalNC, (v) => v)],
+            ["(−) Custos de transação a apropriar", ...m.venc.custosNC.map((v) => -v), -m.custosNC],
           ],
-          total: ["Passivo não circulante", ...d.ncGrupo.map(mil), mil(d.nc)],
-          notas: ["Principal pelo valor contábil da data-base (inclui a atualização monetária de IPCA e TLP até a data-base)."],
+          total: ["Passivo não circulante", ...m.venc.nc, m.compDb.total.nc],
+          notas: [
+            "Principal pelo valor contábil da data-base (inclui a atualização monetária de IPCA e TLP e o excedente da TJLP capitalizado até a data-base).",
+            NOTA_ARREDONDAMENTO,
+          ],
         },
         {
           nome: "Características",
@@ -800,8 +1081,8 @@ export function C06NotaExplicativa() {
               x.c.dataCaptacao,
               x.c.vencimento,
               taxaContratadaDivida(x.c),
-              mil(x.c.valorCaptado),
-              mil(x.saldoContabil),
+              Math.round(mil(x.c.valorCaptado)),
+              m.compDb.contratos.get(x.c.id)?.total ?? 0,
               x.c.descricaoAmortizacao,
               x.c.descricaoJuros,
               x.c.garantias,
@@ -823,19 +1104,14 @@ export function C06NotaExplicativa() {
             { titulo: "Total a apropriar", tipo: "inteiro", largura: 16 },
             { titulo: "CET (% a.a.)", tipo: "decimal", largura: 12 },
           ],
-          linhas: d.custos.map((l) => [l.x.c.id, l.x.c.instrumento, mil(l.original), mil(l.apropriado), mil(l.circ), mil(l.nc), mil(l.aApropriar), l.x.cet * 100]),
-          total: [
-            "Total",
-            "",
-            mil(soma(d.custos, (l) => l.original)),
-            mil(soma(d.custos, (l) => l.apropriado)),
-            mil(soma(d.custos, (l) => l.circ)),
-            mil(soma(d.custos, (l) => l.nc)),
-            mil(d.custosDb),
-            "",
-          ],
+          linhas: d.custos.map((l) => {
+            const c = m.custosPorContrato.get(l.x.c.id)!;
+            return [l.x.c.id, l.x.c.instrumento, c.original, c.apropriado, c.circ, c.nc, c.aApropriar, l.x.cet * 100];
+          }),
+          total: ["Total", "", m.custosTotal.original, m.custosTotal.apropriado, m.custosTotal.circ, m.custosTotal.nc, m.custosTotal.aApropriar, ""],
           notas: [
-            `Saldo a apropriar em ${fmtDate(ab)}: R$ ${fmtMil(d.custosAb)} mil · (+) incorridos em novas captações: R$ ${fmtMil(d.custosIncorridos)} mil · (−) apropriados ao resultado: R$ ${fmtMil(d.custosApropriados)} mil · saldo em ${fmtDate(db)}: R$ ${fmtMil(d.custosDb)} mil.`,
+            `Saldo a apropriar em ${fmtDate(ab)}: ${rsK(m.custosAb)} · (+) incorridos em novas captações: ${rsK(m.custosInc)} · (−) apropriados ao resultado: ${rsK(m.custosApr)} · saldo em ${fmtDate(db)}: ${rsK(m.custosDb)}.`,
+            NOTA_ARREDONDAMENTO,
             "CET = TIR dos fluxos do contrato (captação líquida dos custos × pagamentos realizados e projetados com o último dado disponível importado do SAP).",
           ],
         },
@@ -907,6 +1183,10 @@ export function C06NotaExplicativa() {
   // Colunas das tabelas
   // -------------------------------------------------------------------------
 
+  /** Saldo do contrato em R$ mil, igual ao da composição (os contratos somam a modalidade) */
+  const saldoMil = (x: PosicaoDivida) => m.compDb.contratos.get(x.c.id)?.total ?? 0;
+  const custoMil = (l: LinhaCusto) => m.custosPorContrato.get(l.x.c.id)!;
+
   const colCaracteristicas = (bndes: boolean): Column<PosicaoDivida>[] => [
     {
       key: "inst",
@@ -966,8 +1246,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 110,
       value: (x) => x.c.valorCaptado,
-      render: (x) => fmtMil(x.c.valorCaptado),
-      total: (rows) => fmtMil(soma(rows, (x) => x.c.valorCaptado)),
+      render: (x) => fmtK(Math.round(mil(x.c.valorCaptado))),
+      total: (rows) => fmtK(soma(rows, (x) => Math.round(mil(x.c.valorCaptado)))),
     },
     {
       key: "saldo",
@@ -976,8 +1256,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 120,
       value: (x) => x.saldoContabil,
-      render: (x) => <span className="font-semibold">{fmtMil(x.saldoContabil)}</span>,
-      total: (rows) => fmtMil(totalDivida(rows)),
+      render: (x) => <span className="font-semibold">{fmtK(saldoMil(x))}</span>,
+      total: (rows) => fmtK(soma(rows, saldoMil)),
     },
     {
       key: "gar",
@@ -1023,8 +1303,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 110,
       value: (l) => l.original,
-      render: (l) => fmtMil(l.original),
-      total: (rows) => fmtMil(soma(rows, (l) => l.original)),
+      render: (l) => fmtK(custoMil(l).original),
+      total: () => fmtK(m.custosTotal.original),
     },
     {
       key: "apropriado",
@@ -1032,8 +1312,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 140,
       value: (l) => l.apropriado,
-      render: (l) => fmtMil(l.apropriado),
-      total: (rows) => fmtMil(soma(rows, (l) => l.apropriado)),
+      render: (l) => fmtK(custoMil(l).apropriado),
+      total: () => fmtK(m.custosTotal.apropriado),
     },
     {
       key: "circ",
@@ -1042,8 +1322,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 100,
       value: (l) => l.circ,
-      render: (l) => fmtMil(l.circ),
-      total: (rows) => fmtMil(soma(rows, (l) => l.circ)),
+      render: (l) => fmtK(custoMil(l).circ),
+      total: () => fmtK(m.custosTotal.circ),
     },
     {
       key: "nc",
@@ -1052,8 +1332,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 120,
       value: (l) => l.nc,
-      render: (l) => fmtMil(l.nc),
-      total: (rows) => fmtMil(soma(rows, (l) => l.nc)),
+      render: (l) => fmtK(custoMil(l).nc),
+      total: () => fmtK(m.custosTotal.nc),
     },
     {
       key: "total",
@@ -1061,8 +1341,8 @@ export function C06NotaExplicativa() {
       align: "right",
       minWidth: 120,
       value: (l) => l.aApropriar,
-      render: (l) => <span className="font-semibold">{fmtMil(l.aApropriar)}</span>,
-      total: (rows) => fmtMil(soma(rows, (l) => l.aApropriar)),
+      render: (l) => <span className="font-semibold">{fmtK(custoMil(l).aApropriar)}</span>,
+      total: () => fmtK(m.custosTotal.aApropriar),
     },
     {
       key: "pct",
@@ -1194,7 +1474,7 @@ export function C06NotaExplicativa() {
             sub={reclassDb.length ? `inclui ${listaPt(reclassDb)} (CPC 26)` : `${fmtPct(d.total > 0 ? d.circ / d.total : 0, 1)} do total`}
           />
           <HeaderKpi label="Não circulante" value={fmtCompact(d.nc)} sub={`prazo médio ${fmtDec(d.prazoMedio, 1)} anos`} />
-          <HeaderKpi label="Custo médio ponderado" value={fmtPct(d.custoMedio)} state="information" sub="a.a. · juros + correção monetária" />
+          <HeaderKpi label="Custo médio ponderado" value={fmtPct(d.custoMedio)} sub="a.a. · juros + correção monetária" />
         </>
       }
       headerExtra={
@@ -1227,8 +1507,18 @@ export function C06NotaExplicativa() {
             title="Empréstimos, financiamentos e debêntures – composição por modalidade"
             subtitle={`Consolidado · R$ mil · ${fmtDate(db)} comparado a ${fmtDate(ab)} · clique na modalidade para ver os contratos`}
           >
-            <div className="overflow-x-auto fiori-scroll -mx-4 px-4">
-              <table className="w-full text-sm border-separate border-spacing-0 min-w-[860px] sm:min-w-[1080px]">
+            <ComposicaoCelular
+              linhas={d.composicao}
+              compDb={m.compDb}
+              compAb={m.compAb}
+              db={db}
+              ab={ab}
+              custoMedio={d.custoMedio}
+              abertos={abertos}
+              onToggle={toggleGrupo}
+            />
+            <div className="hidden sm:block overflow-x-auto fiori-scroll -mx-4 px-4">
+              <table className="w-full text-sm border-separate border-spacing-0 min-w-[1080px]">
                 <thead>
                   <tr className="text-[13px]">
                     <th className="sticky left-0 z-[2] bg-white" />
@@ -1254,8 +1544,10 @@ export function C06NotaExplicativa() {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.composicao.map((l) => {
+                  {d.composicao.map((l, gi) => {
                     const aberto = abertos.has(l.grupo);
+                    const gDb = m.compDb.grupos[gi];
+                    const gAb = m.compAb.grupos[gi];
                     const ids = idsDoGrupo(l);
                     return (
                       <Fragment key={l.grupo}>
@@ -1281,18 +1573,20 @@ export function C06NotaExplicativa() {
                           </td>
                           <td className="hidden sm:table-cell py-2.5 pr-3 border-b border-line-soft text-label text-[13px] leading-snug">{l.encargos}</td>
                           <td className="py-2.5 pl-3 border-b border-line-soft text-right tabular whitespace-nowrap">{l.pos.length ? fmtPct(l.taxa) : "–"}</td>
-                          <Num v={l.circ} />
-                          <Num v={l.nc} />
-                          <Num v={l.total} forte />
-                          <Num v={l.circA} largo />
-                          <Num v={l.ncA} />
-                          <Num v={l.totalA} forte ultimo />
+                          <Num v={gDb.circ} />
+                          <Num v={gDb.nc} />
+                          <Num v={gDb.total} forte />
+                          <Num v={gAb.circ} largo />
+                          <Num v={gAb.nc} />
+                          <Num v={gAb.total} forte ultimo />
                         </tr>
                         {aberto &&
                           ids.map((id) => {
                             const x = l.pos.find((y) => y.c.id === id);
                             const xa = l.posA.find((y) => y.c.id === id);
                             const c = (x ?? xa)!.c;
+                            const cDb = x ? m.compDb.contratos.get(id) : undefined;
+                            const cAb = xa ? m.compAb.contratos.get(id) : undefined;
                             return (
                               <tr key={id} className="text-[13px] bg-[#fafbfc]">
                                 <td className="sticky left-0 z-[1] bg-[#fafbfc] py-2 pl-7 pr-3 border-b border-line-soft">
@@ -1310,12 +1604,12 @@ export function C06NotaExplicativa() {
                                   {x && !xa && <div className="text-xs">Captado em {fmtDate(c.dataCaptacao)}</div>}
                                 </td>
                                 <td className="py-2 pl-3 border-b border-line-soft text-right tabular text-label">{x ? fmtPct(x.taxaEfetivaAA) : "–"}</td>
-                                <Num v={x?.circulante ?? 0} leve />
-                                <Num v={x?.naoCirculante ?? 0} leve />
-                                <Num v={x?.saldoContabil ?? 0} leve />
-                                <Num v={xa?.circulante ?? 0} leve largo />
-                                <Num v={xa?.naoCirculante ?? 0} leve />
-                                <Num v={xa?.saldoContabil ?? 0} leve ultimo />
+                                <Num v={cDb?.circ ?? 0} leve />
+                                <Num v={cDb?.nc ?? 0} leve />
+                                <Num v={cDb?.total ?? 0} leve />
+                                <Num v={cAb?.circ ?? 0} leve largo />
+                                <Num v={cAb?.nc ?? 0} leve />
+                                <Num v={cAb?.total ?? 0} leve ultimo />
                               </tr>
                             );
                           })}
@@ -1326,12 +1620,12 @@ export function C06NotaExplicativa() {
                     <td className="sticky left-0 z-[1] bg-[#f5f6f7] py-2.5 pl-2 pr-3 border-y border-[#a8b2bd]">Total</td>
                     <td className="hidden sm:table-cell bg-[#f5f6f7] py-2.5 border-y border-[#a8b2bd]" />
                     <td className="bg-[#f5f6f7] py-2.5 pl-3 border-y border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtPct(d.custoMedio)}</td>
-                    <Num v={d.circ} total />
-                    <Num v={d.nc} total />
-                    <Num v={d.total} total />
-                    <Num v={d.circA} total largo />
-                    <Num v={d.ncA} total />
-                    <Num v={d.totalA} total ultimo />
+                    <Num v={m.compDb.total.circ} total />
+                    <Num v={m.compDb.total.nc} total />
+                    <Num v={m.compDb.total.total} total />
+                    <Num v={m.compAb.total.circ} total largo />
+                    <Num v={m.compAb.total.nc} total />
+                    <Num v={m.compAb.total.total} total ultimo />
                   </tr>
                 </tbody>
               </table>
@@ -1347,6 +1641,10 @@ export function C06NotaExplicativa() {
                 projetados com o último dado disponível importado do SAP ({fmtDate(ultimoDado)}).
               </li>
               {reclassAb.length > 0 && <li>(iv) {notaReclass(reclassAb, ab, false)}</li>}
+              <li>
+                ({reclassAb.length > 0 ? "v" : "iv"}) Valores em R$ mil arredondados de modo que linhas e colunas fechem (diferença
+                de arredondamento alocada à parcela com maior resto).
+              </li>
             </ul>
           </Card>
 
@@ -1356,13 +1654,13 @@ export function C06NotaExplicativa() {
                 cabecalho={[fmtDate(db), fmtDate(ab)]}
                 minWidth={320}
                 linhas={[
-                  { rotulo: "Principal (valor nominal)", valores: [d.saldoDb.principal, d.saldoAb.principal] },
-                  { rotulo: "Atualização monetária do principal", valores: [d.saldoDb.am, d.saldoAb.am] },
-                  { rotulo: "Juros a pagar", valores: [d.saldoDb.juros, d.saldoAb.juros] },
-                  { rotulo: "(−) Custos de transação a apropriar", valores: [d.saldoDb.custos, d.saldoAb.custos] },
-                  { rotulo: "Saldo contábil", valores: [d.saldoDb.total, d.saldoAb.total], forte: true },
-                  { rotulo: "Circulante", valores: [d.circ, d.circA], recuo: true },
-                  { rotulo: "Não circulante", valores: [d.nc, d.ncA], recuo: true },
+                  { rotulo: "Principal (valor nominal)", valores: [m.saldoDb.principal, m.saldoAb.principal] },
+                  { rotulo: "Atualização monetária do principal", valores: [m.saldoDb.am, m.saldoAb.am] },
+                  { rotulo: "Juros a pagar", valores: [m.saldoDb.juros, m.saldoAb.juros] },
+                  { rotulo: "(−) Custos de transação a apropriar", valores: [m.saldoDb.custos, m.saldoAb.custos] },
+                  { rotulo: "Saldo contábil", valores: [m.saldoDb.total, m.saldoAb.total], forte: true },
+                  { rotulo: "Circulante", valores: [m.compDb.total.circ, m.compAb.total.circ], recuo: true },
+                  { rotulo: "Não circulante", valores: [m.compDb.total.nc, m.compAb.total.nc], recuo: true },
                 ]}
               />
             </Card>
@@ -1378,8 +1676,8 @@ export function C06NotaExplicativa() {
                     <CartesianGrid vertical={false} stroke="#e5e5e5" />
                     <XAxis dataKey="grupo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval={0} />
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => fmtDec(v, 0)} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 1)} mi`, n]} cursor={{ fill: "#f2f4f6" }} />
-                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 1)}\u00a0mi`, n]} cursor={{ fill: "#f2f4f6" }} />
+                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                     <Bar dataKey="abertura" name={fmtDate(ab)} fill={CHART_SEMANTIC.neutral} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
                     <Bar dataKey="dataBase" name={fmtDate(db)} fill={CHART_COLORS[6]} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
                   </BarChart>
@@ -1405,22 +1703,22 @@ export function C06NotaExplicativa() {
                   </ObjectStatus>
                 ) : (
                   <ObjectStatus state="negative" inverted>
-                    Diferença {fmtMil(d.difRoll)}
+                    Diferença {rsMil(d.difRoll)}
                   </ObjectStatus>
                 )
               }
             >
               <NotaTabela
                 cabecalho={["Controladora", "Consolidado"]}
-                linhas={linhasMov.map((l) => ({ rotulo: l.rotulo, valores: [d.movCtrl.total[l.campo], d.movCons.total[l.campo]], forte: l.forte }))}
+                linhas={linhasMov.map((l) => ({ rotulo: l.rotulo, valores: [m.movCtrl[l.campo], m.movCons[l.campo]], forte: l.forte }))}
               />
               <p className="text-[13px] text-text mt-4 leading-relaxed">
-                <strong>Encargos do período:</strong> R$ {fmtMil(encargosPeriodo)} mil no consolidado (juros, atualização monetária e
-                apropriação dos custos de transação)
-                {d.movCons.total.capitalizados >= 500 ? (
+                <strong>Encargos do período:</strong> {rsK(encargosMil)} no consolidado (juros, atualização monetária e apropriação
+                dos custos de transação)
+                {m.movCons.capitalizados > 0 ? (
                   <>
-                    , dos quais R$ {fmtMil(d.movCons.total.capitalizados)} mil capitalizados no imobilizado em andamento (CPC 20) e R${" "}
-                    {fmtMil(encargosPeriodo - d.movCons.total.capitalizados)} mil reconhecidos como despesa financeira.
+                    , dos quais {rsK(m.movCons.capitalizados)} capitalizados no imobilizado em andamento (CPC 20) e{" "}
+                    {rsK(encargosMil - m.movCons.capitalizados)} reconhecidos como despesa financeira.
                   </>
                 ) : (
                   ", integralmente reconhecidos como despesa financeira."
@@ -1436,7 +1734,7 @@ export function C06NotaExplicativa() {
                   chave: l.c.id,
                   titulo: l.c.id,
                   detalhe: `${l.c.instrumento} · ${fmtDate(l.c.dataCaptacao)}`,
-                  valor: l.captacoes,
+                  valor: Math.round(mil(l.captacoes)),
                 }))}
               />
               <div className="h-4" />
@@ -1447,29 +1745,31 @@ export function C06NotaExplicativa() {
                   chave: l.c.id,
                   titulo: l.c.id,
                   detalhe: `${l.c.instrumento} · ${fmtDate(l.c.vencimento)}`,
-                  valor: -(l.pagamentoPrincipal + l.pagamentoJuros),
+                  valor: Math.round(mil(-(l.pagamentoPrincipal + l.pagamentoJuros))),
                 }))}
               />
               <div className="h-4" />
               <ListaEventos
                 titulo="Encargos capitalizados (CPC 20)"
                 vazio="Sem capitalização de encargos no período."
-                itens={d.capitalizados.map((l: MovContrato) => ({
-                  chave: l.c.id,
-                  titulo: l.c.id,
-                  detalhe: l.c.capitalizacaoCPC20 ? `${l.c.capitalizacaoCPC20.ativo} · até ${fmtDate(l.c.capitalizacaoCPC20.ate)}` : l.c.instrumento,
-                  valor: l.capitalizados,
-                }))}
+                itens={d.capitalizados
+                  .map((l: MovContrato) => ({
+                    chave: l.c.id,
+                    titulo: l.c.id,
+                    detalhe: l.c.capitalizacaoCPC20 ? `${l.c.capitalizacaoCPC20.ativo} · até ${fmtDate(l.c.capitalizacaoCPC20.ate)}` : l.c.instrumento,
+                    valor: m.capitalizados.get(l.c.id) ?? 0,
+                  }))
+                  .filter((x) => x.valor !== 0)}
               />
               <div className="mt-5 pt-4 border-t border-line-soft">
                 <div className="text-[13px] font-bold text-text mb-1.5">Efeito no caixa do período (DFC)</div>
                 <dl className="text-[13px] divide-y divide-line-soft">
-                  <LinhaCaixa rotulo="Captações líquidas dos custos de transação" v={d.movCons.total.captacoes + d.movCons.total.custosTransacao} />
-                  <LinhaCaixa rotulo="Amortização de principal" v={d.movCons.total.pagamentoPrincipal} />
-                  <LinhaCaixa rotulo="Pagamento de juros" v={d.movCons.total.pagamentoJuros} />
+                  <LinhaCaixa rotulo="Captações líquidas dos custos de transação" v={m.movCons.captacoes + m.movCons.custosTransacao} />
+                  <LinhaCaixa rotulo="Amortização de principal" v={m.movCons.pagamentoPrincipal} />
+                  <LinhaCaixa rotulo="Pagamento de juros" v={m.movCons.pagamentoJuros} />
                   <LinhaCaixa
                     rotulo="Efeito líquido"
-                    v={d.movCons.total.captacoes + d.movCons.total.custosTransacao + d.movCons.total.pagamentoPrincipal + d.movCons.total.pagamentoJuros}
+                    v={m.movCons.captacoes + m.movCons.custosTransacao + m.movCons.pagamentoPrincipal + m.movCons.pagamentoJuros}
                     forte
                   />
                 </dl>
@@ -1483,11 +1783,12 @@ export function C06NotaExplicativa() {
 
           <Card title="Movimentação por modalidade" subtitle={`Consolidado · R$ mil · ${fmtDate(ab)} → ${fmtDate(db)}`}>
             <NotaTabela
-              cabecalho={[...d.movGrupos.map((m) => m.grupo), "Total"]}
+              cabecalho={[...d.movGrupos.map((g) => g.grupo), "Total"]}
               minWidth={900}
+              totalPrimeiro
               linhas={linhasMov.map((l) => ({
                 rotulo: l.rotulo,
-                valores: [...d.movGrupos.map((m) => m.total[l.campo]), d.movCons.total[l.campo]],
+                valores: [...m.movGrupos.map((g) => g[l.campo]), m.movCons[l.campo]],
                 forte: l.forte,
               }))}
             />
@@ -1501,8 +1802,9 @@ export function C06NotaExplicativa() {
           {d.bndesReclass.length > 0 && (
             <MessageStrip design="negative">
               Os contratos {listaPt(d.bndesReclass.map((x) => x.c.id))} estão integralmente no circulante (CPC 26, item 74) e, por isso,
-              não constam do cronograma do não circulante: principal de R$ {fmtMil(soma(d.bndesReclass, (x) => x.principalAtualizado))} mil
-              apresentado no passivo circulante em {fmtDate(db)}.
+              não constam do cronograma do não circulante: principal de {rsMil(soma(d.bndesReclass, (x) => x.principalAtualizado))}{" "}
+              apresentado no passivo circulante em {fmtDate(db)}, dos quais {rsK(m.principalReclassLP)} de parcelas de longo prazo
+              reclassificadas.
             </MessageStrip>
           )}
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
@@ -1515,26 +1817,41 @@ export function C06NotaExplicativa() {
                 primeira="Ano de vencimento"
                 cabecalho={[...d.gruposVenc, "Total"]}
                 minWidth={760}
+                totalPrimeiro
                 linhas={[
-                  ...d.vencimentos.map((v) => ({ rotulo: v.rotulo, valores: [...v.valores, v.total] })),
-                  { rotulo: "Principal no não circulante", valores: [...d.principalNC, soma(d.principalNC, (v) => v)], forte: true },
-                  {
-                    rotulo: "(−) Custos de transação a apropriar",
-                    valores: [...d.custosNCGrupo.map((v) => -v), -soma(d.custosNCGrupo, (v) => v)],
-                  },
-                  { rotulo: "Passivo não circulante", valores: [...d.ncGrupo, d.nc], forte: true },
+                  ...d.vencimentos.map((v, i) => ({ rotulo: v.rotulo, valores: [...m.venc.linhas[i], m.venc.totais[i]] })),
+                  { rotulo: "Principal no não circulante", valores: [...m.venc.principalNC, soma(m.venc.principalNC, (v) => v)], forte: true },
+                  { rotulo: "(−) Custos de transação a apropriar", valores: [...m.venc.custosNC.map((v) => -v), -m.custosNC] },
+                  { rotulo: "Passivo não circulante", valores: [...m.venc.nc, m.compDb.total.nc], forte: true },
                 ]}
               />
               <ul className="text-xs text-label mt-4 space-y-1 leading-relaxed">
-                {!db.endsWith("-12-31") && (
-                  <li>
-                    (i) {d.ano0}: parcelas de {fmtDate(primeiroMesNC)} a 31/12/{d.ano0}; as parcelas até {fmtDate(d.limite)} estão no
-                    circulante (principal de R$ {fmtMil(d.principalCP)} mil).
-                  </li>
-                )}
-                {db.endsWith("-12-31") && <li>(i) Parcelas até {fmtDate(d.limite)} classificadas no circulante: principal de R$ {fmtMil(d.principalCP)} mil.</li>}
-                <li>(ii) Principal pelo valor contábil da data-base, incluindo a atualização monetária de IPCA e TLP até {fmtDate(db)}.</li>
+                <li>
+                  (i){" "}
+                  {db.endsWith("-12-31") ? (
+                    <>Principal no circulante em {fmtDate(db)}: </>
+                  ) : (
+                    <>
+                      {d.ano0}: parcelas de {fmtDate(primeiroMesNC)} a 31/12/{d.ano0}. Principal no circulante em {fmtDate(db)}:{" "}
+                    </>
+                  )}
+                  {rsK(m.principalCP12)} de parcelas com vencimento em até 12 meses (até {fmtDate(d.limite)})
+                  {m.principalReclassLP > 0 ? (
+                    <>
+                      {" "}
+                      e {rsK(m.principalReclassLP)} de principal de longo prazo de {listaPt(reclassDb)} reclassificado para o
+                      circulante ({rsK(m.reclassLiquido)} líquidos dos custos de transação de longo prazo) por descumprimento de
+                      covenant sem waiver na data do balanço (CPC 26, item 74); total de {rsK(m.principalCP)}
+                    </>
+                  ) : null}
+                  .
+                </li>
+                <li>
+                  (ii) Principal pelo valor contábil da data-base, incluindo a atualização monetária de IPCA e TLP e o excedente da
+                  TJLP sobre 6% a.a. capitalizado até {fmtDate(db)}.
+                </li>
                 <li>(iii) Custos de transação a apropriar após 12 meses, deduzidos do passivo não circulante (CPC 48).</li>
+                <li>(iv) Valores arredondados de modo que linhas e colunas fechem com a composição (aba Composição).</li>
               </ul>
             </Card>
 
@@ -1547,10 +1864,10 @@ export function C06NotaExplicativa() {
                     <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={32} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 1)} mi`, n]}
+                      formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 1)}\u00a0mi`, n]}
                       cursor={{ fill: "#f2f4f6" }}
                     />
-                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
+                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                     {d.gruposVenc.map((g) => (
                       <Bar key={g} dataKey={g} stackId="nc" name={g} fill={COR_GRUPO[g]} maxBarSize={40} isAnimationActive={false} />
                     ))}
@@ -1559,14 +1876,14 @@ export function C06NotaExplicativa() {
               </div>
               {ultimaFaixa.total > 0 && (
                 <p className="text-xs text-label mt-3 leading-relaxed">
-                  {d.anoCorte} em diante: R$ {fmtMil(ultimaFaixa.total)} mil ({fmtPct(totalPrincipalNC > 0 ? ultimaFaixa.total / totalPrincipalNC : 0, 1)} do
-                  principal não circulante):{" "}
+                  {d.anoCorte} em diante: {rsK(m.venc.totais[m.venc.totais.length - 1])} (
+                  {fmtPct(totalPrincipalNC > 0 ? ultimaFaixa.total / totalPrincipalNC : 0, 1)} do principal não circulante):{" "}
                   {listaPt(
                     d.gruposVenc
-                      .map((g, i) => ({ g, v: ultimaFaixa.valores[i] }))
-                      .filter((x) => x.v >= 500)
+                      .map((g, i) => ({ g, v: m.venc.linhas[m.venc.linhas.length - 1][i] }))
+                      .filter((x) => x.v > 0)
                       .sort((a, b) => b.v - a.v)
-                      .map((x) => `${x.g} R$ ${fmtMil(x.v)} mil`),
+                      .map((x) => `${x.g} ${rsK(x.v)}`),
                   )}
                   .
                 </p>
@@ -1589,7 +1906,10 @@ export function C06NotaExplicativa() {
               icon={<span className="block w-2.5 h-2.5 mt-1.5 rounded-full" style={{ backgroundColor: COR_GRUPO[g] }} />}
               bodyClassName="px-0 pb-0"
             >
-              <DataTable columns={colCaracteristicas(g === "BNDES")} rows={pos} rowKey={(x) => x.c.id} showTotals={pos.length > 1} />
+              <div className="hidden lg:block">
+                <DataTable columns={colCaracteristicas(g === "BNDES")} rows={pos} rowKey={(x) => x.c.id} showTotals={pos.length > 1} />
+              </div>
+              <CaracteristicasCelular pos={pos} bndes={g === "BNDES"} saldoMil={saldoMil} db={db} />
             </Card>
           );
         })}
@@ -1603,12 +1923,12 @@ export function C06NotaExplicativa() {
                 cabecalho={["Consolidado"]}
                 minWidth={320}
                 linhas={[
-                  { rotulo: `Saldo a apropriar em ${fmtDate(ab)}`, valores: [d.custosAb], forte: true },
-                  { rotulo: "(+) Custos incorridos em novas captações", valores: [d.custosIncorridos] },
-                  { rotulo: "(−) Apropriação ao resultado", valores: [-d.custosApropriados] },
-                  { rotulo: `Saldo a apropriar em ${fmtDate(db)}`, valores: [d.custosDb], forte: true },
-                  { rotulo: "Circulante (próximos 12 meses)", valores: [soma(d.custos, (l) => l.circ)], recuo: true },
-                  { rotulo: "Não circulante", valores: [soma(d.custos, (l) => l.nc)], recuo: true },
+                  { rotulo: `Saldo a apropriar em ${fmtDate(ab)}`, valores: [m.custosAb], forte: true },
+                  { rotulo: "(+) Custos incorridos em novas captações", valores: [m.custosInc] },
+                  { rotulo: "(−) Apropriação ao resultado", valores: [-m.custosApr] },
+                  { rotulo: `Saldo a apropriar em ${fmtDate(db)}`, valores: [m.custosDb], forte: true },
+                  { rotulo: "Circulante (próximos 12 meses)", valores: [m.custosCirc], recuo: true },
+                  { rotulo: "Não circulante", valores: [m.custosNC], recuo: true },
                 ]}
               />
               <p className="text-xs text-label mt-4 leading-relaxed">
@@ -1624,8 +1944,8 @@ export function C06NotaExplicativa() {
                     <CartesianGrid horizontal={false} stroke="#e5e5e5" />
                     <XAxis type="number" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} tickFormatter={(v: number) => fmtDec(v, 0)} />
                     <YAxis type="category" dataKey="id" tick={AXIS_STYLE} tickLine={false} axisLine={false} width={60} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 0)} mil`, n]} cursor={{ fill: "#f2f4f6" }} />
-                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$\u00a0${fmtDec(v, 0)}\u00a0mil`, n]} cursor={{ fill: "#f2f4f6" }} />
+                    <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} formatter={textoLegenda} />
                     <Bar dataKey="apropriado" stackId="c" name="Apropriado acumulado" fill="#a8b2bd" isAnimationActive={false} />
                     <Bar dataKey="circ" stackId="c" name="A apropriar – circulante" fill={CHART_COLORS[1]} isAnimationActive={false} />
                     <Bar dataKey="nc" stackId="c" name="A apropriar – não circulante" fill={CHART_COLORS[6]} radius={[0, 4, 4, 0]} isAnimationActive={false} />
@@ -1640,7 +1960,10 @@ export function C06NotaExplicativa() {
             subtitle={`Custo amortizado (CPC 48) · R$ mil · posição em ${fmtDate(db)} · circulante e não circulante: saldo a apropriar`}
             bodyClassName="px-0 pb-0"
           >
-            <DataTable columns={colCustos} rows={d.custos} rowKey={(l) => l.x.c.id} showTotals />
+            <div className="hidden lg:block">
+              <DataTable columns={colCustos} rows={d.custos} rowKey={(l) => l.x.c.id} showTotals />
+            </div>
+            <CustosCelular custos={d.custos} valores={custoMil} total={m.custosTotal} />
             <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft">
               CET: taxa interna de retorno dos fluxos de cada contrato – captação líquida dos custos de transação × pagamentos de principal e
               juros realizados até a data-base e projetados com o último dado disponível importado do SAP ({fmtDate(ultimoDado)}).
@@ -1755,9 +2078,12 @@ export function C06NotaExplicativa() {
       )}
 
       <MessageStrip>
-        Valores em R$ mil, exceto quando indicado. Exercício: {fmtDate(ab)} a {fmtDate(db)}. Saldos pelo custo amortizado (CPC 48);
-        juros e parcelas futuras dos contratos pós-fixados projetados com o último dado disponível importado do SAP (
-        {fmtDate(ultimoDado)}). Classificação circulante × não circulante conforme CPC 26.
+        Valores em R$ mil, exceto quando indicado, arredondados de modo que linhas e colunas fechem. Exercício: {fmtDate(ab)} a{" "}
+        {fmtDate(db)}. Saldos pelo custo amortizado (CPC 48), com juros compostos (CDI e títulos em {p.baseDiasUteis} dias úteis;
+        BNDES em {p.baseDiasCorridos} dias corridos, com o excedente da TJLP sobre 6% a.a. capitalizado) e as séries históricas de
+        CDI, IPCA, TJLP e TLP importadas do SAP até a data-base; juros e parcelas futuras dos contratos pós-fixados projetados com
+        o último dado disponível ({fmtDate(ultimoDado)}), com pagamentos em dia não útil no dia útil seguinte. Classificação
+        circulante × não circulante conforme CPC 26.
       </MessageStrip>
     </ReportPage>
   );
@@ -1782,7 +2108,7 @@ function idsDoGrupo(l: LinhaComp): string[] {
   return ids;
 }
 
-/** Célula numérica (R$ mil) da tabela de composição */
+/** Célula numérica da tabela de composição (valor já em R$ mil) */
 function Num({ v, forte, total, leve, largo, ultimo }: { v: number; forte?: boolean; total?: boolean; leve?: boolean; largo?: boolean; ultimo?: boolean }) {
   return (
     <td
@@ -1794,7 +2120,7 @@ function Num({ v, forte, total, leve, largo, ultimo }: { v: number; forte?: bool
         forte && "font-semibold",
       )}
     >
-      {fmtMil(v)}
+      {fmtK(v)}
     </td>
   );
 }
@@ -1806,8 +2132,27 @@ interface LinhaNota {
   recuo?: boolean;
 }
 
-/** Tabela no padrão de nota explicativa (R$ mil, negativos entre parênteses) com a 1ª coluna fixa */
-function NotaTabela({ cabecalho, linhas, minWidth = 520, primeira = "R$ mil" }: { cabecalho: string[]; linhas: LinhaNota[]; minWidth?: number; primeira?: string }) {
+/**
+ * Tabela no padrão de nota explicativa (valores já em R$ mil, negativos entre parênteses) com a 1ª coluna fixa.
+ * `totalPrimeiro`: a última coluna é o total – destacada e, no celular, logo após o rótulo (visível sem rolar).
+ */
+function NotaTabela({
+  cabecalho,
+  linhas,
+  minWidth = 520,
+  primeira = "R$ mil",
+  totalPrimeiro = false,
+}: {
+  cabecalho: string[];
+  linhas: LinhaNota[];
+  minWidth?: number;
+  primeira?: string;
+  totalPrimeiro?: boolean;
+}) {
+  const estreito = !useMediaQuery("(min-width: 640px)");
+  const ultima = cabecalho.length - 1;
+  const ordem = totalPrimeiro && estreito ? [ultima, ...cabecalho.map((_, i) => i).slice(0, -1)] : cabecalho.map((_, i) => i);
+  const ehTotal = (i: number) => totalPrimeiro && i === ultima;
   // No celular a largura mínima é menor, para que a 1ª coluna (fixa) não esconda os valores
   const larguras = { "--mw": `${Math.min(minWidth, 150 + 85 * cabecalho.length)}px`, "--mw-sm": `${minWidth}px` } as CSSProperties;
   return (
@@ -1815,10 +2160,20 @@ function NotaTabela({ cabecalho, linhas, minWidth = 520, primeira = "R$ mil" }: 
       <table className="w-full text-sm border-separate border-spacing-0 min-w-[var(--mw)] sm:min-w-[var(--mw-sm)]" style={larguras}>
         <thead>
           <tr className="text-[13px]">
-            <th className="sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd]">{primeira}</th>
-            {cabecalho.map((c, i) => (
-              <th key={i} className="text-right font-semibold py-2 pl-4 pr-2 border-b border-[#a8b2bd] whitespace-nowrap">
-                {c}
+            <th
+              className={clsx(
+                "sticky left-0 z-[2] bg-white text-left font-semibold py-2 pr-3 border-b border-[#a8b2bd]",
+                totalPrimeiro && "max-sm:w-[150px] max-sm:min-w-[150px] max-sm:shadow-[inset_-1px_0_0_#e5e5e5]",
+              )}
+            >
+              {primeira}
+            </th>
+            {ordem.map((i) => (
+              <th
+                key={i}
+                className={clsx("text-right font-semibold py-2 pl-4 pr-2 border-b border-[#a8b2bd] whitespace-nowrap", ehTotal(i) && "bg-[#f5f6f7] font-bold")}
+              >
+                {cabecalho[i]}
               </th>
             ))}
           </tr>
@@ -1828,12 +2183,27 @@ function NotaTabela({ cabecalho, linhas, minWidth = 520, primeira = "R$ mil" }: 
             const cell = l.forte ? "py-2.5 bg-[#f5f6f7] border-y border-[#a8b2bd] font-bold" : "py-2 border-b border-line-soft";
             return (
               <tr key={l.rotulo}>
-                <td className={clsx("sticky left-0 z-[1] pr-3", l.forte ? cell : clsx(cell, "bg-white"), l.recuo ? "pl-6 text-label" : "pl-2")}>
+                <td
+                  className={clsx(
+                    "sticky left-0 z-[1] pr-3",
+                    l.forte ? cell : clsx(cell, "bg-white"),
+                    l.recuo ? "pl-6 text-label" : "pl-2",
+                    totalPrimeiro && "max-sm:shadow-[inset_-1px_0_0_#e5e5e5]",
+                  )}
+                >
                   {l.rotulo}
                 </td>
-                {l.valores.map((v, i) => (
-                  <td key={i} className={clsx("text-right tabular whitespace-nowrap pl-4 pr-2", cell, l.recuo && "text-label")}>
-                    {fmtMil(v)}
+                {ordem.map((i) => (
+                  <td
+                    key={i}
+                    className={clsx(
+                      "text-right tabular whitespace-nowrap pl-4 pr-2",
+                      cell,
+                      l.recuo && "text-label",
+                      ehTotal(i) && !l.forte && "bg-[#f5f6f7] font-semibold",
+                    )}
+                  >
+                    {fmtK(l.valores[i])}
                   </td>
                 ))}
               </tr>
@@ -1858,7 +2228,7 @@ function LinhaCaixa({ rotulo, v, forte }: { rotulo: string; v: number; forte?: b
   return (
     <div className={clsx("flex items-baseline justify-between gap-3 py-1.5", forte && "font-bold")}>
       <dt className={forte ? "text-text" : "text-label"}>{rotulo}</dt>
-      <dd className="tabular text-text whitespace-nowrap">{fmtMil(v)}</dd>
+      <dd className="tabular text-text whitespace-nowrap">{fmtK(v)}</dd>
     </div>
   );
 }
@@ -1886,12 +2256,261 @@ function ListaEventos({
               <span className="min-w-0">
                 <span className="font-semibold text-text">{it.titulo}</span> <span className="text-label">· {it.detalhe}</span>
               </span>
-              <span className="tabular text-text whitespace-nowrap">{fmtMil(it.valor)}</span>
+              <span className="tabular text-text whitespace-nowrap">{fmtK(it.valor)}</span>
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+type ComposicaoMil = ReturnType<typeof composicaoMil>;
+
+/** Composição por modalidade no celular (lista com pop-in, no lugar da tabela larga) */
+function ComposicaoCelular({
+  linhas,
+  compDb,
+  compAb,
+  db,
+  ab,
+  custoMedio,
+  abertos,
+  onToggle,
+}: {
+  linhas: LinhaComp[];
+  compDb: ComposicaoMil;
+  compAb: ComposicaoMil;
+  db: string;
+  ab: string;
+  custoMedio: number;
+  abertos: Set<Grupo>;
+  onToggle: (g: Grupo) => void;
+}) {
+  return (
+    <div className="sm:hidden -mx-4">
+      <div className="flex items-end justify-between gap-3 px-4 py-2 text-xs text-label border-y border-[#a8b2bd]">
+        <span className="font-semibold text-text text-[13px]">Modalidade</span>
+        <span className="text-right">
+          R$ mil · <span className="font-semibold text-text">{fmtDate(db)}</span> ({fmtDate(ab)})
+        </span>
+      </div>
+      <ul className="divide-y divide-line-soft">
+        {linhas.map((l, gi) => {
+          const g = compDb.grupos[gi];
+          const ga = compAb.grupos[gi];
+          const aberto = abertos.has(l.grupo);
+          const ids = idsDoGrupo(l);
+          return (
+            <li key={l.grupo}>
+              <button type="button" className="w-full text-left px-4 py-3" aria-expanded={aberto} onClick={() => onToggle(l.grupo)}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-text min-w-0">
+                    <ChevronRight className={clsx("w-4 h-4 shrink-0 text-label transition-transform", aberto && "rotate-90")} />
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COR_GRUPO[l.grupo] }} />
+                    {l.grupo}
+                    <span className="text-label font-normal">({ids.length})</span>
+                  </span>
+                  <span className="text-right shrink-0 tabular">
+                    <span className="block text-sm font-bold text-text">{fmtK(g.total)}</span>
+                    <span className="block text-xs text-label">({fmtK(ga.total)})</span>
+                  </span>
+                </div>
+                <div className="text-xs text-label leading-snug mt-0.5 pl-[22px]">{l.encargos}</div>
+                <dl className="grid grid-cols-3 gap-x-3 mt-2 pl-[22px] text-[13px]">
+                  <PopIn rotulo="Circulante" valor={fmtK(g.circ)} />
+                  <PopIn rotulo="Não circulante" valor={fmtK(g.nc)} />
+                  <PopIn rotulo="Taxa efetiva" valor={l.pos.length ? fmtPct(l.taxa) : "–"} />
+                </dl>
+              </button>
+              {aberto && (
+                <ul className="bg-[#fafbfc] border-t border-line-soft divide-y divide-line-soft">
+                  {ids.map((id) => {
+                    const x = l.pos.find((y) => y.c.id === id);
+                    const xa = l.posA.find((y) => y.c.id === id);
+                    const c = (x ?? xa)!.c;
+                    const cd = compDb.contratos.get(id);
+                    const ca = compAb.contratos.get(id);
+                    return (
+                      <li key={id} className="pl-[38px] pr-4 py-2.5 text-[13px]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-text">
+                              {c.id}
+                              {x?.reclassificado && <span className="ml-1.5 text-negative font-normal">(reclassificado)</span>}
+                            </div>
+                            <div className="text-xs text-label leading-snug">
+                              {taxaContratadaDivida(c)}
+                              {!x ? ` · liquidado em ${fmtDate(c.vencimento)}` : !xa ? ` · captado em ${fmtDate(c.dataCaptacao)}` : ""}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0 tabular">
+                            <div className="font-semibold text-text">{fmtK(cd?.total ?? 0)}</div>
+                            <div className="text-xs text-label">({fmtK(ca?.total ?? 0)})</div>
+                          </div>
+                        </div>
+                        {x && (
+                          <div className="text-xs text-label mt-0.5 tabular">
+                            Circulante {fmtK(cd?.circ ?? 0)} · não circulante {fmtK(cd?.nc ?? 0)}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+        <li className="px-4 py-3 bg-[#f5f6f7] border-t border-[#a8b2bd]">
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-sm font-bold text-text">Total</span>
+            <span className="text-right tabular">
+              <span className="block text-sm font-bold text-text">{fmtK(compDb.total.total)}</span>
+              <span className="block text-xs text-label">({fmtK(compAb.total.total)})</span>
+            </span>
+          </div>
+          <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+            <PopIn rotulo="Circulante" valor={fmtK(compDb.total.circ)} />
+            <PopIn rotulo="Não circulante" valor={fmtK(compDb.total.nc)} />
+            <PopIn rotulo="Taxa efetiva" valor={fmtPct(custoMedio)} />
+          </dl>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+/** Características dos contratos no celular (lista com pop-in, no lugar da tabela larga) */
+function CaracteristicasCelular({
+  pos,
+  bndes,
+  saldoMil,
+  db,
+}: {
+  pos: PosicaoDivida[];
+  bndes: boolean;
+  saldoMil: (x: PosicaoDivida) => number;
+  db: string;
+}) {
+  const captado = (x: PosicaoDivida) => Math.round(mil(x.c.valorCaptado));
+  return (
+    <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+      {pos.map((x) => (
+        <li key={x.c.id} className="px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-text leading-snug">{x.c.instrumento}</div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-label">
+                <Tag>{x.c.id}</Tag>
+                {x.c.formaBNDES && <Tag color={x.c.formaBNDES === "Direto" ? "#0070f2" : "#8b47d7"}>{x.c.formaBNDES}</Tag>}
+                <span>{EMPRESAS[x.c.empresa]?.nome ?? x.c.empresa}</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-sm font-bold tabular text-text">{fmtK(saldoMil(x))}</div>
+              <div className="text-xs text-label whitespace-nowrap">saldo {fmtDate(db)}</div>
+            </div>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+            <PopIn rotulo="Captação → vencimento" valor={`${fmtDate(x.c.dataCaptacao)} → ${fmtDate(x.c.vencimento)}`} />
+            <PopIn rotulo="Valor captado" valor={fmtK(captado(x))} />
+          </dl>
+          <div className="text-xs text-label leading-snug mt-2 space-y-1">
+            <p>
+              <span className="text-text font-semibold">{taxaContratadaDivida(x.c)}</span> · juros {minuscula(x.c.descricaoJuros)}
+            </p>
+            <p>
+              <span className="text-text">Amortização:</span> {x.c.descricaoAmortizacao}
+            </p>
+            {bndes && (
+              <p>
+                {x.c.agente ? `Agente financeiro: ${x.c.agente.replace(" (agente financeiro)", "")}` : "Contratação direta com o BNDES"}
+                {x.c.linhaCredito && ` · linha ${x.c.linhaCredito}`}
+              </p>
+            )}
+            {!bndes && x.c.agente && <p>{x.c.agente}</p>}
+            <p>
+              <span className="text-text">Garantias:</span> {x.c.garantias}
+            </p>
+            <p>
+              <span className="text-text">Finalidade:</span> {x.c.finalidade}
+            </p>
+            {x.c.lastro && (
+              <p>
+                <span className="text-text">Lastro:</span> {x.c.lastro}
+              </p>
+            )}
+          </div>
+        </li>
+      ))}
+      {pos.length > 1 && (
+        <li className="px-4 py-3 bg-[#f5f6f7] flex items-start justify-between gap-3">
+          <span className="text-sm font-bold text-text">Total</span>
+          <span className="text-right tabular">
+            <span className="block text-sm font-bold text-text">{fmtK(soma(pos, saldoMil))}</span>
+            <span className="block text-xs text-label">captado {fmtK(soma(pos, captado))}</span>
+          </span>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+interface CustoMil {
+  original: number;
+  apropriado: number;
+  circ: number;
+  nc: number;
+  aApropriar: number;
+}
+
+/** Custos de transação por contrato no celular (lista com pop-in, no lugar da tabela larga) */
+function CustosCelular({ custos, valores, total }: { custos: LinhaCusto[]; valores: (l: LinhaCusto) => CustoMil; total: CustoMil }) {
+  return (
+    <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+      {custos.map((l) => {
+        const v = valores(l);
+        const pct = l.original > 0 ? l.apropriado / l.original : 0;
+        return (
+          <li key={l.x.c.id} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm">
+                  <span className="font-semibold text-text">{l.x.c.id}</span>
+                  <span className="text-xs text-label"> · {grupoDe(l.x.c)}</span>
+                </div>
+                <div className="text-xs text-label tabular">
+                  {fmtDate(l.x.c.dataCaptacao)} → {fmtDate(l.x.c.vencimento)}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-bold tabular text-text">{fmtK(v.aApropriar)}</div>
+                <div className="text-xs text-label whitespace-nowrap">a apropriar · CET {fmtPct(l.x.cet)}</div>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2 text-[13px]">
+              <PopIn rotulo="Custo original" valor={fmtK(v.original)} />
+              <PopIn rotulo="Apropriado acumulado" valor={`${fmtK(v.apropriado)} · ${fmtPct(pct, 0)}`} />
+              <PopIn rotulo="Circulante" valor={fmtK(v.circ)} />
+              <PopIn rotulo="Não circulante" valor={fmtK(v.nc)} />
+            </dl>
+          </li>
+        );
+      })}
+      <li className="px-4 py-3 bg-[#f5f6f7]">
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-sm font-bold text-text">Total</span>
+          <span className="text-sm font-bold tabular text-text">{fmtK(total.aApropriar)}</span>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2 text-[13px]">
+          <PopIn rotulo="Custo original" valor={fmtK(total.original)} />
+          <PopIn rotulo="Apropriado acumulado" valor={fmtK(total.apropriado)} />
+          <PopIn rotulo="Circulante" valor={fmtK(total.circ)} />
+          <PopIn rotulo="Não circulante" valor={fmtK(total.nc)} />
+        </dl>
+      </li>
+    </ul>
   );
 }
 

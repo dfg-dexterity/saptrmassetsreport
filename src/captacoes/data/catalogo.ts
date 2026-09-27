@@ -84,7 +84,7 @@ export const RELATORIOS_CAPTACOES: RelatorioBase[] = [
     titulo: "C03 – Encargos e custo da dívida",
     tituloCurto: "Encargos e Custo da Dívida",
     descricao:
-      "Encargos do período, juros capitalizados (CPC 20), despesa financeira e custo médio ponderado (alimenta as Premissas e os covenants).",
+      "Encargos do período, encargos capitalizados (CPC 20), despesa financeira e custo médio ponderado (alimenta as Premissas e os covenants).",
     publico: "Tesouraria / Controladoria",
     periodicidade: "Mensal",
     norma: "CPC 20 / CPC 48",
