@@ -49,7 +49,7 @@ cadastro fica salvo no navegador de quem acessa.
 | 6. Base técnica | **Catálogo de CDS Views** (Debt and Investment Management, Maturity Profile) | Lista de CDS |
 
 Motor de cálculo da dívida: simulação diária por contrato (base 365 dias corridos), CDI/TJLP/TLP/IPCA + spread, custo
-amortizado pela taxa efetiva (CPC 48), circulante × não circulante (CPC 26, inclusive reclassificação por covenant
+amortizado (CPC 48, custos de transação apropriados linearmente pelo prazo), circulante × não circulante (CPC 26, inclusive reclassificação por covenant
 descumprido sem waiver na data do balanço – veja a data-base 31/12/2025), juros capitalizados em ativo qualificável (CPC 20)
 e CET. Detalhes em [docs/GUIA-CAPTACOES.md](docs/GUIA-CAPTACOES.md).
 

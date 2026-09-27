@@ -584,7 +584,7 @@ export function C06NotaExplicativa() {
     push("secao", "a) Política contábil");
     push(
       "p",
-      "Os empréstimos, financiamentos, debêntures e certificados de recebíveis (CRA e CRI) são reconhecidos inicialmente pelo valor justo, líquido dos custos de transação incorridos, e mensurados subsequentemente pelo custo amortizado. Os encargos – juros, atualização monetária e custos de transação – são apropriados ao resultado pelo prazo dos contratos, pelo método da taxa efetiva de juros (CPC 48 / IFRS 9).",
+      "Os empréstimos, financiamentos, debêntures e certificados de recebíveis (CRA e CRI) são reconhecidos inicialmente pelo valor justo, líquido dos custos de transação incorridos, e mensurados subsequentemente pelo custo amortizado. Os juros e a atualização monetária são apropriados ao resultado pela fluência do prazo dos contratos; os custos de transação são apropriados linearmente pelo prazo de cada contrato, por não gerarem diferença relevante em relação ao método da taxa efetiva de juros (CPC 48 / IFRS 9).",
     );
     push(
       "p",
