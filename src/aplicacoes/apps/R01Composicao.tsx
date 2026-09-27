@@ -393,7 +393,7 @@ function DetalheOperacao({ pos, benchmark, onClose }: { pos: Posicao; benchmark:
     ID12: fmtBRL(op.principal, true),
   };
   return (
-    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
+    <aside className="bg-white rounded-[var(--radius-card)] shadow-fiori-lg lg:shadow-fiori overflow-hidden self-auto lg:self-start flex flex-col fixed inset-x-4 bottom-4 top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 lg:sticky lg:inset-auto lg:top-[4.25rem] lg:z-auto lg:max-h-[calc(100vh-5.5rem)]">
       <header className="px-4 pt-3.5 pb-3 border-b border-line-soft">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -420,7 +420,7 @@ function DetalheOperacao({ pos, benchmark, onClose }: { pos: Posicao; benchmark:
         </div>
       </header>
 
-      <div className="overflow-y-auto fiori-scroll px-4 py-4 space-y-5">
+      <div className="flex-1 min-h-0 overflow-y-auto fiori-scroll px-4 py-4 space-y-5">
         <section>
           <h4 className="text-sm font-bold text-text mb-2">Valores na data-base</h4>
           <dl className="space-y-1.5 text-[13px]">

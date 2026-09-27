@@ -88,7 +88,7 @@ export interface EtapaChecklist {
 }
 
 export const CHECKLIST_FECHAMENTO: EtapaChecklist[] = [
-  { id: "mercado", dia: "DU-2", etapa: "Importar dados de mercado do mês (CDI, IPCA, TJLP, TLP)", transacao: null, responsavel: "Tesouraria" },
+  { id: "mercado", dia: "DU-1", etapa: "Importar dados de mercado do mês (CDI, IPCA, TJLP, TLP)", transacao: null, responsavel: "Tesouraria" },
   { id: "captacoes", dia: "DU-1", etapa: "Revisar novas captações, custos de transação e cronogramas (C00)", transacao: null, responsavel: "Tesouraria" },
   { id: "tbb1", dia: "DU-1", etapa: "Contabilizar os fluxos do período (pagamentos de principal e juros)", transacao: "TBB1", responsavel: "Tesouraria" },
   { id: "tpm44", dia: "DU+1", etapa: "Apropriação por competência de juros e custos de transação", transacao: "TPM44", responsavel: "Contabilidade" },

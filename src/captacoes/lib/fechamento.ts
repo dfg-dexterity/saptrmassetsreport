@@ -120,7 +120,7 @@ export function checagensIntegridade(
   const cronogramas = CONTRATOS.filter((c) => Math.abs(c.amortizacoes.reduce((s, a) => s + a.pct, 0) - 1) > 1e-9);
   const glDiv = gl.filter((l) => l.status === "Divergente");
   const extDiv = extratos.filter((l) => l.status === "Divergente");
-  const fmt = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (v: number) => (Math.round(v * 100) / 100 || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return [
     {
       id: "cplp",

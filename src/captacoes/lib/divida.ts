@@ -264,7 +264,10 @@ export function calcularPosicaoDivida(c: ContratoDivida, data: string, p: Premis
     principalCirculante = pa;
     custosCirculante = ca;
   }
-  const circulante = Math.min(saldo, Math.max(0, principalCirculante + jap - custosCirculante));
+  // Sem principal no curto prazo, a redutora circulante fica limitada aos juros a pagar (o excedente segue no não
+  // circulante), mantendo circulante = principal CP + juros − custos CP também nas contas do FI-GL (C05).
+  custosCirculante = Math.min(custosCirculante, principalCirculante + jap);
+  const circulante = Math.min(saldo, principalCirculante + jap - custosCirculante);
   const futuras = c.amortizacoes.filter((a) => a.data > data);
   const somaPct = futuras.reduce((s, a) => s + a.pct, 0);
   const prazoMedioAnos = somaPct > 0 ? futuras.reduce((s, a) => s + a.pct * (diffDays(data, a.data) / 365), 0) / somaPct : 0;
