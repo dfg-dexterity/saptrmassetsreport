@@ -144,6 +144,9 @@ interface LinhaParametro {
 
 const pctTexto = (v: number, casas = 2) => `${fmtDec(v * 100, casas)}%`;
 
+/** Tributo fora do modelo (visão gerencial) */
+const NOTA_PIS_COFINS = "PIS/COFINS sobre receitas financeiras (4,65% – Decreto 8.426/2015) não modelado nesta demo (visão gerencial).";
+
 /** Títulos públicos federais (aba Premissas): custódia, VNA, cupons e valor de face */
 function parametrosTesouro(p: PremissasMercado): LinhaParametro[] {
   const T = PARAMETROS_TESOURO;
@@ -151,13 +154,16 @@ function parametrosTesouro(p: PremissasMercado): LinhaParametro[] {
   const ntnb = vnaNTNB(p.dataBase, p);
   const cupomSemNTNF = Math.pow(1 + T.cupomNTNF, 0.5) - 1;
   const cupomSemNTNB = Math.pow(1 + T.cupomNTNB, 0.5) - 1;
+  // a âncora do VNA (último dado importado) só é citada quando não é posterior à data-base
+  const comAncora = p.dataBase >= T.dataVNA;
   return [
     {
-      rotulo: "Taxa de custódia B3",
+      rotulo: "Taxa de custódia",
       valor: `${pctTexto(T.custodiaB3)} a.a.`,
       numero: T.custodiaB3 * 100,
       origem: "parametro",
-      detalhe: "Sobre o saldo em custódia; apropriada pro rata e cobrada semestralmente",
+      detalhe:
+        "Tabela B3/Tesouro Direto – parâmetro da planilha; PJ: custódia SELIC via banco custodiante. Sobre o saldo em custódia, apropriada pro rata e cobrada semestralmente",
     },
     {
       rotulo: "Taxa do agente de custódia",
@@ -171,14 +177,18 @@ function parametrosTesouro(p: PremissasMercado): LinhaParametro[] {
       valor: fmtBRL(lft, true),
       numero: Math.round(lft * 100) / 100,
       origem: "sap",
-      detalhe: `Na data-base; série do Tesouro Nacional/ANBIMA ancorada em ${fmtBRL(T.vnaLFT, true)} (${fmtDate(T.dataVNA)}), corrigida pela Selic diária`,
+      detalhe: comAncora
+        ? `Na data-base; série do Tesouro Nacional/ANBIMA ancorada em ${fmtBRL(T.vnaLFT, true)} (${fmtDate(T.dataVNA)}), corrigida pela Selic diária`
+        : "Na data-base; série do Tesouro Nacional/ANBIMA, corrigida pela Selic diária",
     },
     {
       rotulo: "VNA da NTN-B (Tesouro IPCA+)",
       valor: fmtBRL(ntnb, true),
       numero: Math.round(ntnb * 100) / 100,
       origem: "sap",
-      detalhe: `Na data-base; VNA ANBIMA ancorado em ${fmtBRL(T.vnaNTNB, true)} (${fmtDate(T.dataVNA)}), corrigido pelo IPCA`,
+      detalhe: comAncora
+        ? `Na data-base; VNA ANBIMA ancorado em ${fmtBRL(T.vnaNTNB, true)} (${fmtDate(T.dataVNA)}), corrigido pelo IPCA`
+        : "Na data-base; VNA ANBIMA, corrigido pelo IPCA",
     },
     {
       rotulo: "Cupom da NTN-F",
@@ -265,11 +275,18 @@ function parametrosTimeDeposit(): LinhaParametro[] {
   const T = PARAMETROS_TIME_DEPOSIT;
   return [
     {
-      rotulo: "IOF câmbio na remessa",
+      rotulo: "IOF câmbio – remessa para investimento no exterior",
       valor: pctTexto(T.iofCambio),
       numero: T.iofCambio * 100,
       origem: "legal",
-      detalhe: "Decreto 6.306/2007 – alíquota geral sobre o valor convertido na remessa",
+      detalhe: `Decreto 6.306/2007, art. 15-B, XXI-A, red. Decreto 12.499/2025; desde ${fmtDate(T.inicioIofInvestimento)} (eficácia restabelecida pelo STF) – sobre o valor convertido na remessa`,
+    },
+    {
+      rotulo: "IOF câmbio – alíquota geral (referência)",
+      valor: pctTexto(T.iofCambioGeral),
+      numero: T.iofCambioGeral * 100,
+      origem: "legal",
+      detalhe: `Decreto 6.306/2007, art. 15-B, caput – demais operações de câmbio; o motor a aplicaria a remessas anteriores a ${fmtDate(T.inicioIofInvestimento)} (nenhuma na carteira)`,
     },
     {
       rotulo: "Base de cálculo dos juros",
@@ -304,7 +321,7 @@ function parametrosTimeDeposit(): LinhaParametro[] {
       valor: pctTexto(ALIQUOTA_IRPJ_CSLL, 0),
       numero: ALIQUOTA_IRPJ_CSLL * 100,
       origem: "legal",
-      detalhe: "25% + 9% sobre o resultado (juros + variação cambial); sem IRRF – compõe o lucro real",
+      detalhe: "25% + 9% sobre o resultado (juros + variação cambial); sem IRRF – compõe o lucro real (Lei 9.249/1995, art. 25)",
     },
   ];
 }
@@ -321,7 +338,8 @@ export function PremissasApp() {
     const mesAnterior = previousMonthEnd(p.dataBase);
     const linha = (moeda: "USD" | "EUR", nome: string, atual: number) => {
       const anterior = ptaxDoMes(moeda, mesAnterior.slice(0, 7));
-      return { moeda, nome, papel: "Conversão de time deposits e do fundo cambial", atual, anterior, variacao: atual / anterior - 1 };
+      const papel = moeda === "USD" ? "Conversão dos time deposits; referência do fundo cambial" : "Conversão dos time deposits";
+      return { moeda, nome, papel, atual, anterior, variacao: atual / anterior - 1 };
     };
     return {
       mesAnterior,
@@ -352,6 +370,15 @@ export function PremissasApp() {
     }
     return out;
   }, [p]);
+
+  // Eixo do CDI: domínio de inteiros (floor/ceil) com marcas regulares de 1 p.p. (2 p.p. se a faixa for larga)
+  const eixoCDI = useMemo(() => {
+    const vs = serieCDI.flatMap((m) => [m.historico, m.projecao]).filter((v): v is number => v !== null);
+    const passo = Math.max(...vs) - Math.min(...vs) > 8 ? 2 : 1;
+    const lo = Math.floor(Math.min(...vs) / passo) * passo;
+    const hi = Math.ceil(Math.max(...vs) / passo) * passo;
+    return Array.from({ length: Math.round((hi - lo) / passo) + 1 }, (_, i) => lo + i * passo);
+  }, [serieCDI]);
 
   const exportar = () =>
     exportarExcel(
@@ -433,7 +460,7 @@ export function PremissasApp() {
             { titulo: "Observação", largura: 80 },
           ],
           linhas: blocos.exterior.map((x) => [x.rotulo, x.numero, ORIGEM[x.origem].rotulo, x.detalhe]),
-          notas: ["Taxas e alíquotas em %; tarifa em US$."],
+          notas: ["Taxas e alíquotas em %; tarifa em US$.", NOTA_PIS_COFINS],
         },
         {
           nome: "IRRF",
@@ -563,7 +590,16 @@ export function PremissasApp() {
             <LineChart data={serieCDI} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke="#e5e5e5" />
               <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} interval="preserveStartEnd" minTickGap={24} />
-              <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={44} domain={["dataMin - 1", "dataMax + 1"]} tickFormatter={(v: number) => `${fmtDec(v, 0)}%`} />
+              <YAxis
+                tick={AXIS_STYLE}
+                tickLine={false}
+                axisLine={false}
+                width={44}
+                domain={[eixoCDI[0], eixoCDI[eixoCDI.length - 1]]}
+                ticks={eixoCDI}
+                interval={0}
+                tickFormatter={(v: number) => `${fmtDec(v, 0)}%`}
+              />
               <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtDec(v, 2)}%`, n]} />
               <ReferenceLine
                 x={fmtMonthShort(`${p.dataBase.slice(0, 7)}-01`)}
@@ -622,9 +658,10 @@ export function PremissasApp() {
             </table>
           </div>
           <p className="text-xs text-label mt-3 leading-relaxed">
-            R$ por unidade de moeda. A PTAX de fim de mês converte os time deposits e o fundo cambial (CPC 02); entre dois fins
-            de mês, a PTAX é interpolada e, após a data-base, os relatórios usam a PTAX da data-base (último dado disponível).
-            Variação positiva = real depreciado (ganho cambial nos ativos em moeda estrangeira).
+            R$ por unidade de moeda. A PTAX converte os time deposits (CPC 02); no fundo cambial (cota em R$) ela só explica a
+            variação da cota. Entre dois fins de mês, a PTAX é interpolada e, após a data-base, os relatórios usam a PTAX da
+            data-base (último dado disponível). Variação positiva = real depreciado (ganho cambial nos ativos em moeda
+            estrangeira).
           </p>
         </Card>
 
@@ -640,7 +677,7 @@ export function PremissasApp() {
           <TabelaParametros linhas={blocos.exterior} />
           <p className="text-xs text-label mt-3 leading-relaxed">
             Resultado em R$ = juros em moeda original × PTAX + variação cambial sobre o principal − IOF câmbio − tarifa;
-            provisão de IRPJ/CSLL sobre o resultado positivo.
+            provisão de IRPJ/CSLL sobre o resultado positivo. {NOTA_PIS_COFINS}
           </p>
         </Card>
       </div>

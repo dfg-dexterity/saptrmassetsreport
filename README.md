@@ -48,11 +48,19 @@ Launchpad usam essa base.
 
 Motores dos novos tipos de contrato: **títulos públicos** (`lib/tesouro.ts`) – PU pelas convenções ANBIMA/Tesouro (252
 dias úteis), VNA da LFT pela Selic e da NTN-B pelo IPCA, curva à taxa de compra × mercado à taxa indicativa mensal, cupons
-com IR regressivo, custódia B3 e taxa do agente; **fundos** (`lib/fundos.ts`) – cota diária (% do CDI, CDI + spread,
-série mensal de multimercado/Ibovespa ou cambial), taxas de administração e performance na cota, come-cotas no último dia
+com IR regressivo (o 1º cupom sem os juros decorridos pagos na compra), duration de taxa (LFT = 0, pós-fixada),
+custódia e taxa do agente; **fundos** (`lib/fundos.ts`) – cota diária (% do CDI, CDI + spread, série mensal de
+multimercado/Ibovespa ou cambial), taxa de administração e taxa de performance provisionada sobre o excedente ao
+benchmark acima da linha-d'água (revertida se o excedente cai, cristalizada em junho e dezembro), come-cotas no último dia
 útil de maio e novembro (15% LP / 20% CP) e IR complementar no resgate; **time deposits** (`lib/timeDeposit.ts`) – juros
 simples ACT/360 em moeda original, conversão pela PTAX venda BCB importada do SAP (após a data-base, a PTAX da
-data-base), variação cambial acumulada e do mês, IOF câmbio de 0,38% e IRPJ/CSLL de 34%.
+data-base), variação cambial acumulada e do mês, IOF câmbio de 1,10% na remessa para investimento no exterior (Decreto
+6.306/2007, art. 15-B, XXI-A, na redação do Decreto 12.499/2025) e IRPJ/CSLL de 34% (Lei 9.249/1995, art. 25).
+
+Convenções: nas rentabilidades por período, o IR é a variação do IR acumulado (retido + provisão) – meses de perda ou de
+mudança de faixa revertem a provisão – e o IOF só entra quando realizado; o carry (R06/KPIs) considera só as aplicações em
+R$, com a exposição cambial à parte; cotas de fundos ficam fora dos limites de crédito por grupo econômico (patrimônio
+segregado – limite próprio de 20%). PIS/COFINS sobre receitas financeiras não é modelado (visão gerencial).
 
 O benchmark vale pela regra mais específica (tipo de produto › portfolio › empresa › carteira) vigente em cada dia: o
 rendimento de referência é capitalizado dia a dia (DI diário × % do benchmark), como os próprios papéis, e comparado com o
