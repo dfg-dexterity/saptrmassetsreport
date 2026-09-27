@@ -121,7 +121,7 @@ export function R06Indicadores() {
           ],
           notas: [
             "Dívida e aplicações na data-base; caixa do último balancete trimestral disponível até a data-base (dado corporativo fictício).",
-            ...(caixaAnterior && dlApuracao !== null
+            ...(covDl.dataApuracao !== db && dlApuracao !== null
               ? [`O covenant DL/EBITDA usa a apuração de ${rotuloApuracao(covDl)} (dívida líquida de ${fmtBRL(dlApuracao)}), não a dívida líquida da data-base.`]
               : []),
           ],
@@ -280,7 +280,7 @@ export function R06Indicadores() {
             label="DL / EBITDA"
             value={fmtX(covDl.valor)}
             state={rotuloCovenant(covDl).state}
-            sub={`apuração ${rotuloApuracao(covDl)}${dlApuracao !== null ? `: DL ${fmtCompact(dlApuracao)}` : ""} · covenant ${fmtLimiteCovenant(covDl.cov)}`}
+            sub={`apuração ${rotuloApuracao(covDl)}${dlApuracao !== null && covDl.dataApuracao !== db ? `: DL ${fmtCompact(dlApuracao)}` : ""} · covenant ${fmtLimiteCovenant(covDl.cov)}`}
           />
           <HeaderKpi
             label="Covenants contratuais"
@@ -365,35 +365,58 @@ export function R06Indicadores() {
         subtitle={`Apuração ${fmtQuarter(trimestre.data)} (${fmtDate(trimestre.data)}) · limites internos da tesouraria, não são covenants contratuais`}
         bodyClassName="px-0 pb-0"
       >
-        <DataTable
-          columns={[
-            {
-              key: "ind",
-              header: "Indicador",
-              minWidth: 180,
-              value: (c) => nomeLimite(c),
-              render: (c) => (
-                <div className="leading-snug">
-                  <div className="font-semibold">{nomeLimite(c)}</div>
-                  <div className="text-xs text-label">{c.formula}</div>
+        <div className="hidden lg:block">
+          <DataTable
+            columns={[
+              {
+                key: "ind",
+                header: "Indicador",
+                minWidth: 180,
+                value: (c) => nomeLimite(c),
+                render: (c) => (
+                  <div className="leading-snug">
+                    <div className="font-semibold">{nomeLimite(c)}</div>
+                    <div className="text-xs text-label">{c.formula}</div>
+                  </div>
+                ),
+              },
+              { key: "lim", header: "Limite", align: "right", value: (c) => c.limite, render: (c) => `${c.tipo === "max" ? "≤" : "≥"} ${fmtX(c.limite)}` },
+              { key: "val", header: `Valor ${fmtQuarter(trimestre.data)}`, align: "right", value: (c) => c.valor, render: (c) => <span className="font-bold">{fmtX(c.valor)}</span> },
+              {
+                key: "folga",
+                header: "Folga",
+                align: "right",
+                value: (c) => c.folga,
+                render: (c) => <span className={c.folga >= 0 ? "text-positive" : "text-negative"}>{c.folga < 0 ? "−" : ""}{fmtX(Math.abs(c.folga))}</span>,
+              },
+              { key: "st", header: "Status", value: (c) => c.status, render: (c) => <ObjectStatus state={semaforoState(c.status)}>{SEMAFORO_TEXTO[c.status]}</ObjectStatus> },
+              { key: "fonte", header: "Fonte", value: (c) => c.fonte, render: (c) => <span className="text-label">{c.fonte}</span> },
+            ]}
+            rows={politica}
+            rowKey={(c) => c.id}
+          />
+        </div>
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {politica.map((c) => (
+            <li key={c.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-text">{nomeLimite(c)}</div>
+                  <div className="text-xs text-label leading-snug mt-0.5">{c.formula}</div>
                 </div>
-              ),
-            },
-            { key: "lim", header: "Limite", align: "right", value: (c) => c.limite, render: (c) => `${c.tipo === "max" ? "≤" : "≥"} ${fmtX(c.limite)}` },
-            { key: "val", header: `Valor ${fmtQuarter(trimestre.data)}`, align: "right", value: (c) => c.valor, render: (c) => <span className="font-bold">{fmtX(c.valor)}</span> },
-            {
-              key: "folga",
-              header: "Folga",
-              align: "right",
-              value: (c) => c.folga,
-              render: (c) => <span className={c.folga >= 0 ? "text-positive" : "text-negative"}>{c.folga < 0 ? "−" : ""}{fmtX(Math.abs(c.folga))}</span>,
-            },
-            { key: "st", header: "Status", value: (c) => c.status, render: (c) => <ObjectStatus state={semaforoState(c.status)}>{SEMAFORO_TEXTO[c.status]}</ObjectStatus> },
-            { key: "fonte", header: "Fonte", value: (c) => c.fonte, render: (c) => <span className="text-label">{c.fonte}</span> },
-          ]}
-          rows={politica}
-          rowKey={(c) => c.id}
-        />
+                <div className="shrink-0">
+                  <ObjectStatus state={semaforoState(c.status)}>{SEMAFORO_TEXTO[c.status]}</ObjectStatus>
+                </div>
+              </div>
+              <dl className="grid grid-cols-3 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+                <PopIn rotulo={`Valor ${fmtQuarter(trimestre.data)}`} valor={fmtX(c.valor)} />
+                <PopIn rotulo="Limite" valor={`${c.tipo === "max" ? "≤" : "≥"} ${fmtX(c.limite)}`} />
+                <PopIn rotulo="Folga" valor={<span className={c.folga >= 0 ? "text-positive" : "text-negative"}>{fmtX(c.folga)}</span>} />
+              </dl>
+              <div className="text-xs text-label mt-2">{c.fonte}</div>
+            </li>
+          ))}
+        </ul>
       </Card>
 
       <Card title="Série trimestral" subtitle="Fim de cada trimestre · valores em R$ · indicadores em múltiplos · aplicações pelo valor contábil" bodyClassName="px-0 pb-0">
@@ -401,7 +424,7 @@ export function R06Indicadores() {
           <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className="sticky left-0 bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[260px]">Indicador</th>
+                <th className="sticky left-0 z-[1] bg-white text-left pl-4 pr-3 py-2.5 font-semibold text-[13px] border-b border-[#a8b2bd] min-w-[150px] sm:min-w-[260px]">Indicador</th>
                 {d.serie.map((i) => (
                   <th key={i.data} className="px-3 py-2.5 text-right font-semibold text-[13px] border-b border-[#a8b2bd] whitespace-nowrap">
                     {fmtQuarter(i.data)}
@@ -412,8 +435,8 @@ export function R06Indicadores() {
             <tbody>
               {SERIE.map((s) => (
                 <tr key={s.rotulo} className={s.rotulo === "Dívida líquida" || s.tipo === "x" ? "font-semibold" : ""}>
-                  <td className="sticky left-0 bg-white pl-4 pr-3 py-2 border-b border-line-soft">
-                    <div className="whitespace-nowrap">{s.rotulo}</div>
+                  <td className="sticky left-0 z-[1] bg-white pl-4 pr-3 py-2 border-b border-line-soft max-w-[170px] sm:max-w-none">
+                    <div className="sm:whitespace-nowrap leading-snug">{s.rotulo}</div>
                     {s.formula && <div className="text-xs text-label font-normal leading-snug">{s.formula}</div>}
                   </td>
                   {d.serie.map((i) => (
@@ -435,33 +458,71 @@ export function R06Indicadores() {
         }`}
         bodyClassName="px-0 pb-0"
       >
-        <DataTable<LinhaDivida>
-          columns={[
-            { key: "mod", header: "Modalidade", value: (x) => x.modalidade, render: (x) => <span className="font-semibold">{x.modalidade}</span>, total: () => "Total" },
-            { key: "qtd", header: "Contratos", align: "right", value: (x) => x.contratos, total: (r) => String(r.reduce((s, x) => s + x.contratos, 0)) },
-            {
-              key: "idx",
-              header: "Indexadores",
-              value: (x) => x.indexadores,
-              render: (x) => (
-                <span className="inline-flex flex-wrap gap-1">
-                  {x.indexadores.split(", ").map((i) => (
-                    <Tag key={i}>{i}</Tag>
-                  ))}
-                </span>
-              ),
-            },
-            { key: "taxa", header: "Taxa efetiva média", align: "right", value: (x) => x.taxa, render: (x) => `${fmtPct(x.taxa)} a.a.`, total: () => `${fmtPct(carry.custoDivida)} a.a.` },
-            { key: "venc", header: "Vencimento final", align: "right", value: (x) => x.vencimento, render: (x) => fmtDate(x.vencimento) },
-            { key: "cp", header: "Circulante", align: "right", value: (x) => x.circulante, render: (x) => fmtNum(x.circulante, { dash: true }), total: (r) => fmtNum(r.reduce((s, x) => s + x.circulante, 0)) },
-            { key: "lp", header: "Não circulante", align: "right", value: (x) => x.naoCirculante, render: (x) => fmtNum(x.naoCirculante, { dash: true }), total: (r) => fmtNum(r.reduce((s, x) => s + x.naoCirculante, 0)) },
-            { key: "tot", header: "Total", align: "right", value: (x) => x.circulante + x.naoCirculante, render: (x) => <span className="font-semibold">{fmtNum(x.circulante + x.naoCirculante)}</span>, total: (r) => fmtNum(r.reduce((s, x) => s + x.circulante + x.naoCirculante, 0)) },
-          ]}
-          rows={dividas}
-          rowKey={(x) => x.modalidade}
-          showTotals
-          defaultSort={{ key: "tot", dir: "desc" }}
-        />
+        <div className="hidden lg:block">
+          <DataTable<LinhaDivida>
+            columns={[
+              { key: "mod", header: "Modalidade", value: (x) => x.modalidade, render: (x) => <span className="font-semibold">{x.modalidade}</span>, total: () => "Total" },
+              { key: "qtd", header: "Contratos", align: "right", value: (x) => x.contratos, total: (r) => String(r.reduce((s, x) => s + x.contratos, 0)) },
+              { key: "cp", header: "Circulante", align: "right", value: (x) => x.circulante, render: (x) => fmtNum(x.circulante, { dash: true }), total: (r) => fmtNum(r.reduce((s, x) => s + x.circulante, 0)) },
+              { key: "lp", header: "Não circulante", align: "right", value: (x) => x.naoCirculante, render: (x) => fmtNum(x.naoCirculante, { dash: true }), total: (r) => fmtNum(r.reduce((s, x) => s + x.naoCirculante, 0)) },
+              { key: "tot", header: "Total", align: "right", value: (x) => x.circulante + x.naoCirculante, render: (x) => <span className="font-semibold">{fmtNum(x.circulante + x.naoCirculante)}</span>, total: (r) => fmtNum(r.reduce((s, x) => s + x.circulante + x.naoCirculante, 0)) },
+              { key: "taxa", header: "Taxa efetiva média", align: "right", value: (x) => x.taxa, render: (x) => `${fmtPct(x.taxa)} a.a.`, total: () => `${fmtPct(carry.custoDivida)} a.a.` },
+              {
+                key: "idx",
+                header: "Indexadores",
+                value: (x) => x.indexadores,
+                render: (x) => (
+                  <span className="inline-flex flex-wrap gap-1">
+                    {x.indexadores.split(", ").map((i) => (
+                      <Tag key={i}>{i}</Tag>
+                    ))}
+                  </span>
+                ),
+              },
+              { key: "venc", header: "Vencimento final", align: "right", value: (x) => x.vencimento, render: (x) => fmtDate(x.vencimento) },
+            ]}
+            rows={dividas}
+            rowKey={(x) => x.modalidade}
+            showTotals
+            defaultSort={{ key: "tot", dir: "desc" }}
+          />
+        </div>
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {[...dividas]
+            .sort((a, b) => b.circulante + b.naoCirculante - (a.circulante + a.naoCirculante))
+            .map((x) => (
+              <li key={x.modalidade} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-text">{x.modalidade}</div>
+                    <div className="text-xs text-label leading-snug mt-0.5">
+                      {plural(x.contratos, "contrato", "contratos")} · {x.indexadores} · {fmtPct(x.taxa)} a.a. · vencimento final {fmtDate(x.vencimento)}
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold tabular text-text whitespace-nowrap">{fmtNum(x.circulante + x.naoCirculante)}</span>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+                  <PopIn rotulo="Circulante" valor={fmtNum(x.circulante, { dash: true })} />
+                  <PopIn rotulo="Não circulante" valor={fmtNum(x.naoCirculante, { dash: true })} />
+                </dl>
+              </li>
+            ))}
+          <li className="px-4 py-3 bg-[#f5f6f7]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-text">Total</div>
+                <div className="text-xs text-label leading-snug mt-0.5">
+                  {plural(dividas.reduce((s, x) => s + x.contratos, 0), "contrato", "contratos")} · custo médio {fmtPct(carry.custoDivida)} a.a.
+                </div>
+              </div>
+              <span className="text-sm font-bold tabular text-text whitespace-nowrap">{fmtNum(totalDivida)}</span>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+              <PopIn rotulo="Circulante" valor={fmtNum(dividas.reduce((s, x) => s + x.circulante, 0))} />
+              <PopIn rotulo="Não circulante" valor={fmtNum(dividas.reduce((s, x) => s + x.naoCirculante, 0))} />
+            </dl>
+          </li>
+        </ul>
       </Card>
 
       <MessageStrip>

@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { CheckCircle2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "../../shared/components/fiori/Card";
@@ -13,7 +13,7 @@ import type { PremissasMercado } from "../../shared/data/mercado";
 import { EMPRESAS } from "../../shared/data/empresas";
 import { addDays, diffDays, endOfMonth, fmtDate, fmtMonthShort, lastMonthEnds } from "../../shared/lib/dates";
 import { exportarExcel } from "../../shared/lib/exportar";
-import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct } from "../../shared/lib/format";
+import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, plural } from "../../shared/lib/format";
 import { useBenchmarks } from "../context/BenchmarkContext";
 import { ESCOPOS, useMestre, type Escopo } from "../context/useDados";
 import { relatorioPorId } from "../data/catalogo";
@@ -53,9 +53,15 @@ const semComeCotas = (f: Fundo) => f.regimeIR === "Fundo de ações (15%)";
 /** Benchmark próprio do fundo difere do benchmark cadastrado em % do CDI (multimercado, ações, cambial) */
 const benchmarkProprio = (f: Fundo) => f.produto === "Fundo multimercado" || f.produto === "Fundo de ações" || f.produto === "Fundo cambial";
 
+/** Regra da taxa de performance (CVM 175), como no motor da cota */
+const REGRA_PERFORMANCE =
+  "provisionada diariamente sobre o excedente ao benchmark acima da linha-d'água (última cota cristalizada), revertida se o excedente cai e cristalizada no último dia útil de junho e de dezembro, sobre a cota líquida da taxa de administração";
+
 const pctCDI = (v: number) => `${fmtDec(v * 100, 1)}%`;
 const pp = (v: number, casas = 2) => `${v >= 0 ? "+" : ""}${fmtDec(v * 100, casas)} p.p.`;
 const fmtCota = (v: number) => fmtDec(v, 6);
+/** negativo depois de arredondado a 2 casas percentuais (evita "0,00%" em vermelho) */
+const negativoPct = (frac: number) => Math.round(frac * 10_000) < 0;
 
 interface LinhaFundo {
   f: Fundo;
@@ -263,6 +269,9 @@ export function R09Fundos() {
   const conciliaCC = Math.abs(d.mov.comeCotas - d.cc12) < 1;
   const resgatados = linhas.filter((l) => l.resgate);
   const sel = linhas.find((l) => l.f.id === selecionado) ?? null;
+  const alternar = (id: string) => setSelecionado(id === selecionado ? null : id);
+  // lista em cartões (celular): mesma ordem da tabela (saldo decrescente; resgatados no fim)
+  const listaCelular = [...linhas].sort((a, b) => b.saldo - a.saldo || a.f.id.localeCompare(b.f.id));
 
   const custoLinhas = ativos.filter((l) => !semComeCotas(l.f));
   const custoLiq = (l: LinhaFundo) => l.custoComeCotas * (1 - l.aliquotaIR);
@@ -349,7 +358,7 @@ export function R09Fundos() {
       value: (l) => l.rentabLiquida,
       render: (l) => (
         <div>
-          <div className={l.rentabBruta < 0 ? "text-negative" : ""}>{fmtPct(l.rentabBruta)}</div>
+          <div className={negativoPct(l.rentabBruta) ? "text-negative" : ""}>{fmtPct(l.rentabBruta)}</div>
           <div className="text-xs text-label">líq. {fmtPct(l.rentabLiquida)}</div>
         </div>
       ),
@@ -484,7 +493,8 @@ export function R09Fundos() {
       key: "taxas",
       header: "Taxas pagas",
       align: "right",
-      headerTitle: "Taxas de administração e performance cobradas na cota desde a aplicação (já deduzidas do saldo)",
+      headerTitle:
+        "Taxas cobradas na cota desde a aplicação (já deduzidas do saldo): administração + performance (provisionada/cristalizada – provisão diária acima da linha-d'água, cristalizada em junho e dezembro)",
       value: (l) => l.taxas,
       render: (l) => fmtNum(l.taxas),
       total: somaAtivos((l) => l.taxas),
@@ -518,7 +528,9 @@ export function R09Fundos() {
       render: (l) => (
         <div>
           <div>{fmtPct(l.f.taxaAdm)} a.a.</div>
-          <div className="text-xs text-label">{l.f.taxaPerf > 0 ? `perf. ${fmtPct(l.f.taxaPerf, 0)} s/ ${l.f.benchmark}` : "sem performance"}</div>
+          <div className="text-xs text-label">
+            {l.f.taxaPerf > 0 ? `perf. ${fmtPct(l.f.taxaPerf, 0)} do excedente ao ${l.f.benchmark}` : "sem performance"}
+          </div>
         </div>
       ),
     },
@@ -555,7 +567,7 @@ export function R09Fundos() {
             { titulo: "IR complementar", tipo: "moeda" },
             { titulo: "IOF", tipo: "moeda" },
             { titulo: "Rendimento líquido", tipo: "moeda" },
-            { titulo: "Taxas pagas (adm. + perf.)", tipo: "moeda" },
+            { titulo: "Taxas pagas (adm. + performance provisionada/cristalizada)", tipo: "moeda" },
             { titulo: "Custo do come-cotas", tipo: "moeda" },
             { titulo: "Rentab. bruta", tipo: "pct" },
             { titulo: "Rentab. líquida", tipo: "pct" },
@@ -635,7 +647,7 @@ export function R09Fundos() {
             "",
           ],
           notas: [
-            "(i) Saldo = valor da cota × quantidade de cotas; a cota já é líquida das taxas de administração e performance.",
+            `(i) Saldo = valor da cota × quantidade de cotas; a cota já é líquida da taxa de administração e da taxa de performance, ${REGRA_PERFORMANCE}.`,
             "(ii) Come-cotas (último dia útil de maio e novembro): 15% nos fundos de longo prazo e 20% nos de curto prazo, por redução da quantidade de cotas; fundos de ações não têm come-cotas.",
             "(iii) IR complementar = IR total pela tabela regressiva (curto prazo 22,5%/20%; ações 15%) − come-cotas já recolhido; provisionado na data-base.",
             "(iv) Custo do come-cotas = rendimento que o IR antecipado teria gerado se permanecesse aplicado (custo de oportunidade).",
@@ -701,7 +713,7 @@ export function R09Fundos() {
       onExport={exportar}
       kpis={
         <div className="contents lg:grid lg:grid-cols-3 lg:gap-x-10 lg:gap-y-3">
-          <HeaderKpi label="Saldo em cotas" value={fmtCompact(saldo)} sub={`${ativos.length} fundo(s) · cota × quantidade`} />
+          <HeaderKpi label="Saldo em cotas" value={fmtCompact(saldo)} sub={`${plural(ativos.length, "fundo", "fundos")} · cota × quantidade`} />
           <HeaderKpi
             label="Rendimento bruto"
             value={fmtCompact(rendBruto)}
@@ -715,7 +727,7 @@ export function R09Fundos() {
             state={d.proxData ? "critical" : "neutral"}
             sub={d.proxData ? `IR estimado ${fmtCompact(d.proxIR)} · projeção` : "sem fundos sujeitos"}
           />
-          <HeaderKpi label="Taxas adm. + perf." value={fmtCompact(taxasPagas)} sub="pagas, embutidas na cota" />
+          <HeaderKpi label="Taxas adm. + perf." value={fmtCompact(taxasPagas)} sub="performance provisionada/cristalizada · na cota" />
           <HeaderKpi
             label="Rentab. líquida média"
             value={`${fmtDec(rentabAA * 100, 2)}%`}
@@ -725,9 +737,10 @@ export function R09Fundos() {
           />
         </div>
       }
-      headerExtra={
-        <div className="flex flex-col sm:flex-row sm:items-end gap-x-6 gap-y-2 no-print">
-          <FilterField label="Empresa" className="w-full sm:w-80 shrink-0">
+    >
+      <div className="bg-white rounded-[var(--radius-card)] shadow-fiori px-4 py-3 no-print">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <FilterField label="Empresa">
             <Select
               value={escopo}
               onChange={(v) => {
@@ -737,26 +750,23 @@ export function R09Fundos() {
               options={ESCOPOS}
             />
           </FilterField>
-          <p className="text-[13px] text-label leading-snug sm:text-right sm:ml-auto sm:max-w-xl">
-            Cotas, CDI e retornos importados do SAP até {fmtDate(db)}; o próximo come-cotas e o IR estimado são projetados com o último dado
-            disponível.
-          </p>
+          <div className="sm:col-span-2 text-[13px] text-label sm:text-right leading-snug">
+            Cotas, CDI e retornos importados do SAP até {fmtDate(db)}; próximo come-cotas e IR estimado projetados com o último dado
+            disponível
+          </div>
         </div>
-      }
-    >
+      </div>
+
       <MessageStrip design={conciliaSaldo && conciliaCC ? "positive" : "critical"}>
         <span className="flex flex-wrap gap-x-5 gap-y-1">
-          <span className="inline-flex items-start gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-[3px]" />
-            <span>
-              Saldo em cotas igual à Carteira-Mestre: <strong className="whitespace-nowrap">{fmtBRL(saldoMestre)}</strong>
-            </span>
+          <span>
+            Saldo em cotas {conciliaSaldo ? "igual à" : "diverge da"} Carteira-Mestre: <strong className="whitespace-nowrap">{fmtBRL(saldoMestre)}</strong>
+            {!conciliaSaldo && <span className="whitespace-nowrap"> (R09: {fmtBRL(saldo)})</span>}
           </span>
-          <span className="inline-flex items-start gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-[3px]" />
-            <span>
-              Come-cotas 12 meses conciliado com a movimentação consolidada: <strong className="whitespace-nowrap">{fmtBRL(d.mov.comeCotas)}</strong>
-            </span>
+          <span>
+            Come-cotas 12 meses {conciliaCC ? "igual à" : "diverge da"} movimentação consolidada:{" "}
+            <strong className="whitespace-nowrap">{fmtBRL(d.mov.comeCotas)}</strong>
+            {!conciliaCC && <span className="whitespace-nowrap"> (R09: {fmtBRL(d.cc12)})</span>}
           </span>
         </span>
       </MessageStrip>
@@ -764,19 +774,72 @@ export function R09Fundos() {
       <div className={clsx("grid gap-5", sel ? "lg:grid-cols-[minmax(0,1fr)_420px]" : "grid-cols-1")}>
         <Card
           title={`Fundos de investimento (${linhas.length})`}
-          subtitle="Clique em uma linha para ver cadastro, cota × CDI e eventos de come-cotas"
+          subtitle="Clique em um fundo para ver cadastro, cota × CDI e eventos de come-cotas"
           bodyClassName="px-0 pb-0"
           className="min-w-0 overflow-hidden"
         >
-          <DataTable
-            columns={colunas}
-            rows={linhas}
-            rowKey={(l) => l.f.id}
-            onRowClick={(l) => setSelecionado(l.f.id === selecionado ? null : l.f.id)}
-            selectedKey={selecionado}
-            showTotals
-            defaultSort={{ key: "saldo", dir: "desc" }}
-          />
+          <div className="hidden lg:block">
+            <DataTable
+              columns={colunas}
+              rows={linhas}
+              rowKey={(l) => l.f.id}
+              onRowClick={(l) => alternar(l.f.id)}
+              selectedKey={selecionado}
+              showTotals
+              defaultSort={{ key: "saldo", dir: "desc" }}
+              emptyText="Nenhum fundo nesta empresa na data-base"
+            />
+          </div>
+          <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+            {listaCelular.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum fundo nesta empresa na data-base</li>}
+            {listaCelular.map((l) => (
+              <li key={l.f.id}>
+                <button
+                  type="button"
+                  onClick={() => alternar(l.f.id)}
+                  className={clsx("w-full text-left px-4 py-3", l.f.id === selecionado ? "bg-selected" : "hover:bg-[#f2f4f6]")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-text leading-snug">
+                        <span className="text-link tabular">{l.f.id}</span> · {l.f.nome}
+                      </div>
+                      <div className="text-xs text-label leading-snug mt-0.5">
+                        {l.f.classe} · aplic. {fmtDate(l.f.dataAplicacao)}
+                      </div>
+                    </div>
+                    <ObjectStatus inverted icon={false} state={l.status === "Ativo" ? "positive" : "neutral"} className="shrink-0">
+                      {l.resgate ? `Resgatado ${fmtDate(l.resgate.data)}` : l.status}
+                    </ObjectStatus>
+                  </div>
+                  <ValoresCelular
+                    itens={[
+                      l.resgate
+                        ? { rotulo: "Resgate bruto", valor: fmtNum(l.resgate.bruto) }
+                        : { rotulo: "Saldo", valor: fmtNum(l.saldo), forte: true },
+                      { rotulo: "Rend. líquido", valor: fmtNum(l.rendimentoLiquido), cor: l.rendimentoLiquido < 0 ? "text-negative" : undefined },
+                      { rotulo: "Rentab. líq.", valor: fmtPct(l.rentabLiquida), cor: negativoPct(l.rentabLiquida) ? "text-negative" : undefined },
+                    ]}
+                  />
+                </button>
+              </li>
+            ))}
+            {ativos.length > 0 && (
+              <li className="px-4 py-3 bg-[#f5f6f7]">
+                <div className="text-sm font-bold text-text">
+                  Em carteira · {plural(ativos.length, "fundo", "fundos")}
+                  {resgatados.length > 0 && <span className="font-normal text-label text-xs"> · resgatados fora do total</span>}
+                </div>
+                <ValoresCelular
+                  itens={[
+                    { rotulo: "Saldo", valor: fmtNum(saldo), forte: true },
+                    { rotulo: "Rend. líquido", valor: fmtNum(rendLiq) },
+                    { rotulo: "Rentab. líq.", valor: fmtPct(aplicado > 0 ? rendLiq / aplicado : 0) },
+                  ]}
+                />
+              </li>
+            )}
+          </ul>
           <div className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft space-y-1">
             {resgatados.map((l) => (
               <p key={l.f.id}>
@@ -789,9 +852,9 @@ export function R09Fundos() {
               </p>
             ))}
             <p>
-              Cota líquida das taxas de administração e performance. Rendimento bruto = saldo + come-cotas recolhido − valor aplicado. IR complementar
-              provisionado pela alíquota vigente no resgate. Classificação CPC 48: valor justo por meio do resultado (saldo = valor da cota na
-              data-base).
+              Cota líquida da taxa de administração e da taxa de performance ({REGRA_PERFORMANCE}). Rendimento bruto = saldo + come-cotas
+              recolhido − valor aplicado. IR complementar provisionado pela alíquota vigente no resgate. Classificação CPC 48: valor justo por
+              meio do resultado (saldo = valor da cota na data-base).
             </p>
           </div>
         </Card>
@@ -832,7 +895,7 @@ export function R09Fundos() {
               <Mini
                 titulo="Acumulado em carteira"
                 valor={fmtCompact(ccAcumulado)}
-                sub={`${ativos.filter((l) => l.comeCotasPago > 0).length} fundo(s)`}
+                sub={plural(ativos.filter((l) => l.comeCotasPago > 0).length, "fundo", "fundos")}
               />
               <Mini
                 titulo="Próximo (projeção)"
@@ -1207,13 +1270,27 @@ export function R09Fundos() {
               Em linha: ±0,5 p.p.
             </p>
             <p className="text-xs text-label leading-relaxed">
-              <sup>1</sup> Multimercado (retorno absoluto, performance sobre o CDI), ações (Ibovespa) e cambial (PTAX): o benchmark próprio do fundo
-              difere do benchmark cadastrado em % do CDI, que serve apenas como referência do custo de oportunidade do caixa.
+              <sup>1</sup> Multimercado (retorno absoluto, performance sobre o excedente ao CDI), ações (Ibovespa) e cambial (PTAX): o benchmark
+              próprio do fundo difere do benchmark cadastrado em % do CDI, que serve apenas como referência do custo de oportunidade do caixa.
             </p>
           </div>
         </div>
       </Card>
     </ReportPage>
+  );
+}
+
+/** Valores de um fundo na lista em cartões (celular) */
+function ValoresCelular({ itens }: { itens: { rotulo: string; valor: string; forte?: boolean; cor?: string }[] }) {
+  return (
+    <dl className="grid grid-cols-3 gap-x-3 mt-2 text-[13px]">
+      {itens.map((x) => (
+        <div key={x.rotulo} className="min-w-0">
+          <dt className="text-xs text-label truncate">{x.rotulo}</dt>
+          <dd className={clsx("tabular truncate", x.forte ? "font-bold" : "font-semibold", x.cor ?? "text-text")}>{x.valor}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -1257,7 +1334,7 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
             {l.status === "Ativo" ? "Ativo" : `Resgatado em ${fmtDate(l.resgate!.data)}`}
           </ObjectStatus>
           <ObjectStatus inverted icon={false} state="critical">
-            {f.cpc48}
+            {f.cpc48 === "VJ por Resultado" ? "VJ por resultado" : f.cpc48 === "Custo Amortizado" ? "Custo amortizado" : f.cpc48}
           </ObjectStatus>
           <Tag color={semComeCotas(f) ? "#788fa6" : "#8b47d7"}>{regimeCurto(f.regimeIR)}</Tag>
           <Tag>Rating {f.rating}</Tag>
@@ -1275,15 +1352,23 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
             <Linha label="Produto" valor={f.produto} />
             <Linha label="Rentabilidade-alvo" valor={taxaFundoTexto(f)} quebra />
             <Linha label="Benchmark do fundo" valor={f.benchmark} />
+            <Linha label="Taxa de administração" valor={`${fmtPct(f.taxaAdm)} a.a.`} />
             <Linha
-              label="Taxa adm. / perf."
-              valor={`${fmtPct(f.taxaAdm)} a.a. / ${f.taxaPerf > 0 ? `${fmtPct(f.taxaPerf, 0)} s/ ${f.benchmark}` : "—"}`}
+              label="Taxa de performance"
+              valor={f.taxaPerf > 0 ? `${fmtPct(f.taxaPerf, 0)} do excedente ao ${f.benchmark}` : "sem performance"}
+              quebra
             />
             <Linha label="Liquidez" valor={`${f.liquidez} (crédito em ${f.diasResgate} d.c.)`} />
             <Linha label="Empresa" valor={`${f.empresa} – ${EMPRESAS[f.empresa]?.nome ?? ""}`} quebra />
             <Linha label="Portfolio" valor={f.portfolio} />
             <Linha label="Classificação CPC 48" valor="Valor justo por meio do resultado" quebra />
           </dl>
+          {f.taxaPerf > 0 && (
+            <p className="text-xs text-label leading-relaxed mt-2">
+              Taxa de performance de {fmtPct(f.taxaPerf, 0)} sobre o excedente ao {f.benchmark}: {REGRA_PERFORMANCE}. A cota exibida já é
+              líquida da provisão; sem excedente acima da linha-d'água, não há performance.
+            </p>
+          )}
         </section>
 
         <section>
@@ -1307,18 +1392,18 @@ function DetalheFundo({ l, p, onClose }: { l: LinhaFundo; p: PremissasMercado; o
               valor={fmtBRL(l.rendimentoBruto, true)}
               cor={l.rendimentoBruto >= 0 ? "text-positive" : "text-negative"}
             />
-            <Linha label="(−) Come-cotas recolhido" valor={`− ${fmtBRL(l.comeCotasPago, true)}`} />
+            <Linha label="(−) Come-cotas recolhido" valor={fmtBRL(l.comeCotasPago, true)} />
             <Linha
               label={`(−) IR complementar ${l.resgate ? "retido no resgate" : "provisionado"} (${fmtPct(l.aliquotaIR, 1)} − come-cotas)`}
-              valor={`− ${fmtBRL(l.irComplementar, true)}`}
+              valor={fmtBRL(l.irComplementar, true)}
             />
-            <Linha label="(−) IOF" valor={`− ${fmtBRL(l.iof, true)}`} />
+            <Linha label="(−) IOF" valor={fmtBRL(l.iof, true)} />
             <div className="border-t border-line-soft pt-1.5">
               <Linha label="Rendimento líquido" valor={fmtBRL(l.rendimentoLiquido, true)} forte />
             </div>
             {l.resgate && <Linha label="Líquido creditado (aplicação + rend. líquido)" valor={fmtBRL(l.resgate.liquido, true)} forte />}
             <Linha label="Rentab. bruta / líquida" valor={`${fmtPct(l.rentabBruta)} / ${fmtPct(l.rentabLiquida)}`} />
-            <Linha label="Taxas adm. + perf. pagas (na cota)" valor={fmtBRL(l.taxas, true)} />
+            <Linha label="Taxas na cota: adm. + performance (provisionada/cristalizada)" valor={fmtBRL(l.taxas, true)} />
             <Linha label="Custo do come-cotas" valor={fmtBRL(l.custoComeCotas, true)} cor={l.custoComeCotas > 0.5 ? "text-critical" : undefined} />
           </dl>
         </section>

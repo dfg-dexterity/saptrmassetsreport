@@ -42,7 +42,7 @@ const TD = PARAMETROS_TIME_DEPOSIT;
 const NOTA_RODAPE =
   "Saldo bruto: curva na renda fixa bancária e nos títulos públicos, valor da cota nos fundos e saldo em moeda × PTAX da data-base nos time deposits. Valor contábil = curva no custo amortizado e mercado no valor justo (CPC 48); renda fixa bancária a mercado pelo ágio/deságio informado.";
 
-const NOTA_TRIBUTOS = `Rendimentos, tributos e taxas desde a aplicação. IR: IRRF regressivo (renda fixa, títulos e fundos, inclusive come-cotas) e, nos time deposits, IRPJ/CSLL de 34% sobre o resultado – sem IOF provisório. IOF realizado: nos time deposits, IOF câmbio na remessa (${fmtPct(TD.iofCambio)} a partir de ${fmtDate(TD.inicioIofInvestimento)} – Decreto 6.306/2007, art. 15-B; ${fmtPct(TD.iofCambioGeral)} antes); nos demais contratos é zero, pois o IOF regressivo só incide no resgate antes de 30 dias. PIS/COFINS sobre receitas financeiras (4,65%) não modelado.`;
+const NOTA_TRIBUTOS = `IR: IRRF regressivo (renda fixa, títulos e fundos, inclusive come-cotas) e, nos time deposits, IRPJ/CSLL de 34% sobre o resultado – sem IOF provisório. IOF realizado: nos time deposits, IOF câmbio na remessa (${fmtPct(TD.iofCambio)} a partir de ${fmtDate(TD.inicioIofInvestimento)} – Decreto 6.306/2007, art. 15-B; ${fmtPct(TD.iofCambioGeral)} antes); nos demais contratos é zero, pois o IOF regressivo só incide no resgate antes de 30 dias. PIS/COFINS sobre receitas financeiras (4,65%) não modelado.`;
 
 const infoTipo = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)!;
 const ordemTipo = (t: TipoContrato) => TIPOS_CONTRATO.findIndex((x) => x.tipo === t);
@@ -631,7 +631,7 @@ export function CarteiraMestreApp() {
           </ul>
 
           <p className="px-4 py-3 text-xs text-label leading-relaxed border-t border-line-soft">
-            {NOTA_RODAPE} {NOTA_TRIBUTOS} Colunas em moeda original (ME) totalizadas só quando todos os contratos filtrados estão na mesma moeda.
+            {NOTA_RODAPE} Rendimentos, tributos e taxas desde a aplicação. {NOTA_TRIBUTOS} Colunas em moeda original (ME) totalizadas só quando todos os contratos filtrados estão na mesma moeda.
           </p>
         </Card>
         {sel && <DetalheContrato c={sel} onClose={() => setSelecionado(null)} />}

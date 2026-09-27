@@ -38,14 +38,14 @@ export interface Secao {
 }
 
 export const SECOES: Secao[] = [
-  { id: "parametrizacao", numero: 1, titulo: "Parametrização e Base de Dados" },
+  { id: "parametrizacao", numero: 1, titulo: "Parametrização e base de dados" },
   { id: "posicao", numero: 2, titulo: "Posição" },
-  { id: "movimentacao", numero: 3, titulo: "Movimentação e Evolução" },
-  { id: "rentabilidade", numero: 4, titulo: "Rentabilidade e Eficiência Fiscal" },
+  { id: "movimentacao", numero: 3, titulo: "Movimentação e evolução" },
+  { id: "rentabilidade", numero: 4, titulo: "Rentabilidade e eficiência fiscal" },
   { id: "indicadores", numero: 5, titulo: "Indicadores (KPIs)" },
-  { id: "fechamento", numero: 6, titulo: "Fechamento e Conciliação" },
-  { id: "notas", numero: 7, titulo: "Notas Explicativas" },
-  { id: "tecnica", numero: 8, titulo: "Base Técnica (CDS Views SAP)" },
+  { id: "fechamento", numero: 6, titulo: "Fechamento e conciliação" },
+  { id: "notas", numero: 7, titulo: "Notas explicativas" },
+  { id: "tecnica", numero: 8, titulo: "Base técnica (CDS Views SAP)" },
 ];
 
 export type Relatorio = RelatorioBase;
@@ -122,10 +122,10 @@ export const RELATORIOS: Relatorio[] = [
     titulo: "R08 – Tesouro Direto",
     tituloCurto: "Tesouro Direto",
     descricao:
-      "LFT, LTN, NTN-F, NTN-B Principal e NTN-B: PU e valor na curva × a mercado, MTM, cupons, custódia B3, taxa do agente, IOF/IRRF e valor contábil.",
+      "LFT, LTN, NTN-F, NTN-B Principal e NTN-B: PU e valor na curva × a mercado, MTM, cupons, custódia, taxa do agente, IOF/IRRF e valor contábil.",
     publico: "Tesouraria / Contabilidade",
     periodicidade: "Diária / Mensal",
-    norma: "CPC 48 / CPC 40",
+    norma: "CPC 48 / CPC 40 (R1)",
     secao: "posicao",
     rota: "/r08-tesouro",
     icone: Landmark,
@@ -157,7 +157,7 @@ export const RELATORIOS: Relatorio[] = [
       "Matriz da carteira por moeda × tipo de contrato em R$ e em moeda original; curva × mercado e resultado por moeda.",
     publico: "Tesouraria / Diretoria / Risco",
     periodicidade: "Mensal",
-    norma: "CPC 02 / CPC 40",
+    norma: "CPC 02 / CPC 40 (R1)",
     secao: "posicao",
     rota: "/r11-moeda-tipo",
     icone: Grid3x3,
@@ -282,10 +282,10 @@ export const RELATORIOS: Relatorio[] = [
     titulo: "R12 – Conciliação de fim de mês",
     tituloCurto: "Conciliação de Fim de Mês",
     descricao:
-      "TRM × FI-GL × extratos por tipo de contrato e por conta contábil, roll-forward do saldo e checklist de fechamento (TPM1, TPM44, TPM10).",
+      "TRM × FI-GL × extratos por tipo de contrato e por conta contábil, roll-forward do saldo e checklist de fechamento (TBB1, TPM44, TPM1 e TPM10 – fixar/lançar operações da gestão de posições).",
     publico: "Contabilidade / Controladoria / Auditoria",
     periodicidade: "Mensal (DU-1 a DU+3)",
-    norma: "—",
+    norma: "CPC 48 · controles internos",
     secao: "fechamento",
     rota: "/r12-conciliacao",
     icone: ClipboardCheck,
@@ -301,7 +301,7 @@ export const RELATORIOS: Relatorio[] = [
       "Quadro de movimentação das aplicações (saldo inicial, aplicações, resgates, rendimentos, IRRF, come-cotas, saldo final) – Controladora e Consolidado – e composição por tipo de contrato.",
     publico: "Contabilidade / Auditoria / RI",
     periodicidade: "Trimestral / Anual",
-    norma: "CPC 40 / CPC 48 / CVM 475",
+    norma: "CPC 40 (R1) / CPC 48",
     secao: "notas",
     rota: "/r02-movimentacao",
     icone: FileText,

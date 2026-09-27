@@ -404,7 +404,7 @@ export function R05Evolucao() {
               <ComposedChart data={dadosGrafico} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="#e5e5e5" />
                 <XAxis dataKey="mes" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
-                <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />
+                <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} tickFormatter={(v: number) => fmtDec(v, 0)} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(Math.abs(v), 2)} mi`, n]} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
                 <ReferenceLine y={0} stroke="#a8b2bd" />
@@ -544,7 +544,7 @@ export function R05Evolucao() {
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
                 {tiposComSaldo.map((t) => (
-                  <Bar key={t.tipo} dataKey={t.tipo} name={t.curto} stackId="s" fill={t.cor} isAnimationActive={false} />
+                  <Bar key={t.tipo} dataKey={t.tipo} name={t.tipo} stackId="s" fill={t.cor} isAnimationActive={false} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -573,7 +573,7 @@ export function R05Evolucao() {
                     <td className="pl-4 pr-2 py-2 border-b border-line-soft">
                       <span className="inline-flex items-center gap-2 min-w-0">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
-                        <span className="truncate">{t.curto}</span>
+                        <span className="truncate">{t.tipo}</span>
                         <Link to={t.rota} className="text-link hover:underline text-xs whitespace-nowrap">
                           {t.origem}
                         </Link>
@@ -699,7 +699,7 @@ export function R05Evolucao() {
               k: `${e.codigo}-${e.data}-${e.tipo}`,
               cor: corTipo(e.tipoContrato),
               titulo: `${e.produto} · ${e.contraparte}`,
-              sub: `${fmtDate(e.data)} · ${curtoTipo(e.tipoContrato)} · ${e.codigo} · empresa ${e.empresa}`,
+              sub: `${fmtDate(e.data)} · ${e.tipoContrato} · ${e.codigo} · empresa ${e.empresa}`,
               valor: fmtBRL(e.bruto),
             }))}
           />
@@ -716,7 +716,6 @@ export function R05Evolucao() {
 }
 
 const corTipo = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)?.cor ?? "#758ca4";
-const curtoTipo = (t: TipoContrato) => TIPOS_CONTRATO.find((x) => x.tipo === t)?.curto ?? t;
 
 function itemSaida(e: EventoMestre) {
   const base = { k: `${e.codigo}-${e.data}-${e.tipo}`, cor: corTipo(e.tipoContrato) };
@@ -732,7 +731,7 @@ function itemSaida(e: EventoMestre) {
   return {
     ...base,
     titulo: `${e.tipo} · ${e.produto} · ${e.contraparte}`,
-    sub: `${fmtDate(e.data)} · ${curtoTipo(e.tipoContrato)} · ${e.codigo} · bruto ${fmtBRL(e.bruto)}${ret ? ` · ${ret}` : ""}`,
+    sub: `${fmtDate(e.data)} · ${e.tipoContrato} · ${e.codigo} · bruto ${fmtBRL(e.bruto)}${ret ? ` · ${ret}` : ""}`,
     valor: fmtBRL(e.liquido),
   };
 }

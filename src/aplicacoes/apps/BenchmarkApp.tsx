@@ -197,6 +197,8 @@ export function BenchmarkApp() {
 
   const [visaoGrafico, setVisaoGrafico] = useState<"tipo" | "produto">("tipo");
   const [filtroTipo, setFiltroTipo] = useState<TipoContrato | "todos">("todos");
+  /** celular: lista de contratos mostra os 10 primeiros até o usuário pedir todos */
+  const [todosOps, setTodosOps] = useState(false);
 
   const inicio = lastMonthEnds(p.dataBase, 13)[0];
   // Todos os contratos da Carteira-Mestre (renda fixa, Tesouro Direto, fundos e time deposits), inclusive os liquidados no período
@@ -243,6 +245,10 @@ export function BenchmarkApp() {
     () => (filtroTipo === "todos" ? d.carteira : compararCarteira(linhasTabela.map((l) => l.r), cadastro, p)),
     [filtroTipo, d.carteira, linhasTabela, cadastro, p],
   );
+  const opcoesFiltroTipo: { value: TipoContrato | "todos"; label: string }[] = [
+    { value: "todos", label: "Todos os tipos" },
+    ...TIPOS_CONTRATO.map((t) => ({ value: t.tipo, label: t.curto })),
+  ];
   const listaOps = useMemo(() => [...linhasTabela].sort((a, b) => a.cmp.realizado - a.cmp.pct - (b.cmp.realizado - b.cmp.pct)), [linhasTabela]);
   const dadosGrafico = visaoGrafico === "tipo" ? d.porTipo : d.porProduto;
   // Escala do eixo em % do CDI com marcas redondas (inclui 0 e 100%; negativos quando algum realizado for negativo)
@@ -833,48 +839,46 @@ export function BenchmarkApp() {
         subtitle={`Últimos 12 meses (${fmtDate(inicio)} a ${fmtDate(p.dataBase)}) · ${plural(linhasTabela.length, "contrato", "contratos")} · rendimento ${fmtBRL(linhasTabela.reduce((s, l) => s + l.r.rendimento, 0))}${d.comVigenciaNoPeriodo ? ` · ${d.comVigenciaNoPeriodo} com mudança de regra no período` : ""}`}
         bodyClassName="px-0 pb-0"
         actions={
-          <Select
-            ariaLabel="Tipo de contrato"
-            className="w-44"
-            value={filtroTipo}
-            onChange={setFiltroTipo}
-            options={[
-              { value: "todos" as const, label: "Todos os tipos" },
-              ...TIPOS_CONTRATO.map((t) => ({ value: t.tipo, label: t.curto })),
-            ]}
-          />
+          <div className="hidden sm:block">
+            <Select ariaLabel="Tipo de contrato" className="w-44" value={filtroTipo} onChange={setFiltroTipo} options={opcoesFiltroTipo} />
+          </div>
         }
       >
+        <div className="sm:hidden px-4 pb-3">
+          <Select ariaLabel="Tipo de contrato" value={filtroTipo} onChange={setFiltroTipo} options={opcoesFiltroTipo} />
+        </div>
         <div className="hidden lg:block">
           <DataTable columns={colunasOps} rows={linhasTabela} rowKey={(l) => l.r.codigo} showTotals maxHeight={560} defaultSort={{ key: "dif", dir: "asc" }} />
         </div>
         {/* Celular e tablet: lista em cartões (maiores diferenças negativas primeiro, como na tabela) */}
         <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
           {listaOps.length === 0 && <li className="px-4 py-8 text-center text-sm text-label">Nenhum contrato no filtro selecionado</li>}
-          {listaOps.map((l) => (
+          {(todosOps ? listaOps : listaOps.slice(0, OPS_INICIAIS)).map((l) => (
             <li key={l.r.codigo} className="px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-sm font-semibold text-text">
-                      {l.r.produto} · {l.r.contraparte}
-                    </span>
-                    <Tag color={INFO_TIPO[l.r.tipo].cor}>{INFO_TIPO[l.r.tipo].curto}</Tag>
-                  </div>
-                  <div className="text-xs text-label leading-snug mt-0.5">
-                    {l.r.codigo} · {l.taxa} · {l.portfolio}
-                    {l.r.status === "Liquidada" && <span className="text-critical-strong"> · liquidada em {fmtDate(l.r.fim)}</span>}
-                  </div>
-                  <div className="text-xs text-label leading-snug">
-                    {l.regra ? `Regra: ${l.regra.descricao}` : "Sem regra (100% do CDI)"}
-                    {l.cmp.trechos.length > 1 && ` · ${descreverTrechos(l.cmp.trechos)}`}
-                  </div>
-                </div>
+              <div className="text-sm font-semibold text-text leading-snug">
+                {l.r.produto} · {l.r.contraparte}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                <Tag color={INFO_TIPO[l.r.tipo].cor}>{INFO_TIPO[l.r.tipo].curto}</Tag>
                 <ObjectStatus state={SITUACAO_STATE[l.cmp.situacao]}>{SITUACAO_TEXTO[l.cmp.situacao]}</ObjectStatus>
+              </div>
+              <div className="text-xs text-label leading-snug mt-1">
+                {l.r.codigo} · {l.taxa} · {l.portfolio}
+                {l.r.status === "Liquidada" && <span className="text-critical-strong"> · liquidada em {fmtDate(l.r.fim)}</span>}
+                <br />
+                {l.regra ? `Regra: ${l.regra.descricao}` : "Sem regra (100% do CDI)"}
+                {l.cmp.trechos.length > 1 && ` · ${descreverTrechos(l.cmp.trechos)}`}
               </div>
               <ValoresOp bmk={l.cmp.pct} regra={l.cmp.pctRegra} realizado={l.cmp.realizado} excesso={l.cmp.excesso} />
             </li>
           ))}
+          {listaOps.length > OPS_INICIAIS && (
+            <li className="px-4 py-2.5 text-center">
+              <button type="button" className="text-link text-sm font-semibold hover:underline" onClick={() => setTodosOps((v) => !v)}>
+                {todosOps ? `Mostrar só os ${OPS_INICIAIS} primeiros` : `Mostrar todos os ${plural(listaOps.length, "contrato", "contratos")}`}
+              </button>
+            </li>
+          )}
           {listaOps.length > 0 && (
             <li className="px-4 py-3 bg-[#f5f6f7]">
               <div className="flex items-start justify-between gap-3">
@@ -895,6 +899,9 @@ export function BenchmarkApp() {
     </ReportPage>
   );
 }
+
+/** Contratos exibidos de início na lista do celular (ordenada pela maior diferença negativa) */
+const OPS_INICIAIS = 10;
 
 /** Rótulo do eixo do gráfico por produto (nomes longos do Tesouro abreviados) */
 function rotuloCurtoProduto(produto: string): string {
@@ -927,7 +934,7 @@ function AplicaSeA({ b }: { b: Benchmark }) {
 function ValoresOp({ bmk, regra, realizado, excesso, forte }: { bmk: number; regra: number; realizado: number; excesso: number; forte?: boolean }) {
   const dd = clsx("tabular truncate", forte ? "font-bold" : "font-semibold");
   return (
-    <dl className="grid grid-cols-4 gap-x-2 mt-2 text-[13px]">
+    <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-x-2 mt-2 text-[13px]">
       <div className="min-w-0">
         <dt className="text-xs text-label truncate">Benchmark</dt>
         <dd className={clsx(dd, "text-text")}>{fmtDec(bmk * 100, 1)}%</dd>
@@ -945,7 +952,7 @@ function ValoresOp({ bmk, regra, realizado, excesso, forte }: { bmk: number; reg
       </div>
       <div className="min-w-0 text-right">
         <dt className="text-xs text-label truncate">Excesso</dt>
-        <dd className={clsx(dd, corExcesso(excesso))}>{fmtCompact(excesso)}</dd>
+        <dd className={clsx("tabular whitespace-nowrap", forte ? "font-bold" : "font-semibold", corExcesso(excesso))}>{fmtCompact(excesso)}</dd>
       </div>
     </dl>
   );

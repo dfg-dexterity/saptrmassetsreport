@@ -548,7 +548,7 @@ export function R03Rentabilidade() {
     { rotulo: "(−) IOF realizado", v: (cart.iof / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
     { rotulo: "(−) IR (competência)", v: (cart.ir / Math.max(1, cart.rendimento)) * cart.rentabBruta, cor: "#e76500" },
     { rotulo: "Rentabilidade líquida", v: cart.rentabLiquida, cor: "#256f3a" },
-    { rotulo: "(−) Inflação (IPCA)", v: cart.rentabLiquida - cart.rentabReal, cor: "#aa0808" },
+    { rotulo: `(−) Efeito da inflação (IPCA ${fmtPct(cart.ipcaPeriodo)})`, v: cart.rentabLiquida - cart.rentabReal, cor: "#aa0808" },
     { rotulo: "Rentabilidade real", v: cart.rentabReal, cor: "#049f9a" },
   ];
   const maxPasso = Math.max(...passos.map((x) => Math.abs(x.v)), 0.0001);
@@ -605,7 +605,73 @@ export function R03Rentabilidade() {
         subtitle={`Carteira-Mestre: renda fixa bancária, Tesouro Direto, fundos e time deposits em R$ · ${plural(total.contratos, "contrato", "contratos")} no período (${status === "todas" ? "inclusive liquidados" : ROTULO_STATUS[status].toLowerCase()}) · benchmark cadastrado capitalizado dia a dia`}
         bodyClassName="px-0 pb-0"
       >
-        <DataTable columns={colunasTipo} rows={tipos} rowKey={(t) => t.chave} showTotals />
+        <div className="hidden lg:block">
+          <DataTable columns={colunasTipo} rows={tipos} rowKey={(t) => t.chave} showTotals />
+        </div>
+        {/* celular: lista em cartões (identificação → resultado → detalhes) */}
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {[...tipos, total].map((t) => {
+            const tot = t.chave === "total";
+            return (
+              <li key={t.chave} className={tot ? "px-4 py-3 bg-[#f5f6f7]" : "px-4 py-3"}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex items-start gap-2">
+                    {!tot && <span className="w-2.5 h-2.5 rounded-sm shrink-0 mt-1.5" style={{ backgroundColor: t.cor }} />}
+                    <div className="min-w-0">
+                      <div className={tot ? "text-sm font-bold text-text" : "text-sm font-semibold text-text"}>
+                        {t.rotulo}{" "}
+                        {!tot && (
+                          <Link to={t.rota} className="text-link text-xs font-normal hover:underline">
+                            {t.chave === "Renda fixa bancária" ? "R01/R03" : t.origem}
+                          </Link>
+                        )}
+                      </div>
+                      <div className="text-xs text-label leading-snug mt-0.5">
+                        {plural(t.contratos, "contrato", "contratos")}
+                        {t.contratos > 0 && ` · capital médio ${fmtCompact(t.capital)}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs text-label">Rend. líquido</div>
+                    <div className="text-sm font-bold tabular text-text whitespace-nowrap">{t.contratos > 0 ? fmtNum(t.rendLiquido) : "–"}</div>
+                  </div>
+                </div>
+                {t.contratos > 0 && (
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+                    <PopIn rotulo="Rend. bruto" valor={fmtNum(t.rendimento)} />
+                    <PopIn rotulo="IOF · IR · taxas" valor={`${fmtNum(t.iof, { dash: true })} · ${fmtNum(t.ir, { dash: true })} · ${fmtNum(t.taxas, { dash: true })}`} />
+                    <PopIn
+                      rotulo="% CDI bruto · líquido"
+                      valor={
+                        <span className={t.pctCDIBruto < 0 ? "text-negative" : undefined}>
+                          {pctCDI(t.pctCDIBruto)} · {pctCDI(t.pctCDILiquido)}
+                        </span>
+                      }
+                    />
+                    <PopIn
+                      rotulo="Benchmark"
+                      valor={
+                        t.bmk ? (
+                          <>
+                            {pctCDI(t.bmk.pct)}{" "}
+                            <span className={`text-xs font-normal ${corExcesso(t.bmk.excesso)}`}>
+                              ({t.bmk.realizado - t.bmk.pct >= 0 ? "+" : ""}
+                              {fmtDec((t.bmk.realizado - t.bmk.pct) * 100, 1)} p.p.)
+                            </span>
+                          </>
+                        ) : (
+                          "–"
+                        )
+                      }
+                    />
+                    <PopIn rotulo="Rentab. real" valor={<span className={t.rentabReal >= 0 ? "text-positive" : "text-negative"}>{fmtPct(t.rentabReal)}</span>} />
+                  </dl>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
@@ -683,7 +749,72 @@ export function R03Rentabilidade() {
       </div>
 
       <Card title={`Renda fixa bancária – rentabilidade por contrato (${linhas.length})`} subtitle="Inclui aplicações liquidadas no período (rendimento até a data do resgate) · benchmark capitalizado dia a dia com a regra vigente em cada dia (* regra alterada no período)" bodyClassName="px-0 pb-0">
-        <DataTable columns={colunas} rows={linhas} rowKey={(r) => r.op.transacao} showTotals defaultSort={{ key: "rend", dir: "desc" }} maxHeight={560} />
+        <div className="hidden lg:block">
+          <DataTable columns={colunas} rows={linhas} rowKey={(r) => r.op.transacao} showTotals defaultSort={{ key: "rend", dir: "desc" }} maxHeight={560} />
+        </div>
+        <ul className="lg:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+          {[...linhas]
+            .sort((a, b) => b.rendimento - a.rendimento)
+            .map((r) => {
+              const c = cmpDe(r);
+              return (
+                <li key={r.op.transacao} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-text">
+                        {r.op.produto} · {r.op.contraparte}
+                      </div>
+                      <div className="text-xs text-label leading-snug mt-0.5">
+                        {r.op.transacao} · {taxaContratada(r.op)} · {r.status === "Liquidada" ? `liquidada em ${fmtDate(r.fim)}` : "ativa"}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs text-label">Rend. líquido</div>
+                      <div className="text-sm font-bold tabular text-text whitespace-nowrap">{fmtNum(r.rendLiquido)}</div>
+                    </div>
+                  </div>
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+                    <PopIn rotulo="Rend. bruto" valor={fmtNum(r.rendimento)} />
+                    <PopIn rotulo="IOF · IR" valor={`${fmtNum(r.iof, { dash: true })} · ${fmtNum(r.ir, { dash: true })}`} />
+                    <PopIn rotulo="% CDI bruto · líquido" valor={`${pctCDI(r.pctCDIBruto)} · ${pctCDI(r.pctCDILiquido)}`} />
+                    <PopIn
+                      rotulo="Benchmark · excesso"
+                      valor={
+                        <>
+                          {pctCDI(c.pct)} · <span className={corExcesso(c.excesso)}>{fmtNum(c.excesso)}</span>
+                        </>
+                      }
+                    />
+                  </dl>
+                </li>
+              );
+            })}
+          <li className="px-4 py-3 bg-[#f5f6f7]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-text">Carteira</div>
+                <div className="text-xs text-label leading-snug mt-0.5">{plural(linhas.length, "contrato", "contratos")}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-xs text-label">Rend. líquido</div>
+                <div className="text-sm font-bold tabular text-text whitespace-nowrap">{fmtNum(cart.rendLiquido)}</div>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-2.5 text-[13px]">
+              <PopIn rotulo="Rend. bruto" valor={fmtNum(cart.rendimento)} />
+              <PopIn rotulo="IOF · IR" valor={`${fmtNum(cart.iof, { dash: true })} · ${fmtNum(cart.ir, { dash: true })}`} />
+              <PopIn rotulo="% CDI bruto · líquido" valor={`${pctCDI(cart.pctCDIBruto)} · ${pctCDI(cart.pctCDILiquido)}`} />
+              <PopIn
+                rotulo="Benchmark · excesso"
+                valor={
+                  <>
+                    {pctCDI(bmk.pct)} · <span className={corExcesso(bmk.excesso)}>{fmtNum(bmk.excesso)}</span>
+                  </>
+                }
+              />
+            </dl>
+          </li>
+        </ul>
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
@@ -738,6 +869,16 @@ export function R03Rentabilidade() {
         </Card>
       </div>
     </ReportPage>
+  );
+}
+
+/** Campo da lista em cartões (celular) */
+function PopIn({ rotulo, valor }: { rotulo: string; valor: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-label">{rotulo}</dt>
+      <dd className="text-text font-semibold tabular">{valor}</dd>
+    </div>
   );
 }
 

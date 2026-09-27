@@ -385,11 +385,11 @@ export function R02Movimentacao() {
     ``,
     `As cotas de fundos de investimento (${rsMil(grupoK("fundos"))}) são mensuradas ao valor justo por meio do resultado pelo valor da cota divulgado pelo administrador. Nos fundos sujeitos ao come-cotas, o imposto de renda é antecipado em maio e novembro pela redução da quantidade de cotas, sem saída de caixa${-k.comeCotas > 0 ? `: ${rsMil(-k.comeCotas)} no período` : "; não houve recolhimento no período"}.`,
     ``,
-    `As aplicações no exterior (time deposits em dólar e euro, ${rsMil(grupoK("exterior"))}) são convertidas pela PTAX de fechamento da data-base, com a variação cambial reconhecida no resultado (CPC 02 (R2) / IAS 21), ${k.vc === 0 ? "sem efeito relevante no período" : `${k.vc > 0 ? "positiva" : "negativa"} em ${rsMil(Math.abs(k.vc))} no período`}. Nas remessas para investimento no exterior incidem IOF câmbio de ${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio, 2)} (Decreto 6.306/2007, na redação do Decreto 12.499/2025) e tarifa bancária; os rendimentos auferidos no exterior não sofrem retenção na fonte e são tributados pelo IRPJ/CSLL (${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}) na apuração do lucro real (Lei 9.249/1995, art. 25).`,
+    `As aplicações no exterior (time deposits em dólar e euro, ${rsMil(grupoK("exterior"))}) são convertidas pela PTAX de fechamento da data-base, com a variação cambial reconhecida no resultado conforme o CPC 02 (R2) / IAS 21, ${k.vc === 0 ? "sem efeito relevante no período" : `${k.vc > 0 ? "positiva" : "negativa"} em ${rsMil(Math.abs(k.vc))} no período`}. Nas remessas para investimento no exterior incidem IOF câmbio de ${fmtPct(PARAMETROS_TIME_DEPOSIT.iofCambio, 2)} (Decreto 6.306/2007, na redação do Decreto 12.499/2025) e tarifa bancária; os rendimentos auferidos no exterior não sofrem retenção na fonte e são tributados pelo IRPJ/CSLL (${fmtPct(ALIQUOTA_IRPJ_CSLL, 0)}) na apuração do lucro real (Lei 9.249/1995, art. 25).`,
     ``,
     `Do saldo consolidado, ${rsMil(circ)} estão classificados no ativo circulante e ${rsMil(naoCirc)} no não circulante.`,
     ``,
-    `A exposição da Companhia a riscos de taxa de juros, de câmbio e de crédito e a análise de sensibilidade dos ativos financeiros estão divulgadas na nota explicativa de instrumentos financeiros (CPC 40 (R1)).`,
+    `A exposição da Companhia a riscos de taxa de juros, de câmbio e de crédito e a análise de sensibilidade dos ativos financeiros estão divulgadas na nota explicativa de instrumentos financeiros, conforme o CPC 40 (R1).`,
   ].join("\n");
 
   const colunasMovTipo = ["Saldo bruto inicial", "Aplicações", "Rendimentos", "Variação cambial", "Resgates brutos", "Come-cotas", "Saldo bruto final"];
@@ -732,7 +732,7 @@ export function R02Movimentacao() {
         Valores em R$ mil, com arredondamento controlado (linhas e colunas fecham). Período do exercício: {fmtDate(inicio)} a{" "}
         {fmtDate(p.dataBase)}. Movimentação pelo saldo bruto da Carteira-Mestre (renda fixa, títulos públicos, fundos e time
         deposits), conciliada ao saldo contábil pelo ajuste a valor justo; resgates pelo valor bruto, com IRRF e IOF retidos nas
-        informações complementares; come-cotas em linha própria (CPC 02 (R2) / CPC 40 (R1) / CPC 48).
+        informações complementares; come-cotas em linha própria. Normas: CPC 02 (R2), CPC 40 (R1) e CPC 48.
       </MessageStrip>
     </ReportPage>
   );
