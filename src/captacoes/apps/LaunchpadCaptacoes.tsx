@@ -457,7 +457,7 @@ export function LaunchpadCaptacoes() {
             <SectionTitle extra={<span className="text-xs text-label whitespace-nowrap">Posição em {fmtDate(db)}</span>}>
               Visão geral
             </SectionTitle>
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 min-[1400px]:grid-cols-7 gap-3">
               <KpiCard
                 className="col-span-2 xl:col-span-1"
                 label="Dívida bruta"
