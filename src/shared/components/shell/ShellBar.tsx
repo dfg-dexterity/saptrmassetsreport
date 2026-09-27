@@ -20,17 +20,16 @@ import { useProduto } from "../../context/ProdutoContext";
 import { DATA_BASE_PADRAO } from "../../data/mercado";
 import { fmtDate, fmtMonthLong } from "../../lib/dates";
 import { Popover } from "../fiori/Popover";
+import { DexterityLogo } from "./DexterityLogo";
 import { SobreDialog } from "./SobreDialog";
 
+/** Logotipo da empresa na Shell Bar: lockup Dexterity a partir de sm; no celular, só o símbolo de 4 pétalas */
 export function Logo() {
   return (
-    <div className="flex items-center gap-2">
-      <svg viewBox="0 0 32 32" className="w-8 h-8 shrink-0" aria-hidden>
-        <rect width="32" height="32" rx="8" fill="#0070F2" />
-        <path d="M8 22V12m5.5 10V8m5.5 14v-7m5.5 7V10" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-      <span className="text-base font-black tracking-tight text-text hidden sm:inline">Dexterity</span>
-    </div>
+    <>
+      <DexterityLogo className="h-6 w-auto shrink-0 hidden sm:block" />
+      <DexterityLogo simbolo className="h-7 w-auto shrink-0 sm:hidden" />
+    </>
   );
 }
 
