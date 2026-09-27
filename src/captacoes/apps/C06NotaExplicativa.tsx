@@ -1409,7 +1409,7 @@ export function C06NotaExplicativa() {
               </p>
             </Card>
 
-            <Card className="xl:col-span-2" title="Captações, liquidações e capitalização" subtitle={`Consolidado · ${fmtDate(ab)} → ${fmtDate(db)}`}>
+            <Card className="xl:col-span-2" title="Captações, liquidações e capitalização" subtitle={`Consolidado · R$ mil · ${fmtDate(ab)} → ${fmtDate(db)}`}>
               <ListaEventos
                 titulo="Novas captações"
                 vazio="Nenhuma captação no período."
@@ -1456,8 +1456,8 @@ export function C06NotaExplicativa() {
                 </dl>
               </div>
               <p className="text-xs text-label mt-3 leading-relaxed">
-                Liquidações: principal + juros pagos no período. Juros pagos apresentados conforme a política de classificação da DFC (CPC
-                03, item 44A); R$ mil.
+                Liquidações: principal + juros pagos no período. Na DFC, os juros pagos seguem a política de classificação da Companhia
+                (CPC 03, itens 31 a 34).
               </p>
             </Card>
           </div>
@@ -1812,7 +1812,7 @@ function ListaEventos({
               <span className="min-w-0">
                 <span className="font-semibold text-text">{it.titulo}</span> <span className="text-label">· {it.detalhe}</span>
               </span>
-              <span className="tabular text-text whitespace-nowrap">{fmtCompact(it.valor)}</span>
+              <span className="tabular text-text whitespace-nowrap">{fmtMil(it.valor)}</span>
             </li>
           ))}
         </ul>
