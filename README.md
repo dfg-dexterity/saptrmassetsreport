@@ -31,8 +31,10 @@ São **dois produtos separados**, cada um com a sua página, Launchpad, rotas e 
 | 6. Notas explicativas | **R02 – Movimentação** (1A/1B/1C, Controladora × Consolidado, minuta do texto da nota) | DD-32 |
 | 7. Base técnica | **Catálogo de CDS Views** (campos, domínios, dependências DDL, mapeamento do R01) | Lista de CDS · DD27VVT · Domínios · DDLDEPENDENCY |
 
-O benchmark vale pela regra mais específica (tipo de produto › portfolio › empresa › carteira), com vigência. Nesta demo o
-cadastro fica salvo no navegador de quem acessa.
+O benchmark vale pela regra mais específica (tipo de produto › portfolio › empresa › carteira) vigente em cada dia: o
+rendimento de referência é capitalizado dia a dia (DI diário × % do benchmark), como os próprios papéis, e comparado com o
+realizado no R01 (desde a aplicação), R03 (período), R05 (mês a mês), Launchpad e alertas. Nesta demo o cadastro fica
+salvo no navegador de quem acessa.
 
 ## Captações Financeiras
 
@@ -48,10 +50,14 @@ cadastro fica salvo no navegador de quem acessa.
 | 5. Fechamento e nota | **C06 – Nota explicativa de captações** (composição, movimentação, vencimentos, características, custos, covenants, texto) | C06-NE-Captacoes |
 | 6. Base técnica | **Catálogo de CDS Views** (Debt and Investment Management, Maturity Profile) | Lista de CDS |
 
-Motor de cálculo da dívida: simulação diária por contrato (base 365 dias corridos), CDI/TJLP/TLP/IPCA + spread, custo
-amortizado (CPC 48, custos de transação apropriados linearmente pelo prazo), circulante × não circulante (CPC 26, inclusive reclassificação por covenant
-descumprido sem waiver na data do balanço – veja a data-base 31/12/2025), juros capitalizados em ativo qualificável (CPC 20)
-e CET. Detalhes em [docs/GUIA-CAPTACOES.md](docs/GUIA-CAPTACOES.md).
+Motor de cálculo da dívida: simulação diária por contrato com as convenções de mercado – juros compostos até cada
+pagamento; CDI e spread de debêntures, CRA, CRI e CCB em 252 dias úteis (Fator DI); BNDES em 365 dias corridos, com a
+parcela da TJLP acima de 6% a.a. capitalizada no saldo devedor e a TLP real fixada na contratação; atualização monetária
+pelo IPCA; datas de pagamento no dia útil seguinte. Custo amortizado (CPC 48, custos de transação apropriados
+linearmente pelo prazo), circulante × não circulante (CPC 26, inclusive reclassificação por covenant descumprido sem
+waiver na data do balanço – veja a data-base 31/12/2025), encargos capitalizados em ativo qualificável (CPC 20) e CET.
+Até a data-base valem as séries históricas importadas do SAP (CDI, IPCA, TJLP, TLP); depois dela, o último dado
+disponível. Detalhes em [docs/GUIA-CAPTACOES.md](docs/GUIA-CAPTACOES.md).
 
 ## Destaques comuns
 
