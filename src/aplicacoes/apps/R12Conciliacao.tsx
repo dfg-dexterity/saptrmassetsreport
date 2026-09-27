@@ -759,8 +759,8 @@ export function R12Conciliacao() {
                 arredondados a centavos; os totais são a soma das linhas.{" "}
                 {Math.abs(d.arredondamentoCarteira) >= 0.005 ? (
                   <>
-                    O total das linhas ({fmtBRL(d.totalGL.saldoTRM, true)}) mais o arredondamento de {fmtDifBRL(d.arredondamentoCarteira)} é o
-                    valor contábil da{" "}
+                    O total das linhas ({fmtBRL(d.totalGL.saldoTRM, true)}), ajustado pelo arredondamento de{" "}
+                    {fmtDifBRL(d.arredondamentoCarteira)}, é o valor contábil da{" "}
                     <Link to="/carteira-mestre" className="text-link hover:underline">
                       Carteira-Mestre
                     </Link>{" "}
@@ -1341,7 +1341,7 @@ function AbaRollforward({
             <button type="button" className="text-link font-semibold hover:underline" onClick={() => irPara("gl")}>
               TRM × FI-GL
             </button>
-            {Math.abs(d.arredondamentoCarteira) >= 0.005 ? ` mais ${fmtDifBRL(d.arredondamentoCarteira)} de arredondamento dos saldos por linha` : ""}. O MTM de {fmtBRL(d.mtmCusto, true)} dos contratos ao custo amortizado não é contabilizado – só entra na divulgação do
+            {Math.abs(d.arredondamentoCarteira) >= 0.005 ? `, ajustado pelo arredondamento dos saldos por linha (${fmtDifBRL(d.arredondamentoCarteira)})` : ""}. O MTM de {fmtBRL(d.mtmCusto, true)} dos contratos ao custo amortizado não é contabilizado – só entra na divulgação do
             valor justo (CPC 40).
           </p>
         </Card>
