@@ -102,6 +102,7 @@ export function R07Concentracao() {
     {
       key: "grupo",
       header: "Grupo econômico",
+      sticky: true,
       minWidth: 200,
       value: (g) => g.grupo,
       render: (g) => (

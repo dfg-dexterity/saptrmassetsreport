@@ -546,6 +546,8 @@ function tendencia(d: number | null, f: FmtDelta, melhor: "up" | "down" | null, 
 
 const PP: FmtDelta = { escala: 100, casas: 1, sufixo: " p.p." };
 const PP2: FmtDelta = { escala: 100, casas: 2, sufixo: " p.p." };
+const X2: FmtDelta = { escala: 1, casas: 2, sufixo: "x" };
+const ANO: FmtDelta = { escala: 1, casas: 2, sufixo: " ano" };
 
 /** R$ no cartão: número + escala na unidade ("88,5" "R$ mi") */
 function dinheiro(v: number): { valor: string; unidade: string } {
@@ -1021,7 +1023,7 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       unidade: "dias",
       metaTexto: `≤ ${fmtInt(P.prazoMax)} dias`,
       desvioRotulo: "Folga",
-      desvioTexto: v === null ? "—" : `${fmtInt(Math.round(P.prazoMax - v))} dias`,
+      desvioTexto: v === null ? "—" : comSinal(Math.round(P.prazoMax - v), { escala: 1, casas: 0, sufixo: " dias" }).texto,
       state,
       statusTexto: v === null ? "Sem contratos com vencimento" : STATUS_TEXTO[state],
       tendencia:
@@ -1068,17 +1070,17 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       unidade: "anos",
       metaTexto: `≤ ${fmtDec(P.durationMax, 1)} anos`,
       desvioRotulo: "Folga",
-      desvioTexto: v === null ? "—" : `${fmtDec(P.durationMax - v, 2)} ano`,
+      desvioTexto: v === null ? "—" : comSinal(P.durationMax - v, ANO).texto,
       state,
       statusTexto: v === null ? "Sem títulos no escopo" : STATUS_TEXTO[state],
       tendencia:
-        v !== null && fAnt.duration !== null ? tendencia(v - fAnt.duration, { escala: 1, casas: 2, sufixo: " ano" }, "down") : undefined,
+        v !== null && fAnt.duration !== null ? tendencia(v - fAnt.duration, ANO, "down") : undefined,
       serie: serie(fotos.map((fo) => fo.duration ?? 0)),
       serieUnidade: "anos",
       referencia: v === null ? undefined : P.durationMax,
       laterais: [
         { label: "Limite", value: `${fmtDec(P.durationMax, 1)} anos` },
-        { label: "Folga", value: v === null ? "—" : `${fmtDec(P.durationMax - v, 2)} ano`, state },
+        { label: "Folga", value: v === null ? "—" : comSinal(P.durationMax - v, ANO).texto, state },
       ],
       detalhe: v === null ? "Nenhum título público no escopo" : `${f.titulos} títulos · ${fmtCompact(f.mercadoTitulos)} a mercado (ANBIMA)`,
     });
@@ -1094,7 +1096,7 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       unidade: "pontos",
       metaTexto: `< ${fmtInt(P.hhiLimite)}`,
       desvioRotulo: "Folga",
-      desvioTexto: `${fmtInt(Math.round(P.hhiLimite - f.hhi))} pontos`,
+      desvioTexto: comSinal(Math.round(P.hhiLimite - f.hhi), { escala: 1, casas: 0, sufixo: " pontos" }).texto,
       state,
       statusTexto: classe.rotulo,
       tendencia: tendencia(Math.round(f.hhi) - Math.round(fAnt.hhi), { escala: 1, casas: 0, sufixo: " pontos" }, "down"),
@@ -1158,7 +1160,7 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       ],
       detalhe:
         id === "cambial"
-          ? `Time deposits ${fmtCompact(moedaEstrangeira)} + fundo cambial ${fmtCompact(Math.max(0, r.valor - moedaEstrangeira))} · PTAX USD ${fmtDec(p.ptaxUSD, 4)} · EUR ${fmtDec(p.ptaxEUR, 4)}`
+          ? `Time deposits ${fmtCompact(moedaEstrangeira)}${r.valor - moedaEstrangeira >= 500 ? ` + fundo cambial ${fmtCompact(r.valor - moedaEstrangeira)}` : ""} · PTAX USD ${fmtDec(p.ptaxUSD, 4)} · EUR ${fmtDec(p.ptaxEUR, 4)}`
           : `${fmtCompact(r.valor)} em debêntures, CRI, CRA e fundos de crédito`,
     });
   }
@@ -1168,20 +1170,20 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
     const state = estadoLimite(r12.carga, "max", P.cargaMax, P.cargaAlerta);
     add("carga", {
       valor: r12.carga,
-      valorTexto: fmtDec(r12.carga * 100, 1),
+      valorTexto: fmtDec(r12.carga * 100, 2),
       unidade: "%",
       metaTexto: `≤ ${fmtPct(P.cargaMax, 0)}`,
       desvioRotulo: "Folga",
-      desvioTexto: comSinal(P.cargaMax - r12.carga, PP).texto,
+      desvioTexto: comSinal(P.cargaMax - r12.carga, PP2).texto,
       state,
       statusTexto: STATUS_TEXTO[state],
-      tendencia: tendencia(r12.carga - rAnt.carga, PP, "down"),
+      tendencia: tendencia(r12.carga - rAnt.carga, PP2, "down"),
       serie: serie(acumulado.map((a) => a.carga * 100)),
       serieUnidade: "% (acumulado na janela)",
       referencia: P.cargaMax * 100,
       laterais: [
         { label: "Limite", value: fmtPct(P.cargaMax, 0) },
-        { label: "Folga", value: comSinal(P.cargaMax - r12.carga, PP).texto, state },
+        { label: "Folga", value: comSinal(P.cargaMax - r12.carga, PP2).texto, state },
       ],
       detalhe: `IR ${fmtCompact(r12.ir)} + IOF ${fmtCompact(r12.iof)} sobre ${fmtCompact(r12.rend)}`,
     });
@@ -1195,7 +1197,7 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       unidade: dm.unidade,
       metaTexto: `≤ ${fmtInt(P.taxasMax)} bps a.a.`,
       desvioRotulo: "Folga",
-      desvioTexto: `${fmtDec(P.taxasMax - bps12, 1)} bps`,
+      desvioTexto: comSinal(P.taxasMax - bps12, { escala: 1, casas: 1, sufixo: " bps" }).texto,
       state,
       statusTexto: STATUS_TEXTO[state],
       tendencia: tendencia(bps12 - bpsAnt, { escala: 1, casas: 1, sufixo: " bps" }, "down"),
@@ -1269,10 +1271,10 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       unidade: "x",
       metaTexto: `≤ ${fmtDec(covDl.cov.limite, 2)}x`,
       desvioRotulo: "Folga",
-      desvioTexto: v === null ? "—" : `${fmtDec(covDl.folga, 2)}x`,
+      desvioTexto: v === null ? "—" : comSinal(covDl.folga, X2).texto,
       state: rot.state,
       statusTexto: rot.texto,
-      tendencia: v !== null && anterior !== null ? tendencia(v - anterior, { escala: 1, casas: 2, sufixo: "x" }, "down", "no trimestre") : undefined,
+      tendencia: v !== null && anterior !== null ? tendencia(v - anterior, X2, "down", "no trimestre") : undefined,
       serie: hist.map((h) => ({ x: fmtQuarter(h.data), y: h.valor })),
       serieUnidade: "x (trimestral)",
       referencia: covDl.cov.limite,
@@ -1292,10 +1294,10 @@ function montarPainel(p: Premissas, escopo: Escopo, cadastro: Benchmark[]) {
       unidade: "x",
       metaTexto: `≥ ${fmtDec(P.coberturaMin, 2)}x`,
       desvioRotulo: "Folga",
-      desvioTexto: v === null ? "—" : `${fmtDec(v - P.coberturaMin, 2)}x`,
+      desvioTexto: v === null ? "—" : comSinal(v - P.coberturaMin, X2).texto,
       state,
       statusTexto: v === null ? "Sem dívida circulante" : STATUS_TEXTO[state],
-      tendencia: v !== null && dAnt.cobertura !== null ? tendencia(v - dAnt.cobertura, { escala: 1, casas: 2, sufixo: "x" }, "up") : undefined,
+      tendencia: v !== null && dAnt.cobertura !== null ? tendencia(v - dAnt.cobertura, X2, "up") : undefined,
       serie: serie(dividas.map((d, i) => (i === dividas.length - 1 ? (v ?? 0) : (d.cobertura ?? 0)))),
       serieUnidade: "x",
       referencia: P.coberturaMin,
@@ -1451,7 +1453,7 @@ export function KpisAplicacoes() {
       onExport={exportar}
       kpis={
         <>
-          <HeaderKpi label="Saldo consolidado" value={fmtCompact(d.f.saldo)} sub={`${d.f.cs.length} contratos · ${escopo === "todas" ? "consolidado" : `empresa ${escopo}`}`} />
+          <HeaderKpi label={escopo === "todas" ? "Saldo consolidado" : "Saldo da empresa"} value={fmtCompact(d.f.saldo)} sub={`${d.f.cs.length} contratos · ${escopo === "todas" ? "consolidado" : `empresa ${escopo}`}`} />
           <HeaderKpi
             label="% do CDI 12m"
             value={`${pctBruto.valorTexto}%`}

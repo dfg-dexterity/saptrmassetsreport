@@ -352,8 +352,8 @@ export function R11MoedaTipo() {
           linhas: [
             ...d.matriz.map((l) => [l.tipo, l.me.USD, l.me.EUR]),
             ["Total em moeda original", d.totalME.USD, d.totalME.EUR],
-            [`PTAX da data-base (${fmtDate(p.dataBase)})`, p.ptaxUSD, p.ptaxEUR],
-            [`PTAX do mês anterior (${fmtDate(inicioMes)})`, ptaxAnterior("USD"), ptaxAnterior("EUR")],
+            [`PTAX da data-base (${fmtDate(p.dataBase)})`, fmtDec(p.ptaxUSD, 4), fmtDec(p.ptaxEUR, 4)],
+            [`PTAX do mês anterior (${fmtDate(inicioMes)})`, fmtDec(ptaxAnterior("USD"), 4), fmtDec(ptaxAnterior("EUR"), 4)],
             ["Equivalente em R$ (× PTAX da data-base)", d.totalME.USD * p.ptaxUSD, d.totalME.EUR * p.ptaxEUR],
           ],
           notas: ["Time deposits: principal + juros ACT/360 na moeda original. Fundo cambial (visão exposição): saldo em R$ ÷ PTAX da data-base."],

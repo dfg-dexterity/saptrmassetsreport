@@ -252,7 +252,7 @@ export function R05Evolucao() {
             "Linhas de rentabilidade, CDI, % do CDI e benchmark expressas em fração (formatar como %).",
             "Benchmark do mês: rendimento que os contratos do mês teriam gerado no benchmark cadastrado, calculado dia a dia com a regra vigente em cada dia (capital base × (Π (1 + DI diário × % da regra) − 1)), expresso sobre o saldo médio do mês – mesma base do % do CDI do mês; excesso = rendimentos − rendimento do benchmark.",
             `Coluna 12 meses de % do CDI, benchmark e excesso: mesmo método do R03 (capital base de cada contrato no início da janela). A soma dos excessos mensais (${fmtBRL(excessoMeses)}) difere do excesso de 12 meses (${fmtBRL(d.total12.bmk.excesso)}) porque, mês a mês, o capital é recalculado com o rendimento realizado.`,
-            `Conciliação: saldo final de ${fmtDate(final.fim)} = Σ saldo bruto da Carteira-Mestre (${fmtBRL(conc.mestre, true)}; diferença ${fmtBRL(conc.dif, true)}); rendimentos 12m = R03 consolidado (${fmtBRL(d.total12.rendimento, true)}).`,
+            `Conciliação: saldo final de ${fmtDate(final.fim)} = Σ saldo bruto da Carteira-Mestre (${fmtBRL(conc.mestre, true)}; diferença ${fmtBRL(okMestre ? 0 : conc.dif, true)}); rendimentos 12m = R03 consolidado (${fmtBRL(d.total12.rendimento, true)}).`,
           ],
         },
         {
@@ -330,7 +330,7 @@ export function R05Evolucao() {
       <MessageStrip design={okIdentidade && okMestre && okR03 ? "positive" : "critical"}>
         <span className="inline-flex flex-wrap gap-x-5 gap-y-1">
           <Checagem ok={okMestre}>
-            Saldo final de {fmtMonthShort(final.fim)} = Carteira-Mestre: <strong>{fmtBRL(conc.mestre)}</strong> (diferença {fmtBRL(conc.dif, true)})
+            Saldo final de {fmtMonthShort(final.fim)} = Carteira-Mestre: <strong>{fmtBRL(conc.mestre)}</strong> (diferença {fmtBRL(okMestre ? 0 : conc.dif, true)})
           </Checagem>
           <Checagem ok={okIdentidade}>
             Identidade SI + aplicações + rendimentos − resgates brutos − come-cotas = SF: diferença {fmtBRL(okIdentidade ? 0 : maxDifMes, true)} em todos os meses
@@ -503,16 +503,8 @@ export function R05Evolucao() {
                 <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={40} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                {tiposComSaldo.map((t, i) => (
-                  <Bar
-                    key={t.tipo}
-                    dataKey={t.tipo}
-                    name={t.curto}
-                    stackId="s"
-                    fill={t.cor}
-                    radius={i === tiposComSaldo.length - 1 ? [4, 4, 0, 0] : undefined}
-                    isAnimationActive={false}
-                  />
+                {tiposComSaldo.map((t) => (
+                  <Bar key={t.tipo} dataKey={t.tipo} name={t.curto} stackId="s" fill={t.cor} isAnimationActive={false} />
                 ))}
               </BarChart>
             </ResponsiveContainer>

@@ -442,7 +442,6 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
       const g = grupos.get(`${conta.conta}|${t.tipo}`);
       if (!g) continue;
       const saldoTRM = g.itens.reduce((s, i) => s + i.v, 0);
-      const arredondamento = g.itens.reduce((s, i) => s + (r2(i.v) - i.v), 0);
       const itens: ItemDif[] = [];
       if (conta.componente === "curva" && t.tipo === "Time deposit") {
         const moedas = [...new Set(g.itens.map((i) => i.c.moeda))].filter((m): m is MoedaME => m !== "BRL");
@@ -470,6 +469,9 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
           texto: `Log da TPM44 com erro na operação ${opGL.codigo} (${opGL.produto} ${opGL.contraparte}, aplicada em ${fmtDate(opGL.dataAplicacao)}): determinação de contas não encontrada – juros de ${fmtBRL(juros, true)} apropriados no TRM e não contabilizados. Corrigir e reprocessar a TPM44.`,
         });
       }
+      // lançamentos por contrato arredondados a centavos; nas linhas com diferença apurada, o saldo do razão é o TRM
+      // arredondado mais os itens (o resíduo fica abaixo de meio centavo)
+      const arredondamento = itens.length ? r2(saldoTRM) - saldoTRM : g.itens.reduce((s, i) => s + (r2(i.v) - i.v), 0);
       const diferenca = itens.reduce((s, i) => s + i.valor, 0) + arredondamento;
       gl.push({
         chave: `${conta.conta}|${t.tipo}`,
@@ -507,7 +509,7 @@ function montarConciliacao(db: string, p: PremissasMercado, escopo: Escopo) {
           const taxa = OPERACOES.find((o) => o.transacao === c.id)?.taxa ?? 1;
           const juros = c.saldoCurva - c.principalBRL;
           const valor = -r2((juros * 0.01) / taxa);
-          saldoExtrato += valor;
+          saldoExtrato = r2(c.saldoCurva) + valor;
           itens.push({
             natureza: "pendente",
             valor,
@@ -893,7 +895,6 @@ export function R12Conciliacao() {
   const contasExp = d.contas.filter((c) => c.status === "Diferença explicada").length;
   const extOk = d.extratos.length - d.extPend.length;
   const difGL = d.gl.reduce((s, l) => s + l.diferenca, 0);
-  const difPendente = d.glPend.reduce((s, l) => s + l.diferenca, 0) + d.extPend.reduce((s, l) => s + l.diferenca, 0);
   const executadas = d.checklist.filter((e) => e.status !== "Pendente").length;
   const ressalvas = d.checklist.filter((e) => e.status === "Com ressalva").length;
   const aprovacao = d.checklist.find((e) => e.id === "aprovacao")!;
@@ -1301,7 +1302,7 @@ export function R12Conciliacao() {
       relatorio={rel}
       onExport={exportar}
       kpis={
-        <>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-3">
           <HeaderKpi
             label="Contas conciliadas"
             value={`${contasOk}/${d.contas.length}`}
@@ -1318,7 +1319,7 @@ export function R12Conciliacao() {
             label="Diferenças pendentes"
             value={String(d.glPend.length + d.extPend.length)}
             state={d.glPend.length + d.extPend.length ? "negative" : "positive"}
-            sub={d.glPend.length + d.extPend.length ? `${fmtDifBRL(difPendente)} a regularizar` : "nenhuma a regularizar"}
+            sub={d.glPend.length + d.extPend.length ? `${d.glPend.length} FI-GL · ${plural(d.extPend.length, "extrato", "extratos")}` : "nada a regularizar"}
           />
           <HeaderKpi
             label="Extratos conciliados"
@@ -1338,7 +1339,7 @@ export function R12Conciliacao() {
             state={aprovado ? "positive" : "critical"}
             sub={aprovado ? `aprovado · ${plural(ressalvas, "ressalva", "ressalvas")}` : `aprovação pendente · ${plural(ressalvas, "ressalva", "ressalvas")}`}
           />
-        </>
+        </div>
       }
       headerExtra={
         <div className="border-b border-line-soft -mb-5">
@@ -1544,11 +1545,11 @@ export function R12Conciliacao() {
               bodyClassName="px-0! pb-0!"
             >
               <div className="overflow-x-auto fiori-scroll border-t border-line-soft">
-                <table className="w-full text-[13px] min-w-[640px]">
+                <table className="w-full text-[13px] sm:min-w-[640px]">
                   <thead>
                     <tr className="text-left text-text">
                       <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd]">Conta</th>
-                      <th className="font-semibold px-3 py-2 border-b border-[#a8b2bd]">Regra de determinação</th>
+                      <th className="hidden sm:table-cell font-semibold px-3 py-2 border-b border-[#a8b2bd]">Regra de determinação</th>
                       <th className="font-semibold px-3 py-2 border-b border-[#a8b2bd] text-right">Contratos</th>
                       <th className="font-semibold px-4 py-2 border-b border-[#a8b2bd] text-right whitespace-nowrap">Saldo TRM (R$)</th>
                     </tr>
@@ -1561,16 +1562,12 @@ export function R12Conciliacao() {
                           <td className="px-4 py-2 border-b border-line-soft align-top">
                             <div className={clsx("font-semibold tabular", semSaldo ? "text-label" : "text-text")}>{x.conta.conta}</div>
                             <div className="text-xs text-label leading-snug">{x.conta.descricao}</div>
+                            <div className="sm:hidden mt-1">
+                              <RegraConta regra={x.conta.regra} tipos={x.tipos} />
+                            </div>
                           </td>
-                          <td className="px-3 py-2 border-b border-line-soft align-top leading-snug">
-                            {x.conta.regra}
-                            {x.tipos.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {x.tipos.map((t) => (
-                                  <TagTipo key={t} tipo={t} />
-                                ))}
-                              </div>
-                            )}
+                          <td className="hidden sm:table-cell px-3 py-2 border-b border-line-soft align-top">
+                            <RegraConta regra={x.conta.regra} tipos={x.tipos} />
                           </td>
                           <td className="px-3 py-2 border-b border-line-soft align-top text-right tabular">{semSaldo ? "–" : x.contratos}</td>
                           <td className="px-4 py-2 border-b border-line-soft align-top text-right tabular whitespace-nowrap">
@@ -1582,9 +1579,8 @@ export function R12Conciliacao() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-[#f5f6f7] font-bold text-text">
-                      <td className="px-4 py-2 border-t border-[#a8b2bd]" colSpan={2}>
-                        Total do ativo – aplicações financeiras
-                      </td>
+                      <td className="px-4 py-2 border-t border-[#a8b2bd]">Total do ativo – aplicações financeiras</td>
+                      <td className="hidden sm:table-cell border-t border-[#a8b2bd]" />
                       <td className="px-3 py-2 border-t border-[#a8b2bd] text-right tabular">{d.contratos.length}</td>
                       <td className="px-4 py-2 border-t border-[#a8b2bd] text-right tabular whitespace-nowrap">{fmtValor(d.valorContabil)}</td>
                     </tr>
@@ -2240,6 +2236,21 @@ function AbaChecklist({ d, db, executadas }: { d: Conciliacao; db: string; execu
 // ---------------------------------------------------------------------------
 // Componentes auxiliares
 // ---------------------------------------------------------------------------
+
+function RegraConta({ regra, tipos }: { regra: string; tipos: TipoContrato[] }) {
+  return (
+    <div className="leading-snug">
+      <span className="text-xs sm:text-[13px]">{regra}</span>
+      {tipos.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {tipos.map((t) => (
+            <TagTipo key={t} tipo={t} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TagTipo({ tipo }: { tipo: TipoContrato }) {
   const m = metaTipo(tipo);

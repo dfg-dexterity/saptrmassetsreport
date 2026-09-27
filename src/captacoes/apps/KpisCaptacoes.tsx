@@ -560,7 +560,10 @@ function fotoMensal(data: string, p: PremissasMercado): FotoMensal {
     capitalizadosLTM: somar(enc, (e) => e.capitalizados),
     captacoesAno: mov.total.captacoes,
     custosCaptacoesAno: -mov.total.custosTransacao,
-    novasNoAno: mov.linhas.filter((l) => l.captacoes > 0).map((l) => ({ id: l.c.id, data: l.c.dataCaptacao })),
+    novasNoAno: mov.linhas
+      .filter((l) => l.captacoes > 0)
+      .map((l) => ({ id: l.c.id, data: l.c.dataCaptacao }))
+      .sort((x, y) => x.data.localeCompare(y.data)),
     captacoesAnoAnterior: movAnterior.total.captacoes,
     fontes,
     hhi: indiceHHI(fontes.map((f) => f.share)),
@@ -781,6 +784,8 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
         base = `(DL ${fmtCompact(ind!.dividaLiquida)} + imóveis ${fmtCompact(ind!.imoveisAPagar)}) ÷ PL ${fmtCompact(ind!.patrimonioLiquido)}`;
         break;
     }
+    // apuração anual: a próxima é o 31/12 seguinte à última apuração até a data-base
+    const proxima = anual ? `${Number(ap.dataApuracao.slice(0, 4)) + 1}-12-31` : null;
     const waiverTexto =
       ap.status === "excedido"
         ? ap.reclassifica
@@ -814,7 +819,7 @@ function montarKpis(ctx: ContextoKpi): ResultadoKpi[] {
         ap.status === "ok" ? "cumprido" : ap.status === "atencao" ? "em atenção" : ap.reclassifica ? "descumprido" : "com waiver",
       desvio: ap.valor - ap.cov.limite,
       anterior: ant ? { valor: ant.valor, rotulo: anual ? ant.data.slice(0, 4) : fmtQuarter(ant.data) } : undefined,
-      detalhe: base + waiverTexto,
+      detalhe: base + waiverTexto + (proxima && h.length < 2 ? ` · próxima apuração em ${fmtDate(proxima)}` : ""),
       apuracao: ap,
       prioridade: ap.status === "excedido" ? (ap.reclassifica ? 0 : 2) : ap.status === "atencao" ? 3 : 8,
     });
@@ -1523,7 +1528,13 @@ function CelulaTendencia({ k }: { k: ResultadoKpi }) {
 }
 
 function CelulaMeta({ k }: { k: ResultadoKpi }) {
-  if (k.limite === undefined) return <span className="text-label text-[13px]">— · informativo</span>;
+  if (k.limite === undefined)
+    return (
+      <div className="leading-snug whitespace-nowrap">
+        <div className="text-label">—</div>
+        <div className="text-xs text-label">sem meta · informativo</div>
+      </div>
+    );
   return (
     <div className="leading-snug whitespace-nowrap">
       <div className="font-semibold text-text">{fmtLimite(k.def, k.limite)}</div>
