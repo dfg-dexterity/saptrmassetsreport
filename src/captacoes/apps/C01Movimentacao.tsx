@@ -715,7 +715,11 @@ export function C01Movimentacao() {
             label="Captações líquidas"
             value={fmtCompact(d.dfc.captacoesLiquidas)}
             state={d.dfc.captacoesLiquidas > 0 ? "information" : "neutral"}
-            sub={d.novas.length ? `${d.novas.map((l) => l.c.id).join(", ")} · custos ${fmtCompact(-t.custosTransacao)}` : "Nenhuma captação no período"}
+            sub={
+              d.novas.length
+                ? `${d.novas.length > 2 ? `${d.novas.length} contratos` : d.novas.map((l) => l.c.id).join(", ")} · custos ${fmtCompact(-t.custosTransacao)}`
+                : "Nenhuma captação no período"
+            }
           />
           <HeaderKpi
             label="Encargos apropriados"

@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
 import { FilterField, Select } from "../../shared/components/fiori/Inputs";
@@ -11,7 +11,7 @@ import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { ObjectStatus, Tag } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
 import { IMPORTACAO_SAP } from "../../shared/data/mercado";
-import { addDays, addMonths, fmtDate, fmtMonthLong, fmtMonthShort, monthOf, yearOf } from "../../shared/lib/dates";
+import { addDays, addMonths, diffDays, fmtDate, fmtMonthLong, fmtMonthShort, monthOf, yearOf } from "../../shared/lib/dates";
 import { exportarExcel, type ColunaExport } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec, fmtNum, fmtPct, fmtX } from "../../shared/lib/format";
 import { ESCOPOS, useCovenants, useDivida, type Escopo } from "../context/useDivida";
@@ -69,6 +69,17 @@ function rotuloAno(ano: number, inicioNC: string): string {
 /** Último dado de mercado disponível na data-base (a importação pode ter dados posteriores a ela) */
 function ultimoDadoNaDataBase(dataBase: string): string {
   return dataBase < IMPORTACAO_SAP.ultimoDadoDisponivel ? dataBase : IMPORTACAO_SAP.ultimoDadoDisponivel;
+}
+
+/**
+ * Custos de transação a apropriar nos 12 meses seguintes (apropriação linear), antes do limite ao circulante do
+ * contrato aplicado pelo motor – usado só para explicar o excedente mantido no não circulante.
+ */
+function custosDozeMeses(x: PosicaoDivida, dataBase: string): number {
+  if (x.reclassificado) return x.custosAApropriar;
+  const prazo = Math.max(1, diffDays(x.c.dataCaptacao, x.c.vencimento));
+  const restantes = Math.max(0, diffDays(dataBase, x.c.vencimento));
+  return Math.min(x.custosAApropriar, (x.c.custosTransacao / prazo) * Math.min(365, restantes));
 }
 
 function listaIds(ids: string[]): string {
@@ -187,7 +198,7 @@ export function C02Cronograma() {
         principalCirculante: x.principalCirculante,
         juros: x.jurosAPagar,
         custosCirculante,
-        excedenteCustos: Math.max(0, x.custosCirculante - custosCirculante),
+        excedenteCustos: Math.max(0, custosDozeMeses(x, db) - custosCirculante),
         circulante: x.circulante,
         principalNC: x.principalAtualizado - x.principalCirculante,
         custosNC: x.custosAApropriar - custosCirculante,
@@ -929,16 +940,9 @@ export function C02Cronograma() {
                     formatter={(v: number, n: string) => [`R$ ${fmtDec(v, 2)} mi`, n]}
                   />
                   <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
-                  <Bar dataKey="principal" name="Principal" stackId="f" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false}>
-                    {graficoMeses.map((m) => (
-                      <Cell key={m.mes} fillOpacity={m.mes === mesSel.mes ? 1 : 0.55} />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="juros" name="Juros" stackId="f" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                    {graficoMeses.map((m) => (
-                      <Cell key={m.mes} fillOpacity={m.mes === mesSel.mes ? 1 : 0.55} />
-                    ))}
-                  </Bar>
+                  <ReferenceArea x1={mesSel.mes} x2={mesSel.mes} fill="#0070f2" fillOpacity={0.08} stroke="#0070f2" strokeOpacity={0.35} strokeDasharray="3 3" />
+                  <Bar dataKey="principal" name="Principal" stackId="f" fill={COR_PRINCIPAL} maxBarSize={44} isAnimationActive={false} />
+                  <Bar dataKey="juros" name="Juros" stackId="f" fill={COR_JUROS} maxBarSize={44} radius={[3, 3, 0, 0]} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -952,43 +956,9 @@ export function C02Cronograma() {
               data-base ({fmtBRL(d.principalContratual12m)}): diferença de {fmtBRL(difPrincipal12m)}
               {Math.abs(difPrincipal12m) > TOLERANCIA ? ", correspondente à atualização monetária futura (IPCA/TLP) até as datas de pagamento" : ""}.
             </p>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1 mt-5">
-              <h4 className="text-sm font-bold text-text">Pagamentos em {mesLongo(mesSel.mes)}</h4>
-              <span className="text-xs text-label tabular">{fmtBRL(mesSel.total)}</span>
-            </div>
-            {mesSel.eventos.length === 0 ? (
-              <p className="text-sm text-label py-3">Sem pagamentos no mês.</p>
-            ) : (
-              <ul className="divide-y divide-line-soft">
-                {mesSel.eventos.map((e) => (
-                  <li key={`${e.c.id}-${e.data}`} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-text">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDe(e.c) }} />
-                        <span className="truncate">
-                          {e.c.id} · {e.c.credor}
-                        </span>
-                      </div>
-                      <div className="text-xs text-label pl-4 truncate">
-                        {fmtDate(e.data)} · {e.principal > 0 && e.juros > 0 ? "principal e juros" : e.principal > 0 ? "principal" : "juros"}
-                        {e.data === e.c.vencimento ? " · vencimento final" : ""}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="tabular font-semibold text-text whitespace-nowrap">{fmtBRL(e.principal + e.juros)}</div>
-                      {e.principal > 0 && e.juros > 0 && (
-                        <div className="text-xs text-label tabular whitespace-nowrap">
-                          {fmtCompact(e.principal)} + {fmtCompact(e.juros)}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
-          <div className="xl:col-span-2 min-w-0">
+          <div className="xl:col-span-2 xl:row-span-2 min-w-0">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
               <h4 className="text-sm font-bold text-text">Quadro mensal</h4>
               <span className="text-xs text-label">valores em R$</span>
@@ -1040,6 +1010,43 @@ export function C02Cronograma() {
                 </tfoot>
               </table>
             </div>
+          </div>
+
+          <div className="xl:col-span-3 min-w-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
+              <h4 className="text-sm font-bold text-text">Pagamentos em {mesLongo(mesSel.mes)}</h4>
+              <span className="text-xs text-label tabular">{fmtBRL(mesSel.total)}</span>
+            </div>
+            {mesSel.eventos.length === 0 ? (
+              <p className="text-sm text-label py-3">Sem pagamentos no mês.</p>
+            ) : (
+              <ul className="divide-y divide-line-soft">
+                {mesSel.eventos.map((e) => (
+                  <li key={`${e.c.id}-${e.data}`} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-text">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDe(e.c) }} />
+                        <span className="truncate">
+                          {e.c.id} · {e.c.credor}
+                        </span>
+                      </div>
+                      <div className="text-xs text-label pl-4 truncate">
+                        {fmtDate(e.data)} · {e.principal > 0 && e.juros > 0 ? "principal e juros" : e.principal > 0 ? "principal" : "juros"}
+                        {e.data === e.c.vencimento ? " · vencimento final" : ""}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="tabular font-semibold text-text whitespace-nowrap">{fmtBRL(e.principal + e.juros)}</div>
+                      {e.principal > 0 && e.juros > 0 && (
+                        <div className="text-xs text-label tabular whitespace-nowrap">
+                          {fmtCompact(e.principal)} + {fmtCompact(e.juros)}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
 

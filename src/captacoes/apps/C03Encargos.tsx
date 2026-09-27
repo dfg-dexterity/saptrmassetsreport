@@ -212,6 +212,15 @@ function totalizar(linhas: EncargosContrato[], dias: number): TotaisEncargos {
   };
 }
 
+/** Escala "redonda" para o eixo de valores (passos de 1, 2, 2,5 ou 5 × 10ⁿ, até 5 intervalos) */
+function escalaEixo(max: number): { max: number; ticks: number[] } {
+  if (max <= 0) return { max: 1, ticks: [0, 1] };
+  const base = Math.pow(10, Math.floor(Math.log10(max / 5)));
+  const passo = [1, 2, 2.5, 5, 10].map((m) => m * base).find((p) => max / p <= 5) ?? 10 * base;
+  const topo = Math.ceil(max / passo) * passo;
+  return { max: topo, ticks: Array.from({ length: Math.round(topo / passo) + 1 }, (_, i) => i * passo) };
+}
+
 interface MesEncargos extends TotaisEncargos {
   fim: string;
   rotulo: string;
@@ -332,6 +341,7 @@ export function C03Encargos() {
   const xTicks = Array.from({ length: xMax / 5 + 1 }, (_, i) => i * 5);
   const indexadoresNoGrafico = INDEXADORES.filter((ix) => d.custo.some((x) => x.pos.c.indexador === ix));
   const periodoDatas = `${fmtDate(addDays(inicio, 1))} a ${fmtDate(db)}`;
+  const eixoMensal = escalaEixo(Math.max(0, ...d.mensal.map((m) => m.total)));
 
   // -------------------------------------------------------------------------
   // Tabela por contrato
@@ -786,7 +796,15 @@ export function C03Encargos() {
               <ComposedChart data={d.mensal} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="#e5e5e5" />
                 <XAxis dataKey="rotulo" tick={AXIS_STYLE} tickLine={false} axisLine={{ stroke: "#a8b2bd" }} />
-                <YAxis tick={AXIS_STYLE} tickLine={false} axisLine={false} width={48} tickFormatter={(v: number) => fmtNum(v / 1000)} />
+                <YAxis
+                  domain={[0, eixoMensal.max]}
+                  ticks={eixoMensal.ticks}
+                  tick={AXIS_STYLE}
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  tickFormatter={(v: number) => fmtNum(v / 1000)}
+                />
                 <Tooltip cursor={{ fill: "#f2f4f6" }} content={({ active, payload }) => (active && payload?.length ? <TooltipMes m={payload[0].payload as MesEncargos} /> : null)} />
                 <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
                 <Bar dataKey="juros" name="Juros" stackId="e" fill={COR.juros} isAnimationActive={false}>
@@ -978,8 +996,24 @@ export function C03Encargos() {
                   </div>
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2 text-[13px]">
-                  <PopIn rotulo="Saldo contábil" valor={`${fmtCompact(x.saldo)} · ${fmtPct(x.participacao, 1)}`} />
-                  <PopIn rotulo="Encargos no período" valor={`${fmtCompact(x.encargos)} · ${fmtPct(x.taxaAnualizada)} a.a.`} />
+                  <PopIn
+                    rotulo="Saldo contábil"
+                    valor={
+                      <>
+                        {fmtCompact(x.saldo)}
+                        <span className="block text-xs text-label font-normal">{fmtPct(x.participacao, 1)} da carteira</span>
+                      </>
+                    }
+                  />
+                  <PopIn
+                    rotulo="Encargos no período"
+                    valor={
+                      <>
+                        {fmtCompact(x.encargos)}
+                        <span className="block text-xs text-label font-normal">{fmtPct(x.taxaAnualizada)} a.a.</span>
+                      </>
+                    }
+                  />
                 </dl>
               </li>
             ))}

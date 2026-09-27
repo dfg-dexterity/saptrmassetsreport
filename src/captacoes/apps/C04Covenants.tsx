@@ -51,6 +51,8 @@ const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily:
 
 const STATUS_TEXTO: Record<Semaforo, string> = { ok: "Cumprido", atencao: "Em atenção", excedido: "Descumprido" };
 const COR_STATUS: Record<Semaforo, string> = { ok: CHART_SEMANTIC.good, atencao: CHART_SEMANTIC.critical, excedido: CHART_SEMANTIC.bad };
+/** Faixa de atenção e zona de descumprimento nos gráficos */
+const COR_FAIXA = { atencao: "#f0ab00", atencaoOpacidade: 0.24, zona: CHART_SEMANTIC.bad, zonaOpacidade: 0.08 };
 const COR_ESTADO: Record<ValueState, string> = {
   positive: "#256f3a",
   critical: "#b44f00",
@@ -538,19 +540,23 @@ function CelulaWaiver({ a }: { a: ApuracaoCovenant }) {
   return (
     <div className="leading-snug">
       <div className="font-semibold text-text">{a.waiver.credor}</div>
-      <div className={`text-xs ${a.waiverVigente ? "text-label" : "text-critical"}`}>
-        {fmtDate(a.waiver.obtidoEm)}
-        {a.waiverVigente ? " · vigente" : " · após o balanço"}
-      </div>
+      <div className="text-xs text-label tabular">{fmtDate(a.waiver.obtidoEm)}</div>
+      <div className={`text-xs ${a.waiverVigente ? "text-positive" : "text-critical"}`}>{a.waiverVigente ? "vigente" : "após o balanço"}</div>
     </div>
   );
 }
 
 function CelulaCPC26({ a }: { a: ApuracaoCovenant }) {
-  if (a.reclassifica) return <ObjectStatus state="negative">Sim – circulante</ObjectStatus>;
+  if (a.reclassifica)
+    return (
+      <div className="leading-snug">
+        <ObjectStatus state="negative">Reclassifica</ObjectStatus>
+        <div className="text-xs text-label">NC → circulante</div>
+      </div>
+    );
   return (
     <div className="leading-snug">
-      <div className="text-[13px] font-semibold text-text">Não</div>
+      <div className="text-[13px] text-text">Não reclassifica</div>
       {a.status === "excedido" && a.waiverVigente && <div className="text-xs text-label">waiver vigente</div>}
     </div>
   );
@@ -577,19 +583,18 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
     {
       key: "indicador",
       header: "Indicador",
-      minWidth: 190,
+      minWidth: 140,
       value: (a) => a.cov.indicador,
       render: (a) => (
-        <div className="py-0.5">
-          <div className="font-semibold text-text leading-snug">{a.cov.indicador}</div>
-          <div className="text-xs text-label leading-snug mt-0.5">{a.cov.fonte}</div>
-        </div>
+        <span className="block font-semibold text-text leading-snug py-0.5" title={a.cov.fonte}>
+          {a.cov.indicador}
+        </span>
       ),
     },
     {
       key: "formula",
       header: "Fórmula",
-      minWidth: 220,
+      minWidth: 165,
       render: (a) => <span className="text-[13px] text-label leading-snug block">{a.cov.formula}</span>,
     },
     {
@@ -600,7 +605,7 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
       render: (a) => (
         <div>
           <div className="font-semibold">{fmtLimite(a.cov)}</div>
-          <div className="text-xs text-label">{faixaAtencao(a.cov).replace("atenção ", "atenção: ")}</div>
+          <div className="text-xs text-label">atenção {a.cov.tipo === "max" ? "≥" : "≤"} {fmtRef(a.cov, a.cov.alerta)}</div>
         </div>
       ),
     },
@@ -611,7 +616,7 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
       render: (a) => (
         <div className="leading-snug whitespace-nowrap">
           <div>{a.cov.periodicidade}</div>
-          <div className="text-xs text-label">próxima {fmtDate(proximaApuracao(a.cov, dataBase))}</div>
+          <div className="text-xs text-label">próx. {fmtDate(proximaApuracao(a.cov, dataBase))}</div>
         </div>
       ),
     },
@@ -645,11 +650,11 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
       value: (a) => (a.status === "ok" ? 0 : a.status === "atencao" ? 1 : 2),
       render: (a) => <ObjectStatus state={semaforoState(a.status)}>{STATUS_TEXTO[a.status]}</ObjectStatus>,
     },
-    { key: "waiver", header: "Waiver", minWidth: 120, value: (a) => a.waiver?.obtidoEm ?? "", render: (a) => <CelulaWaiver a={a} /> },
-    { key: "contratos", header: "Contratos afetados", minWidth: 150, render: (a) => <TagsContratos ids={a.cov.contratos} ativos={ativos} /> },
+    { key: "waiver", header: "Waiver", value: (a) => a.waiver?.obtidoEm ?? "", render: (a) => <CelulaWaiver a={a} /> },
+    { key: "contratos", header: "Contratos afetados", render: (a) => <TagsContratos ids={a.cov.contratos} ativos={ativos} /> },
     {
       key: "cpc26",
-      header: "Reclassifica (CPC 26)",
+      header: "Efeito CPC 26",
       headerTitle: "Efeito CPC 26: descumprimento sem waiver até a data do balanço reclassifica o não circulante para o circulante",
       value: (a) => (a.reclassifica ? 1 : 0),
       render: (a) => <CelulaCPC26 a={a} />,
@@ -662,11 +667,11 @@ function TabelaCovenants({ apuracoes, dataBase, ativos }: { apuracoes: ApuracaoC
       subtitle={`Última apuração de cada covenant até a data-base ${fmtDate(dataBase)} · folga positiva = dentro do limite`}
       bodyClassName="px-0 pb-0"
     >
-      <div className="hidden xl:block">
+      <div className="hidden min-[1420px]:block">
         <DataTable columns={colunas} rows={apuracoes} rowKey={(a) => a.cov.id} />
       </div>
       {/* Pop-in (sap.m.Table responsiva): em telas estreitas as colunas descem para baixo do indicador */}
-      <ul className="xl:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
+      <ul className="min-[1420px]:hidden border-t border-[#a8b2bd] divide-y divide-line-soft">
         {apuracoes.map((a) => (
           <li key={a.cov.id} className="px-4 py-3">
             <div className="flex items-start justify-between gap-3">
@@ -732,12 +737,12 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
   const fmtPonto = (v: number) => fmtValor(cov, v / escala);
   const faixa: [number, number] = cov.tipo === "max" ? [alerta, limite] : [limite, alerta];
   const zona: [number, number] = cov.tipo === "max" ? [limite, max] : [0, limite];
-  const estado = estadoCovenant(a);
+  const estado = semaforoState(a.status);
   const ultimo = dados.length - 1;
 
   const referencias = [
-    <ReferenceArea key="zona" y1={zona[0]} y2={zona[1]} fill={CHART_SEMANTIC.bad} fillOpacity={0.07} stroke="none" ifOverflow="hidden" />,
-    <ReferenceArea key="faixa" y1={faixa[0]} y2={faixa[1]} fill={CHART_SEMANTIC.critical} fillOpacity={0.16} stroke="none" ifOverflow="hidden" />,
+    <ReferenceArea key="zona" y1={zona[0]} y2={zona[1]} fill={COR_FAIXA.zona} fillOpacity={COR_FAIXA.zonaOpacidade} stroke="none" ifOverflow="hidden" />,
+    <ReferenceArea key="faixa" y1={faixa[0]} y2={faixa[1]} fill={COR_FAIXA.atencao} fillOpacity={COR_FAIXA.atencaoOpacidade} stroke="none" ifOverflow="hidden" />,
     <ReferenceLine
       key="limite"
       y={limite}
@@ -794,7 +799,7 @@ function CardGrafico({ a }: { a: ApuracaoCovenant }) {
                 {dados.map((x) => (
                   <Cell key={x.data} fill={COR_STATUS[x.status]} />
                 ))}
-                <LabelList dataKey="valor" position="top" formatter={(v: number) => fmtPonto(v)} fontSize={11} fontWeight={700} fill="#1d2d3e" />
+                <LabelList dataKey="valor" position="insideTop" offset={7} formatter={(v: number) => fmtPonto(v)} fontSize={11} fontWeight={700} fill="#ffffff" />
               </Bar>
             </BarChart>
           ) : (
@@ -859,11 +864,11 @@ function CardLeitura({ proximaTri, proximaAnual }: { proximaTri: string; proxima
           Limite contratual (valor à direita do gráfico)
         </li>
         <li className="flex items-center gap-3">
-          <span className="w-7 h-3 rounded-sm shrink-0" style={{ backgroundColor: CHART_SEMANTIC.critical, opacity: 0.35 }} />
+          <span className="w-7 h-3 rounded-sm shrink-0" style={{ backgroundColor: COR_FAIXA.atencao, opacity: COR_FAIXA.atencaoOpacidade + 0.1 }} />
           Faixa de atenção – folga reduzida
         </li>
         <li className="flex items-center gap-3">
-          <span className="w-7 h-3 rounded-sm shrink-0" style={{ backgroundColor: CHART_SEMANTIC.bad, opacity: 0.18 }} />
+          <span className="w-7 h-3 rounded-sm shrink-0" style={{ backgroundColor: COR_FAIXA.zona, opacity: COR_FAIXA.zonaOpacidade + 0.06 }} />
           Zona de descumprimento
         </li>
         <li className="flex items-center gap-3">
