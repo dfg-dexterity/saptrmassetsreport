@@ -97,8 +97,31 @@ body {
 }
 
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
   .no-print {
     display: none !important;
+  }
+  /* tabelas largas: sem rolagem nem altura máxima na impressão, fonte reduzida */
+  .overflow-auto,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .fiori-scroll {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  table {
+    font-size: 9px !important;
+  }
+  th,
+  td {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+  .sticky {
+    position: static !important;
   }
   body {
     background: #fff;
