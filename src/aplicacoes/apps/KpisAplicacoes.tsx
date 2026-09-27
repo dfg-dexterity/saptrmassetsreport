@@ -488,7 +488,7 @@ const DEFINICOES: DefinicaoKpi[] = [
     curto: "Taxas",
     resumo: "Fundos (adm./perf.), custódia e tarifas de TD",
     formula:
-      "Taxas de administração e performance dos fundos + custódia B3 e taxa do agente dos títulos + tarifas de time deposits (12 meses) ÷ saldo médio, em bps a.a.",
+      "Taxas de administração e performance dos fundos + custódia e taxa do agente dos títulos + tarifas de time deposits (12 meses) ÷ saldo médio, em bps a.a.",
     unidade: "R$ · bps a.a.",
     meta: "≤ 25 bps a.a. sobre o saldo médio",
     fonte: "comite",
