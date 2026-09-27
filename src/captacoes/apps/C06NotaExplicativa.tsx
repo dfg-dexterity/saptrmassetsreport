@@ -106,9 +106,9 @@ function rsMil(v: number): string {
   return `R$ ${fmtNum(v / 1000)} mil`;
 }
 
-/** Spread total a.a. (BNDES indireto: spread do BNDES composto com o do agente financeiro) */
+/** Spread total a.a. (BNDES indireto: spread do BNDES somado ao do agente financeiro, como no motor e nas escrituras) */
 function spreadTotal(c: ContratoDivida): number {
-  return (1 + c.spread) * (1 + (c.spreadAgente ?? 0)) - 1;
+  return c.spread + (c.spreadAgente ?? 0);
 }
 
 /** Encargos contratuais médios ponderados pelo saldo, por indexador: "CDI + 1,42% a.a. · IPCA + 6,20% a.a." */

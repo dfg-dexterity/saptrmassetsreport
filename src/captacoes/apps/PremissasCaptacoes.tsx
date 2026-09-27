@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { CartesianGrid, Legend, Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "../../shared/components/fiori/Card";
 import { DataTable, type Column } from "../../shared/components/fiori/DataTable";
-import { AXIS_STYLE, CHART_COLORS, HeaderKpi, MicroBar } from "../../shared/components/fiori/Kpi";
+import { AXIS_STYLE, HeaderKpi, MicroBar } from "../../shared/components/fiori/Kpi";
 import { MessageStrip } from "../../shared/components/fiori/MessageStrip";
 import { Tag } from "../../shared/components/fiori/ObjectStatus";
 import { ReportPage } from "../../shared/components/shell/ReportPage";
@@ -14,12 +14,12 @@ import { exportarExcel } from "../../shared/lib/exportar";
 import { fmtBRL, fmtCompact, fmtDec, fmtInt, fmtPct } from "../../shared/lib/format";
 import { useDivida } from "../context/useDivida";
 import { relatorioCaptacao } from "../data/catalogo";
-import type { ContratoDivida, IndexadorDivida } from "../data/contratos";
+import { COR_INDEXADOR, type ContratoDivida, type IndexadorDivida } from "../data/contratos";
 import { custoMedioPonderado, prazoMedioCarteira, totalDivida, type PosicaoDivida } from "../lib/divida";
 
 const rel = relatorioCaptacao("premissas");
 const tooltipStyle = { borderRadius: 8, border: "1px solid #d9d9d9", fontFamily: "72, Arial", fontSize: 12 };
-const COR_CDI = CHART_COLORS[0];
+const COR_CDI = COR_INDEXADOR.CDI;
 const MESES_PROJECAO = 12;
 
 // ---------------------------------------------------------------------------
@@ -33,9 +33,9 @@ function fmtDataHora(iso: string): string {
 
 /** Último dado de mercado disponível na data-base (a importação pode ter dados posteriores a ela) */
 
-/** Spread total a.a. do contrato (TJLP indireto: spread BNDES composto com o spread do agente financeiro) */
+/** Spread total a.a. (BNDES indireto: spread do BNDES somado ao do agente financeiro, como no motor e nas escrituras) */
 function spreadTotal(c: ContratoDivida): number {
-  return (1 + c.spread) * (1 + (c.spreadAgente ?? 0)) - 1;
+  return c.spread + (c.spreadAgente ?? 0);
 }
 
 function ponderar(pos: PosicaoDivida[], fn: (x: PosicaoDivida) => number): number {
@@ -88,7 +88,7 @@ function linhasPremissas(p: PremissasMercado, abertura: string, ultimoDado: stri
     {
       id: "cdi",
       rotulo: "CDI a.a.",
-      uso: "Juros dos contratos CDI + spread (debêntures, CRA DI e CCB)",
+      uso: "Juros dos contratos CDI + spread (debêntures, CRA DI e CCB); até a data-base vale a série histórica mensal",
       valor: fmtPct(p.cdi),
       excel: p.cdi * 100,
       unidade: "% a.a.",
@@ -108,7 +108,7 @@ function linhasPremissas(p: PremissasMercado, abertura: string, ultimoDado: stri
     {
       id: "ipca12m",
       rotulo: "IPCA 12 meses",
-      uso: "Correção monetária do principal (IPCA + spread e TLP)",
+      uso: "Correção monetária do principal (IPCA + spread e TLP), pro rata por dia corrido; até a data-base vale a série histórica mensal",
       valor: fmtPct(p.ipca12m),
       excel: p.ipca12m * 100,
       unidade: "% (12 meses)",
@@ -118,7 +118,7 @@ function linhasPremissas(p: PremissasMercado, abertura: string, ultimoDado: stri
     {
       id: "tjlp",
       rotulo: "TJLP a.a.",
-      uso: "BNDES FINEM – direto e indireto",
+      uso: "BNDES FINEM (direto e indireto): juros sobre a TJLP limitada a 6% a.a.; o excedente é capitalizado no principal",
       valor: fmtPct(p.tjlp),
       excel: p.tjlp * 100,
       unidade: "% a.a.",
@@ -128,7 +128,7 @@ function linhasPremissas(p: PremissasMercado, abertura: string, ultimoDado: stri
     {
       id: "tlpReal",
       rotulo: "TLP – taxa real a.a.",
-      uso: "BNDES FINAME (TLP = taxa real + IPCA)",
+      uso: "Referência para novas contratações – cada contrato FINAME usa a TLP real do mês da contratação (série histórica) + IPCA",
       valor: fmtPct(p.tlpReal),
       excel: p.tlpReal * 100,
       unidade: "% a.a. (real)",
@@ -148,7 +148,7 @@ function linhasPremissas(p: PremissasMercado, abertura: string, ultimoDado: stri
     {
       id: "baseDiasUteis",
       rotulo: "Base de dias úteis",
-      uso: "Juros de CDI + spread (Fator DI) e spread dos títulos IPCA+ – debêntures, CRA, CRI e CCB – apropriados por dia útil",
+      uso: "Juros de CDI + spread (Fator DI) e spread dos títulos IPCA+ – debêntures, CRA, CRI e CCB – apropriados por dia útil (calendário ANBIMA); pagamentos em dia não útil vão para o dia útil seguinte",
       valor: `${fmtInt(p.baseDiasUteis)} dias úteis`,
       excel: p.baseDiasUteis,
       unidade: "dias úteis",
@@ -202,7 +202,7 @@ const INDEXADORES: DefIndexador[] = [
     formula: "(1 + TLP real da contratação) × (1 + spread + spread do agente) − 1 + correção do principal pelo IPCA",
     efetiva: "Taxa efetiva: (1 + TLP real) × (1 + spreads) × (1 + IPCA) − 1",
     taxa: (p) => p.tlpReal,
-    taxaSub: (p) => `real + IPCA ${fmtPct(p.ipca12m)}`,
+    taxaSub: (p) => `real vigente + IPCA ${fmtPct(p.ipca12m)}`,
   },
 ];
 
@@ -227,7 +227,7 @@ export function PremissasCaptacoes() {
 
   const d = useMemo(() => {
     const saldoTotal = totalDivida(posicoes);
-    const indexadores: LinhaIndexador[] = INDEXADORES.map((def, i) => {
+    const indexadores: LinhaIndexador[] = INDEXADORES.map((def) => {
       const pos = posicoes.filter((x) => x.c.indexador === def.id);
       const saldo = totalDivida(pos);
       return {
@@ -237,7 +237,7 @@ export function PremissasCaptacoes() {
         participacao: saldoTotal > 0 ? saldo / saldoTotal : 0,
         spread: ponderar(pos, (x) => spreadTotal(x.c)),
         taxaEfetiva: ponderar(pos, (x) => x.taxaEfetivaAA),
-        cor: CHART_COLORS[i],
+        cor: COR_INDEXADOR[def.id],
       };
     });
 
@@ -309,7 +309,8 @@ export function PremissasCaptacoes() {
           ],
           notas: [
             "Premissas somente leitura: para alterá-las, atualize os dados de mercado no SAP e reimporte.",
-            `Valores futuros projetados com o último dado disponível (${fmtDate(ultimoDado)}), mantido constante após a data-base.`,
+            "Até a data-base, os encargos usam as séries históricas mensais de CDI, IPCA, TJLP e TLP importadas do SAP.",
+            `Valores futuros projetados com o último dado disponível (${fmtDate(ultimoDado)}), mantido constante após a data-base; pagamentos em dia não útil vão para o dia útil seguinte.`,
           ],
         },
         {
@@ -340,9 +341,10 @@ export function PremissasCaptacoes() {
           ]),
           total: ["Total", "", "", "", posicoes.length, d.saldoTotal, 1, "", d.custoMedio],
           notas: [
-            "Spread médio ponderado da TJLP inclui o spread do agente financeiro (composto).",
+            "Spread médio ponderado da TJLP inclui o spread do agente financeiro (somado ao spread do BNDES, como nas escrituras).",
             "Taxa efetiva a.a. = juros + correção monetária, com as taxas vigentes na data-base; total = custo médio ponderado da dívida.",
-            "Taxas pós-fixadas projetadas com o último dado disponível importado do SAP.",
+            "Até a data-base, séries históricas importadas do SAP; depois dela, taxas pós-fixadas projetadas com o último dado disponível.",
+            "TLP: cada contrato usa a taxa real do mês da contratação; a coluna de taxa vigente mostra a TLP real atual (novas contratações).",
           ],
         },
         {
@@ -502,16 +504,18 @@ export function PremissasCaptacoes() {
         <>
           <HeaderKpi label="CDI a.a." value={fmtPct(p.cdi)} sub={`Selic ${fmtPct(p.selic)}`} />
           <HeaderKpi label="IPCA 12 meses" value={fmtPct(p.ipca12m)} sub={`TJLP ${fmtPct(p.tjlp)} · TLP ${fmtPct(p.tlpReal)} real`} />
-          <HeaderKpi label="Custo médio da dívida" value={fmtPct(d.custoMedio)} state="information" sub="a.a. · ponderado pelo saldo" />
+          <HeaderKpi label="Custo médio da dívida" value={fmtPct(d.custoMedio)} sub="a.a. · ponderado pelo saldo" />
           <HeaderKpi label="Prazo médio" value={fmtDec(d.prazoMedio, 1)} unit="anos" sub={`${posicoes.length} contratos ativos`} />
         </>
       }
     >
       <MessageStrip design="information">
         As premissas gerais são <strong>importadas do SAP</strong> ({IMPORTACAO_SAP.sistema}) e são somente leitura. Última
-        importação em {importacao}; último dado disponível na data-base: <strong>{fmtDate(ultimoDado)}</strong>. Os valores
-        futuros (juros, correção monetária e cronograma) são projetados usando o último dado disponível, mantido constante
-        após a data-base. Para alterar uma premissa, atualize os dados de mercado no SAP.
+        importação em {importacao}; último dado disponível na data-base: <strong>{fmtDate(ultimoDado)}</strong>. Até a
+        data-base, os encargos usam as séries históricas mensais de CDI, IPCA, TJLP e TLP; os valores futuros (juros,
+        correção monetária e cronograma) são projetados usando o último dado disponível, mantido constante após a data-base,
+        com pagamentos em dia não útil deslocados para o dia útil seguinte. Para alterar uma premissa, atualize os dados de
+        mercado no SAP.
       </MessageStrip>
 
       <Card
@@ -611,9 +615,10 @@ export function PremissasCaptacoes() {
           </li>
         </ul>
         <p className="text-xs text-label px-4 py-3 leading-relaxed border-t border-line-soft xl:border-t-0">
-          Spread médio da TJLP inclui o spread do agente financeiro (BNDES indireto), composto ao spread do BNDES. Taxa efetiva
-          = juros + correção monetária do principal, com as taxas vigentes na data-base; as parcelas futuras são projetadas
-          com o último dado disponível importado do SAP.
+          Spread médio da TJLP inclui o spread do agente financeiro (BNDES indireto), somado ao spread do BNDES. Taxa efetiva
+          = juros + correção monetária do principal (na TJLP, o excedente sobre 6% a.a. capitalizado), com as taxas vigentes na
+          data-base; na TLP vale a taxa real da contratação de cada contrato. Até a data-base valem as séries históricas
+          importadas do SAP; as parcelas futuras são projetadas com o último dado disponível.
         </p>
       </Card>
 
@@ -624,7 +629,7 @@ export function PremissasCaptacoes() {
           subtitle="Taxa efetiva a.a. ponderada pelo saldo contábil na data-base"
         >
           <div className="flex items-baseline gap-1.5">
-            <span className="text-[2.25rem] leading-none font-light tabular text-[#0070f2]">{fmtPct(d.custoMedio)}</span>
+            <span className="text-[2.25rem] leading-none font-light tabular text-text">{fmtPct(d.custoMedio)}</span>
             <span className="text-sm text-label">a.a.</span>
           </div>
           <div className="text-[13px] text-label mt-1.5">
@@ -714,7 +719,12 @@ export function PremissasCaptacoes() {
                   labelFormatter={(m: string) => mesLongo(m)}
                   formatter={(v: number, n: string) => [`${fmtDec(v, 2)}% a.a.`, n]}
                 />
-                <Legend wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }} iconType="plainline" iconSize={16} />
+                <Legend
+                  wrapperStyle={{ fontSize: 12, fontFamily: "72, Arial" }}
+                  iconType="plainline"
+                  iconSize={16}
+                  formatter={(v: string) => <span style={{ color: "#1d2d3e" }}>{v}</span>}
+                />
                 <ReferenceLine
                   x={d.mesBase}
                   stroke="#1d2d3e"
