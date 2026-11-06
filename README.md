@@ -108,25 +108,38 @@ npm run build      # gera a pasta dist/ com as duas páginas
 npm run preview    # serve o build em http://localhost:4173
 ```
 
-## Publicando no site
+## Publicação
+
+A demo fica no ar pela **Vercel**, no time `dexterityit`, como o projeto **reporting-pack-demo**, ligado a este
+repositório. Cada push na branch `main` gera o deploy de produção; cada pull request ganha um preview com URL própria.
+
+| Produto | URL |
+| --- | --- |
+| Aplicações Financeiras | `https://reporting-pack.dexterityit.com.br/` |
+| Captações Financeiras | `https://reporting-pack.dexterityit.com.br/captacoes` |
+
+Links diretos para um relatório também funcionam, ex.: `https://reporting-pack.dexterityit.com.br/captacoes#/c04-covenants`.
+
+- `vercel.json` liga as *clean URLs* (`/captacoes` em vez de `/captacoes.html`) e cache imutável para `dist/assets/`,
+  cujos nomes já levam hash.
+- O domínio `dexterityit.com.br` está verificado no time da Vercel (DNS na GoDaddy). O subdomínio é um registro
+  **CNAME** `reporting-pack` → `cname.vercel-dns.com`, o mesmo padrão de `portal.dexterityit.com.br`.
+- O workflow `.github/workflows/ci.yml` só compila e faz o typecheck a cada PR e push em `main`; ele não publica nada.
+
+### Em outro servidor
 
 O build (`dist/`) é estático e usa **rotas com hash** (`/#/r01-composicao`) e caminhos relativos, então funciona em
-qualquer subpasta do site, sem configuração de servidor:
-
-1. `npm run build`
-2. Copie o conteúdo de `dist/` para uma pasta do site, por exemplo `https://seusite.com.br/demos/trm-reporting/`.
-3. Aplicações em `.../trm-reporting/`, Captações em `.../trm-reporting/captacoes.html`. Link direto ou incorporado:
+qualquer subpasta de qualquer site, sem configuração de servidor: `npm run build` e copie o conteúdo de `dist/` para a
+pasta desejada (Aplicações em `index.html`, Captações em `captacoes.html`). Para incorporar em uma página:
 
 ```html
 <iframe
-  src="https://seusite.com.br/demos/trm-reporting/captacoes.html"
+  src="https://reporting-pack.dexterityit.com.br/captacoes"
   title="Demo – Reporting Pack de Captações Financeiras"
   style="width:100%;height:900px;border:0;border-radius:16px"
   loading="lazy"
 ></iframe>
 ```
-
-Links diretos para um relatório também funcionam, ex.: `.../captacoes.html#/c04-covenants`.
 
 ### Arquivo único
 
@@ -135,11 +148,6 @@ Links diretos para um relatório também funcionam, ex.: `.../captacoes.html#/c0
 
 Dentro do viewer de Artifacts do claude.ai o app detecta o ambiente sozinho: usa navegação em memória, entrega o Excel
 pela confirmação de download do viewer e esconde o botão Imprimir (bloqueado nesse frame).
-
-### GitHub Pages (opcional)
-
-O workflow `.github/workflows/deploy.yml` compila o projeto a cada PR e publica no GitHub Pages a cada push na branch
-`main`. Para ativar: *Settings → Pages → Build and deployment → Source: GitHub Actions*.
 
 ## Estrutura
 

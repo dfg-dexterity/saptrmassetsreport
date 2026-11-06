@@ -1,0 +1,30 @@
+name: CI (typecheck e build)
+
+# A publicação é feita pela Vercel (projeto reporting-pack-demo, ligado a este repositório):
+# cada push em main vira deploy de produção e cada pull request ganha um preview.
+# Este workflow só garante que o projeto compila e passa no typecheck.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
