@@ -110,21 +110,23 @@ npm run preview    # serve o build em http://localhost:4173
 
 ## Publicação
 
-A demo fica no ar pela **Vercel**, no time `dexterityit`, como o projeto **reporting-pack-demo**, ligado a este
-repositório. Cada push na branch `main` gera o deploy de produção; cada pull request ganha um preview com URL própria.
+A demo é publicada pelo **GitHub Pages**: cada push na branch `main` roda o workflow `.github/workflows/ci.yml`, que
+compila o projeto e publica a pasta `dist/` (em *Settings → Pages → Build and deployment*, a fonte precisa ser
+**GitHub Actions**). Pull requests só compilam e fazem o typecheck.
 
 | Produto | URL |
 | --- | --- |
 | Aplicações Financeiras | `https://reporting-pack.dexterityit.com.br/` |
 | Captações Financeiras | `https://reporting-pack.dexterityit.com.br/captacoes` |
 
-Links diretos para um relatório também funcionam, ex.: `https://reporting-pack.dexterityit.com.br/captacoes#/c04-covenants`.
+Sem o domínio próprio, o site fica em `https://dfg-dexterity.github.io/saptrmassetsreport/`. Links diretos para um
+relatório também funcionam, ex.: `https://reporting-pack.dexterityit.com.br/captacoes#/c04-covenants`.
 
-- `vercel.json` liga as *clean URLs* (`/captacoes` em vez de `/captacoes.html`) e cache imutável para `dist/assets/`,
-  cujos nomes já levam hash.
-- O domínio `dexterityit.com.br` está verificado no time da Vercel (DNS na GoDaddy). O subdomínio é um registro
-  **CNAME** `reporting-pack` → `cname.vercel-dns.com`, o mesmo padrão de `portal.dexterityit.com.br`.
-- O workflow `.github/workflows/ci.yml` só compila e faz o typecheck a cada PR e push em `main`; ele não publica nada.
+- Domínio próprio: em *Settings → Pages → Custom domain*, informe `reporting-pack.dexterityit.com.br` e marque *Enforce
+  HTTPS*; no DNS (GoDaddy), crie o registro **CNAME** `reporting-pack` → `dfg-dexterity.github.io`.
+- `/captacoes` é um atalho criado no build que redireciona para `captacoes.html` mantendo a rota `#/...`.
+- `vercel.json` continua no repositório para quem preferir publicar na Vercel (clean URLs e cache dos assets); basta
+  importar o repositório lá.
 
 ### Em outro servidor
 

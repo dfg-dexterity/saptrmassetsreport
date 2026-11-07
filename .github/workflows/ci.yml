@@ -1,8 +1,8 @@
-name: CI (typecheck e build)
+name: CI e deploy (GitHub Pages)
 
-# A publicação é feita pela Vercel (projeto reporting-pack-demo, ligado a este repositório):
-# cada push em main vira deploy de produção e cada pull request ganha um preview.
-# Este workflow só garante que o projeto compila e passa no typecheck.
+# Publicação: cada push em main compila o projeto e publica a pasta dist/ no GitHub Pages
+# (Settings → Pages → Build and deployment → Source: GitHub Actions). Pull requests só
+# compilam e fazem o typecheck. O vercel.json continua válido para publicar na Vercel.
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,3 +28,34 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Atalho /captacoes (redireciona para captacoes.html mantendo a rota #/...)
+        run: |
+          mkdir -p dist/captacoes
+          cat > dist/captacoes/index.html <<'EOF'
+          <!doctype html><meta charset="utf-8"><title>Captações Financeiras</title>
+          <script>location.replace("../captacoes.html" + location.hash);</script>
+          EOF
+          touch dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # enablement: tenta trocar a fonte do Pages para "GitHub Actions" sozinho; se não tiver
+      # permissão, troque em Settings → Pages → Source e rode o workflow de novo.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deployment
+        uses: actions/deploy-pages@v4
