@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { DATA_BASE_PADRAO, premissasNaDataBase, type PremissasMercado } from "../data/mercado";
 import { lastMonthEnds } from "../lib/dates";
 
-/** Datas-base disponíveis na demo (fins de mês com dados de mercado importados do SAP) */
-export const DATAS_BASE = lastMonthEnds(DATA_BASE_PADRAO, 6).reverse();
+/** Datas-base disponíveis na demo: fins de mês de out/2025 a dez/2026, todos com dados de mercado importados do SAP */
+export const DATAS_BASE = lastMonthEnds(DATA_BASE_PADRAO, 15).reverse();
 
 interface Ctx {
   /** Premissas gerais importadas do SAP, vigentes na data-base selecionada */

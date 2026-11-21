@@ -56,13 +56,19 @@ export function fonteExtrato(m: Modalidade): string {
   return "Agente fiduciário – PU × quantidade de debêntures";
 }
 
-/** Diferenças simuladas na data-base mais recente (demonstração das exceções de conciliação) */
+/** Diferenças simuladas nos fechamentos de 31/03/2026 e 31/12/2026 (demonstração das exceções de conciliação) */
 export const DIFERENCAS_GL: { dataBase: string; conta: string; valor: number; motivo: string }[] = [
   {
     dataBase: "2026-03-31",
     conta: "2.1.4.03.2",
     valor: -12_480.55,
     motivo: "Apropriação de juros da DEB-03 (TPM44) executada após o corte do FI-GL – reprocessar e contabilizar",
+  },
+  {
+    dataBase: "2026-12-31",
+    conta: "2.1.4.01.2",
+    valor: -8_920.17,
+    motivo: "Juros do BND-02 da parcela de dez/2026 apropriados pelo TPM44 após o corte do FI-GL – reprocessar e contabilizar",
   },
 ];
 
@@ -72,6 +78,12 @@ export const DIFERENCAS_EXTRATO: { dataBase: string; contrato: string; valor: nu
     contrato: "CRA-01",
     valor: 3_412.9,
     motivo: "PU da securitizadora calculado com IPCA projetado; TRM usa o último IPCA importado – validar com a securitizadora",
+  },
+  {
+    dataBase: "2026-12-31",
+    contrato: "CRI-01",
+    valor: 2_915.4,
+    motivo: "PU da securitizadora com o IPCA projetado de dezembro; TRM usa o último IPCA importado – validar com a securitizadora",
   },
 ];
 

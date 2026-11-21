@@ -1,7 +1,7 @@
 /**
  * Premissas gerais de mercado – importadas do SAP (ambiente de teste Dexterity).
  *
- * Os valores reproduzem a aba "Premissas" da planilha base (data-base 31/03/2026). Até a data-base usa-se a série
+ * Os valores reproduzem a aba "Premissas" da planilha base (data-base 31/12/2026). Até a data-base usa-se a série
  * histórica importada (CDI, IPCA, TJLP e TLP); depois dela, os valores são projetados com o último dado disponível (taxa constante).
  */
 
@@ -25,13 +25,13 @@ export interface PremissasMercado {
 /** Compatibilidade com o motor de Aplicações */
 export type Premissas = PremissasMercado;
 
-export const DATA_BASE_PADRAO = "2026-03-31";
+export const DATA_BASE_PADRAO = "2026-12-31";
 
 /** Metadados da última importação de dados de mercado do SAP (ambiente de teste) */
 export const IMPORTACAO_SAP = {
   sistema: "SAP S/4HANA – ambiente de teste Dexterity",
-  ultimaImportacao: "2026-03-31T19:05:00",
-  ultimoDadoDisponivel: "2026-03-31",
+  ultimaImportacao: "2026-12-31T19:05:00",
+  ultimoDadoDisponivel: "2026-12-31",
 };
 
 /** Último dado de mercado disponível do ponto de vista da data-base (datas-base anteriores projetam a partir delas mesmas) */
@@ -112,10 +112,19 @@ export const CDI_MENSAL: Record<string, number> = {
   "2026-01": 0.149,
   "2026-02": 0.149,
   "2026-03": 0.149,
+  "2026-04": 0.1465,
+  "2026-05": 0.144,
+  "2026-06": 0.1415,
+  "2026-07": 0.139,
+  "2026-08": 0.1365,
+  "2026-09": 0.134,
+  "2026-10": 0.1315,
+  "2026-11": 0.129,
+  "2026-12": 0.1265,
 };
 
 export const PRIMEIRO_MES_CDI = "2022-01";
-export const ULTIMO_MES_CDI = "2026-03";
+export const ULTIMO_MES_CDI = "2026-12";
 
 /** IPCA acumulado em 12 meses no mês (fração) importado do SAP – usado como taxa anual de correção no mês */
 export const IPCA_12M_MENSAL: Record<string, number> = {
@@ -170,6 +179,15 @@ export const IPCA_12M_MENSAL: Record<string, number> = {
   "2026-01": 0.0444,
   "2026-02": 0.0452,
   "2026-03": 0.045,
+  "2026-04": 0.0443,
+  "2026-05": 0.0436,
+  "2026-06": 0.0428,
+  "2026-07": 0.0421,
+  "2026-08": 0.0415,
+  "2026-09": 0.0409,
+  "2026-10": 0.0404,
+  "2026-11": 0.0399,
+  "2026-12": 0.0395,
 };
 
 /** TJLP a.a. vigente no mês (fixada trimestralmente pelo CMN) importada do SAP */
@@ -225,6 +243,15 @@ export const TJLP_MENSAL: Record<string, number> = {
   "2026-01": 0.087,
   "2026-02": 0.087,
   "2026-03": 0.087,
+  "2026-04": 0.0862,
+  "2026-05": 0.0862,
+  "2026-06": 0.0862,
+  "2026-07": 0.0845,
+  "2026-08": 0.0845,
+  "2026-09": 0.0845,
+  "2026-10": 0.0826,
+  "2026-11": 0.0826,
+  "2026-12": 0.0826,
 };
 
 /** TLP – taxa real prefixada a.a. do mês (BCB) importada do SAP; fixada no contrato na data da contratação */
@@ -280,6 +307,15 @@ export const TLP_REAL_MENSAL: Record<string, number> = {
   "2026-01": 0.0748,
   "2026-02": 0.0752,
   "2026-03": 0.075,
+  "2026-04": 0.0747,
+  "2026-05": 0.0743,
+  "2026-06": 0.0739,
+  "2026-07": 0.0735,
+  "2026-08": 0.0731,
+  "2026-09": 0.0727,
+  "2026-10": 0.0722,
+  "2026-11": 0.0718,
+  "2026-12": 0.0714,
 };
 
 /** Valor de uma série mensal no mês `mes` (AAAA-MM), limitado ao primeiro e ao último mês disponíveis */
@@ -314,6 +350,15 @@ export const PTAX_MENSAL: Record<"USD" | "EUR", Record<string, number>> = {
     "2026-01": 5.471,
     "2026-02": 5.518,
     "2026-03": 5.452,
+    "2026-04": 5.418,
+    "2026-05": 5.476,
+    "2026-06": 5.397,
+    "2026-07": 5.443,
+    "2026-08": 5.372,
+    "2026-09": 5.318,
+    "2026-10": 5.355,
+    "2026-11": 5.291,
+    "2026-12": 5.246,
   },
   EUR: {
     "2024-06": 5.9547,
@@ -338,11 +383,20 @@ export const PTAX_MENSAL: Record<"USD" | "EUR", Record<string, number>> = {
     "2026-01": 6.052,
     "2026-02": 5.987,
     "2026-03": 5.924,
+    "2026-04": 5.951,
+    "2026-05": 6.014,
+    "2026-06": 5.936,
+    "2026-07": 5.978,
+    "2026-08": 5.902,
+    "2026-09": 5.861,
+    "2026-10": 5.887,
+    "2026-11": 5.843,
+    "2026-12": 5.802,
   },
 };
 
 export const PRIMEIRO_MES_PTAX = "2024-06";
-export const ULTIMO_MES_PTAX = "2026-03";
+export const ULTIMO_MES_PTAX = "2026-12";
 
 /** PTAX de fim de mês (limitada ao primeiro e ao último mês importados) */
 export function ptaxDoMes(moeda: "USD" | "EUR", mes: string): number {

@@ -1,4 +1,4 @@
-import type { PremissasMercado as Premissas } from "../../shared/data/mercado";
+import { IMPORTACAO_SAP, type PremissasMercado as Premissas } from "../../shared/data/mercado";
 import { addDays, diffDays, endOfMonth, fromDay, isBusinessDay, toDay } from "../../shared/lib/dates";
 import { cdiAnual, chavePremissas, ptaxNaData } from "../../shared/lib/taxas";
 import { RETORNOS_MENSAIS, type Fundo } from "../data/fundos";
@@ -43,7 +43,8 @@ function datasCristalizacao(de: string, ate: string): number[] {
 }
 
 function horizonte(f: Fundo, p: Premissas): string {
-  return f.dataResgate ?? addDays(p.dataBase > "2026-03-31" ? p.dataBase : "2026-03-31", 400);
+  const ultimo = IMPORTACAO_SAP.ultimoDadoDisponivel;
+  return f.dataResgate ?? addDays(p.dataBase > ultimo ? p.dataBase : ultimo, 400);
 }
 
 function serieCota(f: Fundo, p: Premissas): SerieCota {
