@@ -7,7 +7,7 @@ import { router } from "./routes";
 
 export default function App() {
   return (
-    <MercadoProvider chave="dxt-captacoes-data-base">
+    <MercadoProvider chave="dxt-captacoes-data-base-2026">
       <ProdutoProvider info={PRODUTO_CAPTACOES} usarAlertas={useAlertasCaptacoes}>
         <RouterProvider router={router} />
       </ProdutoProvider>

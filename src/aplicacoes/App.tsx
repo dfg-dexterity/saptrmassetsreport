@@ -8,7 +8,7 @@ import { router } from "./routes";
 
 export default function App() {
   return (
-    <MercadoProvider chave="dxt-aplicacoes-data-base">
+    <MercadoProvider chave="dxt-aplicacoes-data-base-2026">
       <BenchmarkProvider>
         <ProdutoProvider info={PRODUTO_APLICACOES} usarAlertas={useAlertas}>
           <RouterProvider router={router} />

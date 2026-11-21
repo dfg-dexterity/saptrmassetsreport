@@ -68,7 +68,7 @@ Launchpad e relatórios próprios, mas reutiliza os componentes compartilhados e
 
 - `data/catalogo.ts`: `SECOES_CAPTACOES`, `RELATORIOS_CAPTACOES`, `relatorioCaptacao(id)` (ids: `premissas`, `c00`,
   `c01`, `c02`, `c03`, `c04`, `c05`, `c06`, `cds`), `MAPEAMENTO_C00`.
-- `data/contratos.ts`: `CONTRATOS: ContratoDivida[]` (11 ativos em 31/03/2026 + 1 liquidado), `taxaContratadaDivida(c)`,
+- `data/contratos.ts`: `CONTRATOS: ContratoDivida[]` (11 ativos em 31/12/2026 + 2 liquidados em 2026), `taxaContratadaDivida(c)`,
   `GRUPO_MODALIDADE` (modalidade → "BNDES" | "Debêntures" | "CRA" | "CRI" | "CCB"), `EMPRESAS_DIVIDA`.
   Campos: `id, transacao, empresa, modalidade, instrumento, credor, agente, formaBNDES?, indexador, spread,
   spreadAgente?, dataCaptacao, vencimento, valorCaptado, custosTransacao, amortizacoes[{data, pct}], datasJuros,
@@ -100,6 +100,6 @@ Launchpad e relatórios próprios, mas reutiliza os componentes compartilhados e
 - `context/useDivida.ts`: `useDivida(escopo)` → `{premissas, contratos, posicoes (já com reclassificação CPC 26),
   reclassificados, abertura (31/12 do exercício anterior)}`, `useCovenants()`, `ESCOPOS`, `contratosDoEscopo(escopo)`.
 
-Datas-base disponíveis: 31/10/2025 a 31/03/2026 (padrão 31/03/2026). Em 31/12/2025 o ICSD de 2025 (≈1,26x < 1,30x) está
+Datas-base disponíveis: 31/10/2025 a 31/12/2026 (padrão 31/12/2026). Em 31/12/2025 o ICSD de 2025 (≈1,26x < 1,30x) está
 descumprido e o waiver só foi obtido em 20/01/2026 → os contratos BNDES (BND-01, BND-02) têm o não circulante
-reclassificado para o circulante nessa data-base (CPC 26, item 74). Em 31/03/2026 o waiver já está vigente.
+reclassificado para o circulante nessa data-base (CPC 26, item 74). De 31/01/2026 em diante o waiver já está vigente.

@@ -20,12 +20,16 @@ export const DADOS_CORPORATIVOS: DadosCorporativos[] = [
   { data: "2025-09-30", caixa: 4_600_000, ebitdaLTM: 58_200_000, patrimonioLiquido: 299_000_000, ativoTotal: 856_000_000, imoveisAPagar: 7_800_000 },
   { data: "2025-12-31", caixa: 6_200_000, ebitdaLTM: 60_400_000, patrimonioLiquido: 305_000_000, ativoTotal: 872_000_000, imoveisAPagar: 7_400_000 },
   { data: "2026-03-31", caixa: 4_200_000, ebitdaLTM: 62_000_000, patrimonioLiquido: 311_000_000, ativoTotal: 895_000_000, imoveisAPagar: 7_000_000 },
+  { data: "2026-06-30", caixa: 5_300_000, ebitdaLTM: 63_600_000, patrimonioLiquido: 317_000_000, ativoTotal: 912_000_000, imoveisAPagar: 6_600_000 },
+  { data: "2026-09-30", caixa: 4_900_000, ebitdaLTM: 65_300_000, patrimonioLiquido: 324_000_000, ativoTotal: 930_000_000, imoveisAPagar: 6_200_000 },
+  { data: "2026-12-31", caixa: 6_800_000, ebitdaLTM: 67_100_000, patrimonioLiquido: 332_000_000, ativoTotal: 948_000_000, imoveisAPagar: 5_800_000 },
 ];
 
 /** Geração de caixa para o serviço da dívida (numerador do ICSD – BNDES), por exercício */
 export const GERACAO_CAIXA_ICSD: Record<number, number> = {
   2024: 8_000_000,
   2025: 19_800_000,
+  2026: 51_200_000,
 };
 
 export function dadosCorporativosAte(data: string): DadosCorporativos[] {
